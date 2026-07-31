@@ -1,0 +1,230 @@
+{
+  "name": "ontology-dev-suite",
+  "displayName": "Ontology Development Suite",
+  "description": "Create ontologies (with imports), author TARQL-style CSV-to-RDF CONSTRUCT queries with live preview, and validate against a local SPARQL/SHACL/OWL2-RL checks engine.",
+  "version": "0.1.0",
+  "publisher": "local",
+  "private": true,
+  "engines": {
+    "vscode": "^1.125.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Linters",
+    "Visualization",
+    "Testing"
+  ],
+  "activationEvents": [
+    "workspaceContains:**/*.ttl"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "languages": [
+      {
+        "id": "turtle",
+        "aliases": [
+          "Turtle",
+          "turtle"
+        ],
+        "extensions": [
+          ".ttl",
+          ".owl"
+        ],
+        "configuration": "./language-configuration.turtle.json"
+      },
+      {
+        "id": "sparql-construct",
+        "aliases": [
+          "SPARQL CONSTRUCT",
+          "sparql"
+        ],
+        "extensions": [
+          ".rq",
+          ".sparql",
+          ".cq.rq"
+        ],
+        "configuration": "./language-configuration.sparql.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "turtle",
+        "scopeName": "source.turtle",
+        "path": "./syntaxes/turtle.tmLanguage.json"
+      },
+      {
+        "language": "sparql-construct",
+        "scopeName": "source.sparql",
+        "path": "./syntaxes/sparql-construct.tmLanguage.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "ontologySuite.newOntology",
+        "title": "Ontology Suite: New Ontology..."
+      },
+      {
+        "command": "ontologySuite.addClass",
+        "title": "Ontology Suite: Add Class or Category..."
+      },
+      {
+        "command": "ontologySuite.addProperty",
+        "title": "Ontology Suite: Add Property..."
+      },
+      {
+        "command": "ontologySuite.openQueryWorkbench",
+        "title": "Ontology Suite: Open Query Workbench"
+      },
+      {
+        "command": "ontologySuite.openGraphView",
+        "title": "Ontology Suite: Visualize Subject Graph"
+      },
+      {
+        "command": "ontologySuite.runLocalChecks",
+        "title": "Ontology Suite: Run Local Checks"
+      },
+      {
+        "command": "ontologySuite.showMetrics",
+        "title": "Ontology Suite: Show Metrics & DL Expressivity"
+      },
+      {
+        "command": "ontologySuite.inferFromCsv",
+        "title": "Ontology Suite: Infer Ontology + Query from CSV..."
+      },
+      {
+        "command": "ontologySuite.runDeepValidation",
+        "title": "Ontology Suite: Run Deep Validation (Python CLI)"
+      },
+      {
+        "command": "ontologySuite.runFullTriplify",
+        "title": "Ontology Suite: Run Full Triplify (Python CLI / oxi-gen)"
+      },
+      {
+        "command": "ontologySuite.refreshOutline",
+        "title": "Ontology Suite: Refresh Outline"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "ontologySuite.newOntology"
+        },
+        {
+          "command": "ontologySuite.addClass"
+        },
+        {
+          "command": "ontologySuite.addProperty"
+        },
+        {
+          "command": "ontologySuite.openQueryWorkbench"
+        },
+        {
+          "command": "ontologySuite.openGraphView"
+        },
+        {
+          "command": "ontologySuite.runLocalChecks"
+        },
+        {
+          "command": "ontologySuite.showMetrics"
+        },
+        {
+          "command": "ontologySuite.inferFromCsv"
+        },
+        {
+          "command": "ontologySuite.runDeepValidation"
+        },
+        {
+          "command": "ontologySuite.runFullTriplify"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "ontologySuite.newOntology",
+          "when": "view == ontologySuite.outline",
+          "group": "navigation"
+        },
+        {
+          "command": "ontologySuite.refreshOutline",
+          "when": "view == ontologySuite.outline",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "ontologySuite.addClass",
+          "when": "view == ontologySuite.outline && viewItem == ontologyRoot"
+        },
+        {
+          "command": "ontologySuite.addProperty",
+          "when": "view == ontologySuite.outline && viewItem == ontologyRoot"
+        }
+      ]
+    },
+    "views": {
+      "explorer": [
+        {
+          "id": "ontologySuite.outline",
+          "name": "Ontology Outline"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Ontology Development Suite",
+      "properties": {
+        "ontologySuite.modellingGuidance": {
+          "type": "string",
+          "enum": [
+            "gist",
+            "off"
+          ],
+          "default": "gist",
+          "description": "Advisory modelling-convention hints (MDL-001/002/003). 'gist' applies conventions grounded in Semantic Arts' gist upper ontology; 'off' disables them."
+        },
+        "ontologySuite.pythonCliPath": {
+          "type": "string",
+          "default": "ontology-suite",
+          "description": "Path to the consolidated_ontology_suite 'ontology-suite' CLI executable, used only for deep validation, docgen, version-diff, and full-scale triplify. Optional — leave default to rely on PATH."
+        },
+        "ontologySuite.checksRegistryPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to a consolidated_ontology_suite checkout providing registry.json/sparql/shapes for the local checks engine. Leave empty to use the bundled copy."
+        },
+        "ontologySuite.triplifyPreviewSampleSize": {
+          "type": "number",
+          "default": 20,
+          "description": "Number of CSV rows sampled for the live triplify preview."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "package": "node esbuild.js --production",
+    "typecheck": "tsc --noEmit -p .",
+    "lint": "eslint src"
+  },
+  "overrides": {
+    "@comunica/query-sparql-rdfjs-lite": "5.2.3",
+    "@rdfjs/types": "^2.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.1.2",
+    "@types/vscode": "^1.125.0",
+    "@typescript-eslint/eslint-plugin": "^8.65.0",
+    "@typescript-eslint/parser": "^8.65.0",
+    "esbuild": "^0.28.1",
+    "eslint": "^10.8.0",
+    "typescript": "^6.0.3"
+  },
+  "dependencies": {
+    "@rdfjs/data-model": "^2.1.2",
+    "@viz-js/viz": "^3.28.0",
+    "@zazuko/env-node": "^3.1.0",
+    "eyereasoner": "^21.1.16",
+    "n3": "^2.1.1",
+    "oxigraph": "^0.5.9",
+    "shacl-engine": "^1.1.2"
+  }
+}

@@ -1,0 +1,78 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Turtle",
+  "scopeName": "source.turtle",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#directives" },
+    { "include": "#iris" },
+    { "include": "#blank-nodes" },
+    { "include": "#prefixed-names" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#keywords" },
+    { "include": "#punctuation" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [{ "name": "comment.line.number-sign.turtle", "match": "#.*$" }]
+    },
+    "directives": {
+      "patterns": [
+        { "name": "keyword.control.directive.turtle", "match": "(?i)@prefix\\b|@base\\b" },
+        { "name": "keyword.control.directive.turtle", "match": "(?i)\\bPREFIX\\b|\\bBASE\\b" }
+      ]
+    },
+    "iris": {
+      "patterns": [{ "name": "string.other.link.iri.turtle", "match": "<[^<>\"{}|^`\\\\\\x00-\\x20]*>" }]
+    },
+    "blank-nodes": {
+      "patterns": [{ "name": "variable.other.blank-node.turtle", "match": "_:[A-Za-z0-9_.-]+" }]
+    },
+    "prefixed-names": {
+      "patterns": [
+        {
+          "name": "entity.name.type.prefixed-name.turtle",
+          "match": "\\b([A-Za-z][\\w-]*)?:([A-Za-z_][\\w-]*)?"
+        }
+      ]
+    },
+    "strings": {
+      "patterns": [
+        { "name": "string.quoted.triple.turtle", "begin": "\"\"\"", "end": "\"\"\"", "patterns": [{ "match": "\\\\." }] },
+        { "name": "string.quoted.triple.turtle", "begin": "'''", "end": "'''", "patterns": [{ "match": "\\\\." }] },
+        {
+          "name": "string.quoted.double.turtle",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [{ "name": "constant.character.escape.turtle", "match": "\\\\." }]
+        },
+        {
+          "name": "string.quoted.single.turtle",
+          "begin": "'",
+          "end": "'",
+          "patterns": [{ "name": "constant.character.escape.turtle", "match": "\\\\." }]
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [{ "name": "constant.numeric.turtle", "match": "[+-]?\\d+(\\.\\d+)?([eE][+-]?\\d+)?" }]
+    },
+    "keywords": {
+      "patterns": [
+        { "name": "keyword.other.type-of.turtle", "match": "(?<=\\s|^)a(?=\\s)" },
+        { "name": "constant.language.boolean.turtle", "match": "\\b(true|false)\\b" }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        { "name": "punctuation.terminator.statement.turtle", "match": "\\." },
+        { "name": "punctuation.separator.predicate.turtle", "match": ";" },
+        { "name": "punctuation.separator.object.turtle", "match": "," },
+        { "name": "punctuation.definition.list.turtle", "match": "[()\\[\\]]" },
+        { "name": "punctuation.separator.datatype.turtle", "match": "\\^\\^" },
+        { "name": "punctuation.definition.language-tag.turtle", "match": "@[A-Za-z-]+" }
+      ]
+    }
+  }
+}

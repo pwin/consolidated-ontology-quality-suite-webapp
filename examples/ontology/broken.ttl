@@ -1,0 +1,11 @@
+@prefix ex: <http://example.org/demo#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+
+# Exercises the unresolved owl:imports diagnostic: this IRI is not the
+# identity or owl:versionIRI of any .ttl/.owl file in the workspace.
+<http://example.org/broken>
+  a owl:Ontology ;
+  owl:imports <http://example.org/does-not-exist-locally> ;
+  .
+
+ex:Thing a owl:Class .

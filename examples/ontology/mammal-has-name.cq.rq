@@ -1,0 +1,8 @@
+# Competency question: "Does every Mammal have a name?"
+# @expect: false
+# @against: domain.ttl
+PREFIX ex: <http://example.org/demo#>
+ASK {
+  ?m a ex:Mammal .
+  FILTER NOT EXISTS { ?m ex:hasName ?n }
+}

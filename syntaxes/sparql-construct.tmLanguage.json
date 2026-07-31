@@ -1,0 +1,57 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "SPARQL",
+  "scopeName": "source.sparql",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#keywords" },
+    { "include": "#iris" },
+    { "include": "#variables" },
+    { "include": "#prefixed-names" },
+    { "include": "#strings" },
+    { "include": "#numbers" },
+    { "include": "#punctuation" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [{ "name": "comment.line.number-sign.sparql", "match": "#.*$" }]
+    },
+    "keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.sparql",
+          "match": "(?i)\\b(PREFIX|BASE|SELECT|CONSTRUCT|ASK|DESCRIBE|WHERE|FILTER|OPTIONAL|UNION|GRAPH|BIND|VALUES|MINUS|SERVICE|FROM|NAMED|ORDER|BY|ASC|DESC|LIMIT|OFFSET|GROUP|HAVING|DISTINCT|REDUCED|AS|UNDEF)\\b"
+        },
+        {
+          "name": "support.function.sparql",
+          "match": "(?i)\\b(STR|LANG|LANGMATCHES|DATATYPE|BOUND|IRI|URI|BNODE|RAND|ABS|CEIL|FLOOR|ROUND|CONCAT|STRLEN|UCASE|LCASE|ENCODE_FOR_URI|CONTAINS|STRSTARTS|STRENDS|STRBEFORE|STRAFTER|YEAR|MONTH|DAY|HOURS|MINUTES|SECONDS|TIMEZONE|TZ|NOW|UUID|STRUUID|MD5|SHA1|SHA256|COALESCE|IF|STRLANG|STRDT|isIRI|isURI|isBLANK|isLITERAL|isNUMERIC|REGEX|SUBSTR|REPLACE|EXISTS|COUNT|SUM|MIN|MAX|AVG|SAMPLE|GROUP_CONCAT)\\b"
+        }
+      ]
+    },
+    "iris": {
+      "patterns": [{ "name": "string.other.link.iri.sparql", "match": "<[^<>\"{}|^`\\\\\\x00-\\x20]*>" }]
+    },
+    "variables": {
+      "patterns": [{ "name": "variable.parameter.sparql", "match": "[?$][A-Za-z_][\\w]*" }]
+    },
+    "prefixed-names": {
+      "patterns": [{ "name": "entity.name.type.prefixed-name.sparql", "match": "\\b([A-Za-z][\\w-]*)?:([A-Za-z_][\\w-]*)?" }]
+    },
+    "strings": {
+      "patterns": [
+        { "name": "string.quoted.triple.sparql", "begin": "\"\"\"", "end": "\"\"\"", "patterns": [{ "match": "\\\\." }] },
+        { "name": "string.quoted.double.sparql", "begin": "\"", "end": "\"", "patterns": [{ "name": "constant.character.escape.sparql", "match": "\\\\." }] },
+        { "name": "string.quoted.single.sparql", "begin": "'", "end": "'", "patterns": [{ "name": "constant.character.escape.sparql", "match": "\\\\." }] }
+      ]
+    },
+    "numbers": {
+      "patterns": [{ "name": "constant.numeric.sparql", "match": "[+-]?\\d+(\\.\\d+)?([eE][+-]?\\d+)?" }]
+    },
+    "punctuation": {
+      "patterns": [
+        { "name": "punctuation.definition.list.sparql", "match": "[(){}\\[\\]]" },
+        { "name": "punctuation.separator.sparql", "match": "[.,;]" }
+      ]
+    }
+  }
+}

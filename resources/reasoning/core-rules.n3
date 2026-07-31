@@ -1,0 +1,61 @@
+
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix oqr: <https://ontology-dev-suite.local/reasoning#> .
+
+# Compact RDFS + core OWL2-RL-ish entailment/consistency rules run via the
+# EYE reasoner (eyereasoner npm package). Not a certified OWL2 DL reasoner
+# -- deliberately scoped to the "always available, no JVM" tier described
+# in the plan; full DL completeness (HermiT/Pellet) is the Python CLI's
+# deep-validation fallback, not reimplemented here.
+
+# --- rdfs:subClassOf: transitivity + type propagation ---
+{ ?a rdfs:subClassOf ?b. ?b rdfs:subClassOf ?c. } => { ?a rdfs:subClassOf ?c. } .
+{ ?c rdfs:subClassOf ?d. ?x a ?c. } => { ?x a ?d. } .
+
+# --- rdfs:subPropertyOf: transitivity + triple propagation ---
+{ ?p rdfs:subPropertyOf ?q. ?q rdfs:subPropertyOf ?r. } => { ?p rdfs:subPropertyOf ?r. } .
+{ ?p rdfs:subPropertyOf ?q. ?x ?p ?y. } => { ?x ?q ?y. } .
+
+# --- owl:equivalentClass: symmetric, and behaves like mutual subClassOf ---
+{ ?a owl:equivalentClass ?b. } => { ?b owl:equivalentClass ?a. } .
+{ ?a owl:equivalentClass ?b. ?x a ?a. } => { ?x a ?b. } .
+{ ?a owl:equivalentClass ?b. ?x a ?b. } => { ?x a ?a. } .
+
+# --- owl:equivalentProperty: symmetric, and behaves like mutual subPropertyOf ---
+{ ?p owl:equivalentProperty ?q. } => { ?q owl:equivalentProperty ?p. } .
+{ ?p owl:equivalentProperty ?q. ?x ?p ?y. } => { ?x ?q ?y. } .
+
+# --- owl:sameAs: symmetric, transitive, shares asserted types ---
+{ ?a owl:sameAs ?b. } => { ?b owl:sameAs ?a. } .
+{ ?a owl:sameAs ?b. ?b owl:sameAs ?c. } => { ?a owl:sameAs ?c. } .
+{ ?a owl:sameAs ?b. ?a a ?c. } => { ?b a ?c. } .
+
+# --- rdfs:domain / rdfs:range inference ---
+{ ?p rdfs:domain ?c. ?x ?p ?y. } => { ?x a ?c. } .
+{ ?p rdfs:range ?c. ?x ?p ?y. } => { ?y a ?c. } .
+
+# --- Consistency: owl:disjointWith violated by shared instance ---
+# Emits an oqr:contradiction marker triple (queried back out by
+# reasoningRunner.ts) instead of relying on any reasoner-specific "false"
+# signal, since EYE doesn't expose one generically for this shape of check.
+{
+  ?c1 owl:disjointWith ?c2. ?x a ?c1. ?x a ?c2.
+} => {
+  ?x oqr:contradiction [
+    oqr:reason "disjointClasses" ;
+    oqr:class1 ?c1 ;
+    oqr:class2 ?c2 ;
+  ] .
+} .
+
+# --- Consistency: owl:sameAs contradicting owl:differentFrom ---
+{
+  ?a owl:sameAs ?b. ?a owl:differentFrom ?b.
+} => {
+  ?a oqr:contradiction [
+    oqr:reason "sameAsAndDifferentFrom" ;
+    oqr:other ?b ;
+  ] .
+} .

@@ -1,0 +1,61 @@
+@prefix ex: <http://example.org/demo#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+<http://example.org/demo>
+  a owl:Ontology ;
+  owl:versionInfo "0.1.0" ;
+  skos:prefLabel "Demo Ontology"^^xsd:string ;
+  .
+
+ex:Mammal
+  a owl:Class ;
+  rdfs:label "Mammal"^^xsd:string ;
+  skos:definition "A warm-blooded vertebrate animal."^^xsd:string ;
+  .
+
+ex:Dog
+  a owl:Class ;
+  rdfs:subClassOf ex:Mammal ;
+  rdfs:label "Dog"^^xsd:string ;
+  .
+
+ex:Cat
+  a owl:Class ;
+  rdfs:subClassOf ex:Mammal ;
+  rdfs:label "Cat"^^xsd:string ;
+  .
+
+ex:Puppy
+  a owl:Class ;
+  rdfs:subClassOf ex:Dog ;
+  rdfs:label "Puppy"^^xsd:string ;
+  .
+
+ex:hasBirthDate
+  a owl:DatatypeProperty ;
+  rdfs:domain ex:Mammal ;
+  rdfs:range xsd:date ;
+  rdfs:label "has birth date"^^xsd:string ;
+  .
+
+ex:hasName
+  a owl:DatatypeProperty ;
+  rdfs:domain ex:Mammal ;
+  rdfs:range xsd:string ;
+  rdfs:label "has name"^^xsd:string ;
+  .
+
+ex:hasOwner
+  a owl:ObjectProperty ;
+  rdfs:domain ex:Mammal ;
+  rdfs:label "has owner"^^xsd:string ;
+  .
+
+ex:hasPrimaryOwner
+  a owl:ObjectProperty ;
+  rdfs:subPropertyOf ex:hasOwner ;
+  rdfs:label "has primary owner"^^xsd:string ;
+  .

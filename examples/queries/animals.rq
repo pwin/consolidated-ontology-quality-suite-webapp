@@ -1,0 +1,14 @@
+PREFIX ex: <http://example.org/demo#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+
+CONSTRUCT {
+  ?animal a ex:Mammal ;
+    ex:hasName ?name ;
+    ex:hasBirthDate ?birthDateTyped ;
+    ex:species ?species .
+}
+WHERE {
+  BIND(IRI(CONCAT("http://example.org/demo#animal-", ?id)) AS ?animal)
+  BIND(STRDT(?birth_date, xsd:date) AS ?birthDateTyped)
+}
