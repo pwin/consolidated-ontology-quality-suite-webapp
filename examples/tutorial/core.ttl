@@ -1,0 +1,33 @@
+@prefix ex: <http://example.org/clinic#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# The base vocabulary a "clinic" ontology extends -- deliberately separate
+# from clinic.ttl to give the Tutorial a genuine owl:imports example
+# (clinic.ttl imports this by IRI, resolved locally by
+# ontology/resolveImports.ts).
+
+<http://example.org/clinic/core>
+  a owl:Ontology ;
+  owl:versionInfo "0.1.0"^^xsd:string ;
+  skos:prefLabel "Clinic Core"^^xsd:string ;
+  .
+
+ex:Animal
+  a owl:Class ;
+  rdfs:label "Animal"^^xsd:string ;
+  skos:definition "A living creature that can be brought to the clinic."^^xsd:string ;
+  .
+
+ex:Person
+  a owl:Class ;
+  rdfs:label "Person"^^xsd:string ;
+  .
+
+ex:hasName
+  a owl:DatatypeProperty ;
+  rdfs:range xsd:string ;
+  rdfs:label "has name"^^xsd:string ;
+  .

@@ -1,0 +1,21 @@
+PREFIX ex: <http://example.org/clinic#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+
+# TARQL-style CONSTRUCT for appointments.csv -- open this alongside
+# ../csv/appointments.csv (paired by filename convention) with "Ontology
+# Suite: Open Query Workbench" for a live preview. ex:appointmentNotes is
+# deliberately undeclared in clinic.ttl, to demonstrate the Query
+# Workbench's conformance warning -- see TUTORIAL.md.
+CONSTRUCT {
+  ?appointment a ex:Appointment ;
+    ex:forAnimal ?animalRef ;
+    ex:treatedBy ?vetRef ;
+    ex:hasAppointmentDate ?dateTyped ;
+    ex:appointmentNotes ?notes .
+}
+WHERE {
+  BIND(IRI(CONCAT("http://example.org/clinic#appointment-", ?appointment_id)) AS ?appointment)
+  BIND(IRI(CONCAT("http://example.org/clinic#animal-", ENCODE_FOR_URI(?animal_name))) AS ?animalRef)
+  BIND(IRI(CONCAT("http://example.org/clinic#vet-", ENCODE_FOR_URI(?vet_name))) AS ?vetRef)
+  BIND(STRDT(?appointment_date, xsd:date) AS ?dateTyped)
+}

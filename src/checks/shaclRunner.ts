@@ -9,11 +9,7 @@ const SEVERITY_LABEL: Record<string, Severity> = {
   'http://www.w3.org/ns/shacl#Info': 'Info',
 };
 
-interface CachedValidator {
-  validator: import('shacl-engine').Validator;
-  shapeFilesKey: string;
-}
-let cached: CachedValidator | undefined;
+const cachedValidators = new Map<string, import('shacl-engine').Validator>();
 
 /**
  * Runs the registry's shapes/*.ttl (advanced SHACL-SPARQL shapes named
@@ -24,21 +20,45 @@ let cached: CachedValidator | undefined;
  * and silently reports `conforms: true` against these shapes since it only
  * covers SHACL Core, not the SPARQL extensions every check here relies on.
  *
+ * Validates **one shapes file at a time**, not all six merged into one
+ * Validator: `shacl-engine`'s SPARQL plugin (via its pinned Comunica-lite
+ * dependency, see package.json's `overrides`) throws `Tried to bind
+ * variable ?this in a GROUP BY operator` on some SPARQL-constraint shapes
+ * against some graphs -- confirmed data/query-shape-dependent, not a
+ * blanket incompatibility (`data.ttl`/`efficiency.ttl` crash against a
+ * real ontology fixture while `structural.ttl`/`style.ttl`/`logical.ttl`/
+ * `quality.ttl` succeed with real findings on the exact same graph).
+ * Merging all shapes into one Validator meant one incompatible file
+ * silently zeroed out every other file's real results; per-file isolation
+ * means a crash in one only costs that file's checks.
+ *
  * `shacl-engine`'s SPARQL plugin pulls in a Comunica-lite query engine,
  * whose *module graph* costs several seconds to load on first import --
- * the `Validator` instance is cached at module scope so that cost (and the
- * shapes-parsing cost) is paid once per session, not once per check run.
+ * each file's `Validator` instance is cached at module scope so that cost
+ * (and the shape-parsing cost) is paid once per file per session, not
+ * once per check run.
  */
 export async function runShaclChecks(quads: Quad[], registry: Registry): Promise<ResultRow[]> {
   const dataFactory = (await import('@rdfjs/data-model')).default;
   const rdf = (await import('@zazuko/env-node')).default;
-
-  const validator = await getOrBuildValidator(registry, dataFactory, rdf);
-  if (!validator) return [];
-
   const dataDataset = rdf.dataset(quads as never);
-  const report = await validator.validate({ dataset: dataDataset });
 
+  const rows: ResultRow[] = [];
+  for (const file of registry.shaclFiles) {
+    const validator = await getOrBuildValidator(file, dataFactory, rdf);
+    if (!validator) continue;
+    try {
+      const report = await validator.validate({ dataset: dataDataset });
+      rows.push(...toResultRows(report, registry));
+    } catch (err) {
+       
+      console.error(`[ontologySuite] shacl-engine failed validating against ${file} (see shaclRunner.ts's per-file-isolation comment):`, err);
+    }
+  }
+  return rows;
+}
+
+function toResultRows(report: Awaited<ReturnType<import('shacl-engine').Validator['validate']>>, registry: Registry): ResultRow[] {
   const rows: ResultRow[] = [];
   for (const result of report.results) {
     const sourceShapeIri = result.shape?.ptr?.value;
@@ -64,21 +84,20 @@ export async function runShaclChecks(quads: Quad[], registry: Registry): Promise
 }
 
 async function getOrBuildValidator(
-  registry: Registry,
+  file: string,
   dataFactory: typeof import('@rdfjs/data-model').default,
   rdf: typeof import('@zazuko/env-node').default,
 ): Promise<import('shacl-engine').Validator | undefined> {
-  const key = registry.shaclFiles.slice().sort().join('|');
-  if (cached && cached.shapeFilesKey === key) return cached.validator;
+  const cached = cachedValidators.get(file);
+  if (cached) return cached;
 
-  const shapeQuads: Quad[] = [];
-  for (const file of registry.shaclFiles) {
-    try {
-      shapeQuads.push(...new Parser().parse(fs.readFileSync(file, 'utf8')));
-    } catch (err) {
-       
-      console.error(`[ontologySuite] failed to parse shapes file ${file}:`, err);
-    }
+  let shapeQuads: Quad[];
+  try {
+    shapeQuads = new Parser().parse(fs.readFileSync(file, 'utf8'));
+  } catch (err) {
+     
+    console.error(`[ontologySuite] failed to parse shapes file ${file}:`, err);
+    return undefined;
   }
   if (shapeQuads.length === 0) return undefined;
 
@@ -86,6 +105,6 @@ async function getOrBuildValidator(
   const { targetResolvers, validations } = await import('shacl-engine/sparql.js');
   const shapesDataset = rdf.dataset(shapeQuads as never);
   const validator = new Validator(shapesDataset, { factory: dataFactory, targetResolvers, validations });
-  cached = { validator, shapeFilesKey: key };
+  cachedValidators.set(file, validator);
   return validator;
 }

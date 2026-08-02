@@ -1,0 +1,32 @@
+@prefix ex: <http://example.org/clinic#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# Standalone, focused fixture for "Ontology Suite: Run Local Checks"'s
+# reasoning pass (checks/reasoningRunner.ts, EYE/eyereasoner) -- kept
+# separate from clinic.ttl so the reasoning findings aren't mixed in with
+# the modelling-guidance ones. See TUTORIAL.md's "validating with the
+# reasoner" section.
+
+ex:Dog a owl:Class ; rdfs:label "Dog"^^xsd:string .
+ex:Cat a owl:Class ; rdfs:label "Cat"^^xsd:string .
+ex:Dog owl:disjointWith ex:Cat .
+
+# Puppy is a subclass of Dog, not directly disjoint with Cat itself --
+# the contradiction below only surfaces because the reasoner propagates
+# ex:rex's asserted Puppy type up to the inferred Dog type before checking
+# disjointness, not from flat pattern-matching over asserted triples alone.
+ex:Puppy a owl:Class ; rdfs:subClassOf ex:Dog ; rdfs:label "Puppy"^^xsd:string .
+
+# REA-DISJOINT: rex is asserted a Puppy (-> inferred a Dog) *and* asserted
+# a Cat directly -- Dog and Cat are disjoint.
+ex:rex a ex:Puppy, ex:Cat ;
+  rdfs:label "Rex"^^xsd:string ;
+  .
+
+# REA-SAMEDIFF: the same pair asserted both owl:sameAs and owl:differentFrom.
+ex:alice a owl:Thing ; rdfs:label "Alice"^^xsd:string .
+ex:alicia a owl:Thing ; rdfs:label "Alicia"^^xsd:string .
+ex:alice owl:sameAs ex:alicia .
+ex:alice owl:differentFrom ex:alicia .

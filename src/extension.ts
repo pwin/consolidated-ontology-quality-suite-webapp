@@ -17,6 +17,7 @@ import { openGraphView } from './webviews/graphView';
 import { TermIndex } from './language/termIndex';
 import { registerHoverProvider } from './language/hover';
 import { registerCompletionProvider } from './language/completion';
+import { registerManchesterCompletionProvider } from './language/manchesterCompletion';
 import { registerDefinitionProvider, registerReferenceProvider, registerRenameProvider } from './language/definitionReferencesRename';
 import { registerDocumentSymbolProvider } from './language/documentSymbols';
 import { LiveDiagnosticsProvider } from './language/liveDiagnostics';
@@ -45,6 +46,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.window.registerTreeDataProvider('ontologySuite.outline', outlineProvider),
     registerHoverProvider(termIndex),
     registerCompletionProvider(termIndex),
+    registerManchesterCompletionProvider(termIndex),
     registerDefinitionProvider(termIndex),
     registerReferenceProvider(termIndex),
     registerRenameProvider(termIndex),

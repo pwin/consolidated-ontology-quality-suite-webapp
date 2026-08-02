@@ -131,6 +131,28 @@ Validation" and "Full Triplify" commands, degrading gracefully if absent.
   lighter profile deliberately or use full OWL2 DL when you need the
   expressivity.
 
+**Editing assistance**
+- Autocomplete in `.ttl`/`.rq` is *position-aware*: after `a`/`rdf:type` it
+  suggests classes only; in predicate position, properties only; after
+  `rdfs:subClassOf`/`rdfs:domain`/`rdfs:range`/`owl:equivalentClass`,
+  classes only; after `rdfs:subPropertyOf`/`owl:inverseOf`, properties only
+  — instead of dumping every class/property/individual in the namespace
+  into one list regardless of where the cursor is
+  (`language/completionContext.ts`, a lightweight statement-position
+  heuristic, not a full parser — fails open to "show everything" for
+  anything it can't confidently classify, e.g. inside nested `[ ... ]`
+  blank-node property lists).
+- Autocomplete in `.omn` (Manchester Syntax) — previously none at all:
+  prefix completion, section-aware term completion (`SubClassOf:`/
+  `Types:` suggest classes *and* properties, since a class expression can
+  start with either; `Domain:`/`Range:` suggest classes only;
+  `SubPropertyOf:` suggests properties only), and class-expression keyword
+  completion (`and`/`or`/`not`/`some`/`only`/`value`/`Self`/`min`/`max`/
+  `exactly`) wherever a class expression is being written
+  (`language/manchesterSection.ts` + `manchesterCompletion.ts`).
+- Hover shows label/kind/comment/definition/domain/range/subClassOf for
+  any term, or flags it as undeclared.
+
 **Refactoring**
 - Find-References and workspace-wide Rename for ontology terms, across
   `.ttl` and `.rq` files, backed by the same index used for completion and
@@ -209,25 +231,45 @@ other format and opens the result — warns first if the target is lossy.
 1. Open this folder in VS Code and press `F5` (runs `npm run compile` first,
    via `.vscode/launch.json`/`tasks.json`) — launches an Extension
    Development Host with the extension loaded.
-2. In that window, open the `examples/` folder and try `ontology/domain.ttl`,
-   `queries/animals.rq`, and the commands above.
+2. In that window, open `examples/tutorial/` and work through
+   **[TUTORIAL.md](TUTORIAL.md)** — every feature, step by step, against a
+   coherent example ontology plus a real gist v11→v14.1 upstream-migration
+   scenario.
 3. Alternatively, install the packaged extension directly:
    `code --install-extension ontology-dev-suite-0.2.0.vsix` (build it with
    `npx @vscode/vsce package`).
 
-## Verification
+## Testing
 
-Since driving the actual VS Code GUI isn't possible in the environment this
-was built in, the core logic was verified with standalone Node scripts
-against `examples/`, confirmed to produce correct, real output — not just
-"compiles": import resolution, the checks engine, sketch/prefix-alignment,
-the live triplify preview, CSV profiling, the class/property hierarchy
-builder, and (v0.2.0) every format's round-trip through
-`examples/ontology/domain.ttl` plus the Manchester Syntax class-expression
-engine against a set of real OWL2 restrictions
-(`examples/ontology/expressions-demo.ttl` — `someValuesFrom`,
-`intersectionOf`, `qualifiedCardinality`), confirmed zero triple loss.
-`npm run typecheck`, `npm run lint`, and `npm run compile` all pass clean.
+Two tiers, both real and both passing as of this writing:
+
+- **`npm test`** (Vitest) — 98 tests across 22 files covering every
+  pure-logic module: parsing, all six serializations' round-trips
+  (including the Manchester class-expression engine against real OWL2
+  restrictions), import resolution (including the gist v11→v14.1 drift-
+  and-fix scenario below), the checks engine (SPARQL/SHACL/reasoning/
+  guidance), triplification (sketch/conformance/live-preview/CSV
+  profiling), and the completion-position heuristics. Fast (~10s), no VS
+  Code required.
+- **`npm run test:integration`** (`@vscode/test-cli` + `@vscode/test-electron`)
+  — launches a real, headless VS Code Extension Development Host and
+  exercises the actual extension: activation, command registration,
+  language assignment, and a full **Run Local Checks** run against
+  `examples/tutorial/clinic.ttl` asserting real diagnostics land in the
+  Problems panel. Slower (~35s) and requires downloading a VS Code test
+  binary on first run.
+
+Both suites — and the manual walkthrough in `TUTORIAL.md` — use the same
+`examples/` fixtures, so nothing in the tutorial is aspirational; if it's
+described as working, a test asserts it.
+
+Building this test suite surfaced two real bugs, both fixed (see
+`CHANGELOG.md`): `shacl-engine` crashing on some check shapes against a
+real ontology (fixed via per-shapes-file isolation), and `findPair` not
+searching sibling `csv/`/`queries/` directories (the exact layout every
+example fixture in this repo uses, including the ones that shipped in
+0.1.0 — meaning the Query Workbench's live preview never actually found
+its paired CSV until this was caught by a test).
 
 ## Packaging notes
 

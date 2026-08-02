@@ -1,0 +1,9 @@
+# Competency question: "Does every appointment have a date?" -- passes
+# (green) against instances.ttl, unlike every-appointment-has-vet.cq.rq.
+# @expect: false
+# @against: clinic.ttl,instances.ttl
+PREFIX ex: <http://example.org/clinic#>
+ASK {
+  ?a a ex:Appointment .
+  FILTER NOT EXISTS { ?a ex:hasAppointmentDate ?d }
+}

@@ -1,0 +1,12 @@
+# Competency question: "Does every appointment have a vet assigned?"
+# Deliberately RED against instances.ttl -- appointment-2 has no
+# ex:treatedBy. See TUTORIAL.md: fixing instances.ttl to add one turns
+# this green, a hands-on way to see the test framework catch (and confirm
+# the fix for) a real data gap.
+# @expect: false
+# @against: clinic.ttl,instances.ttl
+PREFIX ex: <http://example.org/clinic#>
+ASK {
+  ?a a ex:Appointment .
+  FILTER NOT EXISTS { ?a ex:treatedBy ?v }
+}

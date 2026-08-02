@@ -1,0 +1,116 @@
+@prefix ex: <http://example.org/clinic#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# A small veterinary-clinic ontology: realistic enough to carry a tutorial
+# (class hierarchy, object/datatype properties, disjointness, an
+# owl:imports dependency on core.ttl), and deliberately carrying one
+# instance of each MDL-00x modelling-guidance smell so "Run Local Checks"
+# has something real to say. See TUTORIAL.md.
+
+<http://example.org/clinic>
+  a owl:Ontology ;
+  owl:imports <http://example.org/clinic/core> ;
+  owl:versionInfo "0.1.0"^^xsd:string ;
+  skos:prefLabel "Veterinary Clinic"^^xsd:string ;
+  .
+
+ex:Mammal
+  a owl:Class ;
+  rdfs:subClassOf ex:Animal ;
+  rdfs:label "Mammal"^^xsd:string ;
+  .
+
+ex:Dog
+  a owl:Class ;
+  rdfs:subClassOf ex:Mammal ;
+  rdfs:label "Dog"^^xsd:string ;
+  owl:disjointWith ex:Cat ;
+  .
+
+ex:Cat
+  a owl:Class ;
+  rdfs:subClassOf ex:Mammal ;
+  rdfs:label "Cat"^^xsd:string ;
+  .
+
+ex:Owner
+  a owl:Class ;
+  rdfs:subClassOf ex:Person ;
+  rdfs:label "Owner"^^xsd:string ;
+  .
+
+ex:Veterinarian
+  a owl:Class ;
+  rdfs:subClassOf ex:Person ;
+  rdfs:label "Veterinarian"^^xsd:string ;
+  .
+
+# MDL-002 smell: a plain named-to-named equivalentClass with no logical
+# definition -- should usually be rdfs:subClassOf or a SKOS mapping instead.
+ex:AnimalDoctor
+  a owl:Class ;
+  rdfs:label "Animal Doctor"^^xsd:string ;
+  .
+
+ex:Veterinarian
+  owl:equivalentClass ex:AnimalDoctor ;
+  .
+
+# MDL-003 smell: a classification-only class with no restrictions of its
+# own -- a candidate for gist:Category instead of a new owl:Class.
+ex:AppointmentType
+  a owl:Class ;
+  rdfs:label "Appointment Type"^^xsd:string ;
+  skos:example "Checkup, vaccination, surgery."^^xsd:string ;
+  .
+
+ex:Appointment
+  a owl:Class ;
+  rdfs:label "Appointment"^^xsd:string ;
+  .
+
+ex:hasOwner
+  a owl:ObjectProperty ;
+  rdfs:domain ex:Animal ;
+  rdfs:range ex:Owner ;
+  rdfs:label "has owner"^^xsd:string ;
+  .
+
+# MDL-001 smell: a named inverse property declared as a top-level property
+# rather than scoped inline to one restriction (see gist's own convention).
+ex:isOwnerOf
+  a owl:ObjectProperty ;
+  owl:inverseOf ex:hasOwner ;
+  rdfs:label "is owner of"^^xsd:string ;
+  .
+
+ex:treatedBy
+  a owl:ObjectProperty ;
+  rdfs:domain ex:Appointment ;
+  rdfs:range ex:Veterinarian ;
+  rdfs:label "treated by"^^xsd:string ;
+  .
+
+ex:forAnimal
+  a owl:ObjectProperty ;
+  rdfs:domain ex:Appointment ;
+  rdfs:range ex:Animal ;
+  rdfs:label "for animal"^^xsd:string ;
+  .
+
+ex:hasBirthDate
+  a owl:DatatypeProperty ;
+  rdfs:domain ex:Animal ;
+  rdfs:range xsd:date ;
+  rdfs:label "has birth date"^^xsd:string ;
+  .
+
+ex:hasAppointmentDate
+  a owl:DatatypeProperty ;
+  rdfs:domain ex:Appointment ;
+  rdfs:range xsd:date ;
+  rdfs:label "has appointment date"^^xsd:string ;
+  .
