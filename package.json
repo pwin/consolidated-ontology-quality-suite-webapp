@@ -1,8 +1,8 @@
 {
   "name": "ontology-dev-suite",
   "displayName": "Ontology Development Suite",
-  "description": "Create ontologies (with imports), author TARQL-style CSV-to-RDF CONSTRUCT queries with live preview, and validate against a local SPARQL/SHACL/OWL2-RL checks engine.",
-  "version": "0.1.0",
+  "description": "Create ontologies (with imports) in Turtle, TriG, N-Triples, N-Quads, RDF/XML, or OWL Manchester Syntax, author TARQL-style CSV-to-RDF CONSTRUCT queries with live preview, and validate against a local SPARQL/SHACL/OWL2-RL checks engine.",
+  "version": "0.2.0",
   "publisher": "local",
   "private": true,
   "engines": {
@@ -15,7 +15,11 @@
     "Testing"
   ],
   "activationEvents": [
-    "workspaceContains:**/*.ttl"
+    "workspaceContains:**/*.ttl",
+    "workspaceContains:**/*.trig",
+    "workspaceContains:**/*.nt",
+    "workspaceContains:**/*.nq",
+    "workspaceContains:**/*.omn"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -31,6 +35,57 @@
           ".owl"
         ],
         "configuration": "./language-configuration.turtle.json"
+      },
+      {
+        "id": "trig",
+        "aliases": [
+          "TriG",
+          "trig"
+        ],
+        "extensions": [
+          ".trig"
+        ],
+        "configuration": "./language-configuration.turtle.json"
+      },
+      {
+        "id": "ntriples",
+        "aliases": [
+          "N-Triples",
+          "ntriples"
+        ],
+        "extensions": [
+          ".nt"
+        ],
+        "configuration": "./language-configuration.turtle.json"
+      },
+      {
+        "id": "nquads",
+        "aliases": [
+          "N-Quads",
+          "nquads"
+        ],
+        "extensions": [
+          ".nq",
+          ".nquads"
+        ],
+        "configuration": "./language-configuration.turtle.json"
+      },
+      {
+        "id": "owl-manchester",
+        "aliases": [
+          "OWL Manchester Syntax",
+          "manchester"
+        ],
+        "extensions": [
+          ".omn"
+        ],
+        "configuration": "./language-configuration.manchester.json"
+      },
+      {
+        "id": "xml",
+        "extensions": [
+          ".rdf"
+        ]
       },
       {
         "id": "sparql-construct",
@@ -51,6 +106,26 @@
         "language": "turtle",
         "scopeName": "source.turtle",
         "path": "./syntaxes/turtle.tmLanguage.json"
+      },
+      {
+        "language": "trig",
+        "scopeName": "source.turtle",
+        "path": "./syntaxes/turtle.tmLanguage.json"
+      },
+      {
+        "language": "ntriples",
+        "scopeName": "source.turtle",
+        "path": "./syntaxes/turtle.tmLanguage.json"
+      },
+      {
+        "language": "nquads",
+        "scopeName": "source.turtle",
+        "path": "./syntaxes/turtle.tmLanguage.json"
+      },
+      {
+        "language": "owl-manchester",
+        "scopeName": "source.owl-manchester",
+        "path": "./syntaxes/manchester.tmLanguage.json"
       },
       {
         "language": "sparql-construct",
@@ -102,6 +177,10 @@
       {
         "command": "ontologySuite.refreshOutline",
         "title": "Ontology Suite: Refresh Outline"
+      },
+      {
+        "command": "ontologySuite.convertFormat",
+        "title": "Ontology Suite: Convert / Save As Serialization..."
       }
     ],
     "menus": {
@@ -135,6 +214,9 @@
         },
         {
           "command": "ontologySuite.runFullTriplify"
+        },
+        {
+          "command": "ontologySuite.convertFormat"
         }
       ],
       "view/title": [
@@ -225,6 +307,7 @@
     "eyereasoner": "^21.1.16",
     "n3": "^2.1.1",
     "oxigraph": "^0.5.9",
+    "rdfxml-streaming-parser": "^3.2.0",
     "shacl-engine": "^1.1.2"
   }
 }

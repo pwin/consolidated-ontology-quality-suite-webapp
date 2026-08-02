@@ -4,11 +4,14 @@ A VS Code extension for creating ontologies (with `owl:imports`) and building
 TARQL-style CSV → RDF data graphs, with live diagnostics, a local
 SPARQL/SHACL/OWL2-RL checks engine, and DL-expressivity/OWL2-profile
 metrics — all running in-process via WASM/JS, no Python or Java required
-for the core workflow.
+for the core workflow. Reads, writes, and converts between Turtle, TriG,
+N-Triples, N-Quads, RDF/XML, and OWL Manchester Syntax (including real
+class expressions — `and`/`or`/`not`/`some`/`only`/cardinality
+restrictions — not just atomic declarations; see [Serializations](#serializations)).
 
-It grew out of two sibling projects: [`consolidated_ontology_suite`](../consolidated_ontology_suite)
+It grew out of two sibling projects: `consolidated_ontology_suite`
 (a mature Python CLI with a 50-check registry, reasoning, docgen, and the
-real `oxi-gen` triplifier) and [`turtle-editor-viewer`](../turtle-editor-viewer)
+real `oxi-gen` triplifier) and `turtle-editor-viewer`
 (a browser-based Turtle/SPARQL editor). This extension reuses the check
 registry's *data* (`registry.json` + `sparql/*.rq` + `shapes/*.ttl` —
 vendored under `resources/checks-registry/`) directly, evaluated by
@@ -27,7 +30,7 @@ Open an ontology, ask for its graph, and get a real rendered SVG (this one
 is generated straight from `examples/ontology/domain.ttl` by the extension's
 own renderer, not a mockup):
 
-![Example graph view output](resources/readme/graph-example.svg)
+![Example graph view output](resources/readme/graph-example.png)
 
 The Ontology Outline (Explorer sidebar) shows classes and properties as a
 nested, Protégé-style hierarchy — object and datatype properties kept as
@@ -144,6 +147,38 @@ gist upper ontology (`ontologySuite.modellingGuidance`, default `"gist"`):
 | `MDL-002` | `owl:equivalentClass` between two plain named classes with no logical definition — usually should be `rdfs:subClassOf` or a SKOS mapping instead. |
 | `MDL-003` | A class with no restrictions of its own — consider `gist:Category` instead, per gist's own scope note on the class. |
 
+## Serializations
+
+Six formats, both directions, via `rdf/serialization.ts`:
+
+| Format | Extension | Read/write via | Round-trips |
+|---|---|---|---|
+| Turtle | `.ttl` | N3.js | Losslessly |
+| TriG | `.trig` | N3.js | Losslessly |
+| N-Triples | `.nt` | N3.js | Losslessly |
+| N-Quads | `.nq`/`.nquads` | N3.js | Losslessly |
+| RDF/XML | `.rdf` | `rdfxml-streaming-parser` (read) + hand-written writer (no `@rdfjs/serializer-rdfxml` exists) | Losslessly |
+| OWL Manchester Syntax | `.omn` | hand-written tokenizer/parser/writer (no npm package exists at all) | OWL-axiom subset only |
+
+Manchester Syntax gets real class-expression support, not just atomic
+class names: `SubClassOf: hasOwner some Person`, `EquivalentTo: Dog and
+(hasOwner some Person)`, cardinality restrictions, `{individual, sets}`,
+etc. — a hand-rolled recursive-descent parser for the (compact,
+well-specified) Manchester expression grammar, translating to/from the
+standard OWL2-in-RDF blank-node encoding
+(`owl:intersectionOf`/`someValuesFrom`/`onProperty`/...). It's still a
+deliberately-scoped subset of full Manchester Syntax — declarations,
+annotations, domain/range, subClassOf/equivalentClass with class
+expressions, individual types — property characteristics and data-range
+expressions aren't covered, which is why `FORMATS.manchester.
+losslessGraph` is `false` where every other format is `true`.
+
+`.owl` is content-sniffed rather than assumed (Protégé defaults it to
+RDF/XML; plenty of hand-authored `.owl` files are actually Turtle).
+
+**Convert / Save As Serialization...** converts the active document to any
+other format and opens the result — warns first if the target is lossy.
+
 ## Commands
 
 | Command | What it does |
@@ -158,6 +193,7 @@ gist upper ontology (`ontologySuite.modellingGuidance`, default `"gist"`):
 | Ontology Suite: Infer Ontology + Query from CSV... | Draft an ontology + query from a raw CSV |
 | Ontology Suite: Run Deep Validation (Python CLI) | Optional full-OWL2-DL fallback |
 | Ontology Suite: Run Full Triplify (Python CLI / oxi-gen) | Production-scale triplification |
+| Ontology Suite: Convert / Save As Serialization... | Convert the active document to another format |
 
 ## Settings
 
@@ -176,18 +212,22 @@ gist upper ontology (`ontologySuite.modellingGuidance`, default `"gist"`):
 2. In that window, open the `examples/` folder and try `ontology/domain.ttl`,
    `queries/animals.rq`, and the commands above.
 3. Alternatively, install the packaged extension directly:
-   `code --install-extension ontology-dev-suite-0.1.0.vsix` (built via
+   `code --install-extension ontology-dev-suite-0.2.0.vsix` (build it with
    `npx @vscode/vsce package`).
 
 ## Verification
 
 Since driving the actual VS Code GUI isn't possible in the environment this
-was built in, the core logic (import resolution, the checks engine, sketch/
-prefix-alignment, the live triplify preview, CSV profiling, and the class/
-property hierarchy builder) was verified with standalone Node scripts
+was built in, the core logic was verified with standalone Node scripts
 against `examples/`, confirmed to produce correct, real output — not just
-"compiles". `npm run typecheck`, `npm run lint`, and `npm run compile` all
-pass clean.
+"compiles": import resolution, the checks engine, sketch/prefix-alignment,
+the live triplify preview, CSV profiling, the class/property hierarchy
+builder, and (v0.2.0) every format's round-trip through
+`examples/ontology/domain.ttl` plus the Manchester Syntax class-expression
+engine against a set of real OWL2 restrictions
+(`examples/ontology/expressions-demo.ttl` — `someValuesFrom`,
+`intersectionOf`, `qualifiedCardinality`), confirmed zero triple loss.
+`npm run typecheck`, `npm run lint`, and `npm run compile` all pass clean.
 
 ## Packaging notes
 

@@ -1,0 +1,43 @@
+@prefix ex: <http://example.org/demo#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# Fixture exercising real OWL2 class expressions -- not just atomic
+# subClassOf targets -- to test the Manchester Syntax class-expression
+# engine (rdf/formats/classExpression.ts) round-trips them correctly.
+
+ex:Person a owl:Class ; rdfs:label "Person"^^xsd:string .
+ex:Dog a owl:Class ; rdfs:label "Dog"^^xsd:string .
+
+ex:hasOwner a owl:ObjectProperty ;
+  rdfs:domain ex:Dog ;
+  rdfs:range ex:Person ;
+  rdfs:label "has owner"^^xsd:string .
+
+# Existential restriction: "a dog that has some owner who is a Person"
+ex:OwnedDog a owl:Class ;
+  rdfs:label "Owned Dog"^^xsd:string ;
+  rdfs:subClassOf [
+    a owl:Restriction ;
+    owl:onProperty ex:hasOwner ;
+    owl:someValuesFrom ex:Person ;
+  ] .
+
+# Intersection: "a dog that is also an OwnedDog"
+ex:HappyDog a owl:Class ;
+  rdfs:label "Happy Dog"^^xsd:string ;
+  owl:equivalentClass [
+    a owl:Class ;
+    owl:intersectionOf ( ex:Dog ex:OwnedDog ) ;
+  ] .
+
+# Qualified cardinality: exactly one owner who is a Person
+ex:SingleOwnerDog a owl:Class ;
+  rdfs:label "Single Owner Dog"^^xsd:string ;
+  rdfs:subClassOf [
+    a owl:Restriction ;
+    owl:onProperty ex:hasOwner ;
+    owl:onClass ex:Person ;
+    owl:qualifiedCardinality "1"^^xsd:nonNegativeInteger ;
+  ] .

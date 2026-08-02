@@ -1,0 +1,27 @@
+Prefix: ex: <http://example.org/demo#>
+Prefix: owl: <http://www.w3.org/2002/07/owl#>
+Prefix: rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+Prefix: xsd: <http://www.w3.org/2001/XMLSchema#>
+
+Class: ex:Person
+    Annotations: rdfs:label "Person"
+
+Class: ex:Dog
+    Annotations: rdfs:label "Dog"
+
+ObjectProperty: ex:hasOwner
+    Domain: ex:Dog
+    Range: ex:Person
+    Annotations: rdfs:label "has owner"
+
+Class: ex:OwnedDog
+    SubClassOf: ex:hasOwner some ex:Person
+    Annotations: rdfs:label "Owned Dog"
+
+Class: ex:HappyDog
+    EquivalentTo: ex:Dog and ex:OwnedDog
+    Annotations: rdfs:label "Happy Dog"
+
+Class: ex:SingleOwnerDog
+    SubClassOf: ex:hasOwner exactly 1 ex:Person
+    Annotations: rdfs:label "Single Owner Dog"

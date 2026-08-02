@@ -1,9 +1,10 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { parseTurtle } from './rdf/parseDocument';
+import { parseTurtle, readOntologyDocument } from './rdf/parseDocument';
 import { resolveImports } from './ontology/resolveImports';
 import { analyzeExpressivity } from './rdf/expressivity';
 import { renderMetricsMarkdown } from './ontology/metricsReport';
+import { FORMATS, RdfFormat, detectFormat, serializeRdf } from './rdf/serialization';
 import { newOntologyWizard, promptAddClass, promptAddProperty, renderAddClassTurtle, renderAddPropertyTurtle } from './ontology/scaffold';
 import { OntologyOutlineProvider } from './ontology/outline';
 import { LocalChecksEngine } from './checks/runLocalChecks';
@@ -59,12 +60,13 @@ export function activate(context: vscode.ExtensionContext): void {
   void updateStatusBar(vscode.window.activeTextEditor);
 
   async function updateStatusBar(editor: vscode.TextEditor | undefined): Promise<void> {
-    if (!editor || editor.document.languageId !== 'turtle') {
+    const format = editor ? detectFormat(editor.document.uri.fsPath, editor.document.getText()) : undefined;
+    if (!editor || !format) {
       statusBarItem.hide();
       return;
     }
     try {
-      const parsed = parseTurtle(editor.document.uri.toString(), editor.document.getText());
+      const parsed = await readOntologyDocument(editor.document.uri.fsPath, editor.document.getText());
       const e = analyzeExpressivity(parsed.quads);
       const profiles = (['EL', 'QL', 'RL'] as const).filter((p) => e.profileMembership[p]).join('/');
       statusBarItem.text = `$(symbol-class) ${e.dlExpressivity}${profiles ? ` (${profiles})` : ''}`;
@@ -75,10 +77,21 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   }
 
+  /** Editing commands (Add Class/Property) work by textual append, which only makes sense for Turtle. */
   function activeTurtleUri(): vscode.Uri | undefined {
     const editor = vscode.window.activeTextEditor;
     if (!editor || editor.document.languageId !== 'turtle') {
       void vscode.window.showErrorMessage('Open a .ttl ontology file first.');
+      return undefined;
+    }
+    return editor.document.uri;
+  }
+
+  /** Read-oriented commands (checks, metrics, graph view) work for any of the six supported serializations. */
+  function activeRdfUri(): vscode.Uri | undefined {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor || !detectFormat(editor.document.uri.fsPath, editor.document.getText())) {
+      void vscode.window.showErrorMessage('Open an ontology file (Turtle, TriG, N-Triples, N-Quads, RDF/XML, or Manchester Syntax) first.');
       return undefined;
     }
     return editor.document.uri;
@@ -159,23 +172,23 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
 
     vscode.commands.registerCommand('ontologySuite.openGraphView', async () => {
-      const uri = activeTurtleUri();
+      const uri = activeRdfUri();
       if (!uri) return;
       await openGraphView(uri);
     }),
 
     vscode.commands.registerCommand('ontologySuite.runLocalChecks', async () => {
-      const uri = activeTurtleUri();
+      const uri = activeRdfUri();
       if (!uri) return;
       await localChecks.runForFile(uri);
     }),
 
     vscode.commands.registerCommand('ontologySuite.showMetrics', async () => {
-      const uri = activeTurtleUri();
+      const uri = activeRdfUri();
       if (!uri) return;
       const text = new TextDecoder('utf-8').decode(await vscode.workspace.fs.readFile(uri));
-      const parsed = parseTurtle(uri.toString(), text);
-      const { mergedQuads } = resolveImports(uri.fsPath, parsed.quads, path.dirname(uri.fsPath));
+      const parsed = await readOntologyDocument(uri.fsPath, text);
+      const { mergedQuads } = await resolveImports(uri.fsPath, parsed.quads, path.dirname(uri.fsPath));
       const markdown = renderMetricsMarkdown(parsed.quads.find((q) => q.predicate.value.endsWith('22-rdf-syntax-ns#type'))?.subject.value ?? null, mergedQuads);
       const doc = await vscode.workspace.openTextDocument({ content: markdown, language: 'markdown' });
       await vscode.commands.executeCommand('markdown.showPreview', doc.uri);
@@ -198,10 +211,10 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
 
     vscode.commands.registerCommand('ontologySuite.runDeepValidation', async () => {
-      const uri = activeTurtleUri();
+      const uri = activeRdfUri();
       if (!uri) return;
       const text = new TextDecoder('utf-8').decode(await vscode.workspace.fs.readFile(uri));
-      const parsed = parseTurtle(uri.toString(), text);
+      const parsed = await readOntologyDocument(uri.fsPath, text);
       try {
         const rows = await vscode.window.withProgress(
           { location: vscode.ProgressLocation.Notification, title: 'Ontology Suite: running Python CLI deep validation…' },
@@ -228,7 +241,55 @@ export function activate(context: vscode.ExtensionContext): void {
         /* errors already surfaced via the CLI client's own error message / output channel */
       }
     }),
+
+    vscode.commands.registerCommand('ontologySuite.convertFormat', async () => {
+      const uri = activeRdfUri();
+      if (!uri) return;
+      const sourceFormat = detectFormat(uri.fsPath, vscode.window.activeTextEditor!.document.getText())!;
+
+      const targetPick = await vscode.window.showQuickPick(
+        Object.values(FORMATS)
+          .filter((f) => f.id !== sourceFormat)
+          .map((f) => ({ label: f.label, description: f.extensions[0], id: f.id, losslessGraph: f.losslessGraph })),
+        { placeHolder: 'Convert to which serialization?' },
+      );
+      if (!targetPick) return;
+      const targetFormat = (targetPick as { id: RdfFormat }).id;
+
+      if (!FORMATS[targetFormat].losslessGraph) {
+        const proceed = await vscode.window.showWarningMessage(
+          `${FORMATS[targetFormat].label} only round-trips an OWL-axiom subset (class/property declarations, labels, domain/range, subClassOf/EquivalentTo class expressions, individual types) -- arbitrary other RDF in this document will be dropped. Continue?`,
+          'Convert anyway',
+          'Cancel',
+        );
+        if (proceed !== 'Convert anyway') return;
+      }
+
+      const text = new TextDecoder('utf-8').decode(await vscode.workspace.fs.readFile(uri));
+      const parsed = await readOntologyDocument(uri.fsPath, text);
+      if (parsed.errors.length > 0) {
+        const proceed = await vscode.window.showWarningMessage(
+          `The source document has ${parsed.errors.length} parse error(s); converting only what parsed successfully. Continue?`,
+          'Convert anyway',
+          'Cancel',
+        );
+        if (proceed !== 'Convert anyway') return;
+      }
+
+      const converted = await serializeRdf(parsed.quads, targetFormat, parsed.prefixes);
+      const targetUri = vscode.Uri.file(replaceExtension(uri.fsPath, FORMATS[targetFormat].extensions[0]));
+      await vscode.workspace.fs.writeFile(targetUri, Buffer.from(converted, 'utf8'));
+      const doc = await vscode.workspace.openTextDocument(targetUri);
+      await vscode.window.showTextDocument(doc, { viewColumn: vscode.ViewColumn.Beside });
+      void vscode.window.showInformationMessage(`Converted to ${FORMATS[targetFormat].label}: ${targetUri.fsPath}`);
+    }),
   );
+}
+
+function replaceExtension(filePath: string, newExt: string): string {
+  const dir = path.dirname(filePath);
+  const base = path.basename(filePath, path.extname(filePath));
+  return path.join(dir, `${base}${newExt}`);
 }
 
 function choosePrimaryPrefix(prefixes: Record<string, string>): string {

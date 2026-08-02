@@ -1,7 +1,7 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { Quad } from 'n3';
-import { parseTurtle } from '../rdf/parseDocument';
+import { readOntologyDocument } from '../rdf/parseDocument';
 import { resolveImports } from '../ontology/resolveImports';
 import { loadRegistry, Registry } from './registryLoader';
 import { runSparqlChecks } from './sparqlRunner';
@@ -36,10 +36,10 @@ export class LocalChecksEngine {
       async (progress) => {
         const bytes = await vscode.workspace.fs.readFile(fileUri);
         const text = new TextDecoder('utf-8').decode(bytes);
-        const doc = parseTurtle(fileUri.toString(), text);
+        const doc = await readOntologyDocument(fileUri.fsPath, text);
 
         progress.report({ message: 'resolving imports', increment: 10 });
-        const { mergedQuads } = resolveImports(fileUri.fsPath, doc.quads, path.dirname(fileUri.fsPath));
+        const { mergedQuads } = await resolveImports(fileUri.fsPath, doc.quads, path.dirname(fileUri.fsPath));
 
         const registry = this.getRegistry();
         const config = vscode.workspace.getConfiguration('ontologySuite');
