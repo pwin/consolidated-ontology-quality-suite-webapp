@@ -1,0 +1,59 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "OWL Manchester Syntax",
+  "scopeName": "source.owl-manchester",
+  "patterns": [
+    { "include": "#comments" },
+    { "include": "#frame-keywords" },
+    { "include": "#section-keywords" },
+    { "include": "#expression-keywords" },
+    { "include": "#iris" },
+    { "include": "#prefixed-names" },
+    { "include": "#strings" }
+  ],
+  "repository": {
+    "comments": {
+      "patterns": [{ "name": "comment.line.number-sign.owl-manchester", "match": "#.*$" }]
+    },
+    "frame-keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.frame.owl-manchester",
+          "match": "^\\s*(Prefix|Ontology|Class|ObjectProperty|DataProperty|AnnotationProperty|Individual)\\s*:"
+        }
+      ]
+    },
+    "section-keywords": {
+      "patterns": [
+        {
+          "name": "keyword.control.section.owl-manchester",
+          "match": "\\b(SubClassOf|SubPropertyOf|EquivalentTo|DisjointWith|Domain|Range|Types|Annotations|Characteristics|InverseOf)\\s*:"
+        }
+      ]
+    },
+    "expression-keywords": {
+      "patterns": [
+        {
+          "name": "keyword.operator.word.owl-manchester",
+          "match": "\\b(and|or|not|some|only|min|max|exactly|value|Self)\\b"
+        }
+      ]
+    },
+    "iris": {
+      "patterns": [{ "name": "string.other.link.iri.owl-manchester", "match": "<[^<>\"{}|^`\\\\\\x00-\\x20]*>" }]
+    },
+    "prefixed-names": {
+      "patterns": [{ "name": "entity.name.type.prefixed-name.owl-manchester", "match": "\\b([A-Za-z][\\w-]*)?:([A-Za-z_][\\w-]*)" }]
+    },
+    "strings": {
+      "patterns": [
+        {
+          "name": "string.quoted.double.owl-manchester",
+          "begin": "\"",
+          "end": "\"",
+          "patterns": [{ "name": "constant.character.escape.owl-manchester", "match": "\\\\." }]
+        }
+      ]
+    }
+  }
+}

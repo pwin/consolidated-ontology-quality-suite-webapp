@@ -1,0 +1,30 @@
+@prefix ex: <http://example.org/demo#> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# A genuine TriG example (the previous version of this file was domain.ttl
+# re-serialized as TriG, which -- having no named graphs -- was
+# byte-for-byte indistinguishable from plain Turtle; not a useful example
+# of what TriG is actually for). Schema and instance data kept in separate
+# named graphs here, the way TriG is used in practice -- e.g. to track
+# provenance, or to let a triplify pipeline write each CSV batch into its
+# own graph.
+
+ex:schemaGraph {
+  ex:Mammal a owl:Class ;
+    rdfs:label "Mammal"^^xsd:string .
+
+  ex:hasName a owl:DatatypeProperty ;
+    rdfs:domain ex:Mammal ;
+    rdfs:range xsd:string ;
+    rdfs:label "has name"^^xsd:string .
+}
+
+ex:instanceGraph {
+  ex:animal-1 a ex:Mammal ;
+    ex:hasName "Buddy"^^xsd:string .
+
+  ex:animal-2 a ex:Mammal ;
+    ex:hasName "Luna"^^xsd:string .
+}

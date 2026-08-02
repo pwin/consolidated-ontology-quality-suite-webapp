@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { parseTurtle } from '../rdf/parseDocument';
+import { readOntologyDocument } from '../rdf/parseDocument';
 import { resolveImports } from '../ontology/resolveImports';
 import { sketchQuery, renderSketchTurtle } from '../triplify/sketch';
 import { checkAlignment } from '../triplify/prefixAlignment';
@@ -70,8 +70,8 @@ export class QueryWorkbench implements vscode.Disposable {
     const ontologyUri = await findLikelyOntology(this.queryUri);
     if (ontologyUri) {
       const ontologyText = new TextDecoder('utf-8').decode(await vscode.workspace.fs.readFile(ontologyUri));
-      const parsed = parseTurtle(ontologyUri.toString(), ontologyText);
-      const resolved = resolveImports(ontologyUri.fsPath, parsed.quads, path.dirname(ontologyUri.fsPath));
+      const parsed = await readOntologyDocument(ontologyUri.fsPath, ontologyText);
+      const resolved = await resolveImports(ontologyUri.fsPath, parsed.quads, path.dirname(ontologyUri.fsPath));
       ontologyQuads = resolved.mergedQuads;
       ontologyPrefixes = parsed.prefixes;
     }

@@ -1,6 +1,6 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { parseTurtle } from '../rdf/parseDocument';
+import { readOntologyDocument } from '../rdf/parseDocument';
 import { resolveImports } from '../ontology/resolveImports';
 
 interface CqDirectives {
@@ -125,8 +125,8 @@ export class CompetencyQuestionProvider implements vscode.Disposable {
     for (const filePath of targetPaths) {
       try {
         const bytes = await vscode.workspace.fs.readFile(vscode.Uri.file(filePath));
-        const parsed = parseTurtle(filePath, new TextDecoder('utf-8').decode(bytes));
-        const { mergedQuads } = resolveImports(filePath, parsed.quads, path.dirname(filePath));
+        const parsed = await readOntologyDocument(filePath, new TextDecoder('utf-8').decode(bytes));
+        const { mergedQuads } = await resolveImports(filePath, parsed.quads, path.dirname(filePath));
         allQuads.push(...mergedQuads);
       } catch {
         /* missing @against file -- surfaced implicitly via an empty/failing test result */

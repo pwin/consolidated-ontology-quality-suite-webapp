@@ -4,11 +4,14 @@ A VS Code extension for creating ontologies (with `owl:imports`) and building
 TARQL-style CSV → RDF data graphs, with live diagnostics, a local
 SPARQL/SHACL/OWL2-RL checks engine, and DL-expressivity/OWL2-profile
 metrics — all running in-process via WASM/JS, no Python or Java required
-for the core workflow.
+for the core workflow. Reads, writes, and converts between Turtle, TriG,
+N-Triples, N-Quads, RDF/XML, and OWL Manchester Syntax (including real
+class expressions — `and`/`or`/`not`/`some`/`only`/cardinality
+restrictions — not just atomic declarations; see [Serializations](#serializations)).
 
-It grew out of two sibling projects: [`consolidated_ontology_suite`](../consolidated_ontology_suite)
+It grew out of two sibling projects: `consolidated_ontology_suite`
 (a mature Python CLI with a 50-check registry, reasoning, docgen, and the
-real `oxi-gen` triplifier) and [`turtle-editor-viewer`](../turtle-editor-viewer)
+real `oxi-gen` triplifier) and `turtle-editor-viewer`
 (a browser-based Turtle/SPARQL editor). This extension reuses the check
 registry's *data* (`registry.json` + `sparql/*.rq` + `shapes/*.ttl` —
 vendored under `resources/checks-registry/`) directly, evaluated by
@@ -27,7 +30,7 @@ Open an ontology, ask for its graph, and get a real rendered SVG (this one
 is generated straight from `examples/ontology/domain.ttl` by the extension's
 own renderer, not a mockup):
 
-![Example graph view output](resources/readme/graph-example.svg)
+![Example graph view output](resources/readme/graph-example.png)
 
 The Ontology Outline (Explorer sidebar) shows classes and properties as a
 nested, Protégé-style hierarchy — object and datatype properties kept as
@@ -128,6 +131,28 @@ Validation" and "Full Triplify" commands, degrading gracefully if absent.
   lighter profile deliberately or use full OWL2 DL when you need the
   expressivity.
 
+**Editing assistance**
+- Autocomplete in `.ttl`/`.rq` is *position-aware*: after `a`/`rdf:type` it
+  suggests classes only; in predicate position, properties only; after
+  `rdfs:subClassOf`/`rdfs:domain`/`rdfs:range`/`owl:equivalentClass`,
+  classes only; after `rdfs:subPropertyOf`/`owl:inverseOf`, properties only
+  — instead of dumping every class/property/individual in the namespace
+  into one list regardless of where the cursor is
+  (`language/completionContext.ts`, a lightweight statement-position
+  heuristic, not a full parser — fails open to "show everything" for
+  anything it can't confidently classify, e.g. inside nested `[ ... ]`
+  blank-node property lists).
+- Autocomplete in `.omn` (Manchester Syntax) — previously none at all:
+  prefix completion, section-aware term completion (`SubClassOf:`/
+  `Types:` suggest classes *and* properties, since a class expression can
+  start with either; `Domain:`/`Range:` suggest classes only;
+  `SubPropertyOf:` suggests properties only), and class-expression keyword
+  completion (`and`/`or`/`not`/`some`/`only`/`value`/`Self`/`min`/`max`/
+  `exactly`) wherever a class expression is being written
+  (`language/manchesterSection.ts` + `manchesterCompletion.ts`).
+- Hover shows label/kind/comment/definition/domain/range/subClassOf for
+  any term, or flags it as undeclared.
+
 **Refactoring**
 - Find-References and workspace-wide Rename for ontology terms, across
   `.ttl` and `.rq` files, backed by the same index used for completion and
@@ -144,6 +169,38 @@ gist upper ontology (`ontologySuite.modellingGuidance`, default `"gist"`):
 | `MDL-002` | `owl:equivalentClass` between two plain named classes with no logical definition — usually should be `rdfs:subClassOf` or a SKOS mapping instead. |
 | `MDL-003` | A class with no restrictions of its own — consider `gist:Category` instead, per gist's own scope note on the class. |
 
+## Serializations
+
+Six formats, both directions, via `rdf/serialization.ts`:
+
+| Format | Extension | Read/write via | Round-trips |
+|---|---|---|---|
+| Turtle | `.ttl` | N3.js | Losslessly |
+| TriG | `.trig` | N3.js | Losslessly |
+| N-Triples | `.nt` | N3.js | Losslessly |
+| N-Quads | `.nq`/`.nquads` | N3.js | Losslessly |
+| RDF/XML | `.rdf` | `rdfxml-streaming-parser` (read) + hand-written writer (no `@rdfjs/serializer-rdfxml` exists) | Losslessly |
+| OWL Manchester Syntax | `.omn` | hand-written tokenizer/parser/writer (no npm package exists at all) | OWL-axiom subset only |
+
+Manchester Syntax gets real class-expression support, not just atomic
+class names: `SubClassOf: hasOwner some Person`, `EquivalentTo: Dog and
+(hasOwner some Person)`, cardinality restrictions, `{individual, sets}`,
+etc. — a hand-rolled recursive-descent parser for the (compact,
+well-specified) Manchester expression grammar, translating to/from the
+standard OWL2-in-RDF blank-node encoding
+(`owl:intersectionOf`/`someValuesFrom`/`onProperty`/...). It's still a
+deliberately-scoped subset of full Manchester Syntax — declarations,
+annotations, domain/range, subClassOf/equivalentClass with class
+expressions, individual types — property characteristics and data-range
+expressions aren't covered, which is why `FORMATS.manchester.
+losslessGraph` is `false` where every other format is `true`.
+
+`.owl` is content-sniffed rather than assumed (Protégé defaults it to
+RDF/XML; plenty of hand-authored `.owl` files are actually Turtle).
+
+**Convert / Save As Serialization...** converts the active document to any
+other format and opens the result — warns first if the target is lossy.
+
 ## Commands
 
 | Command | What it does |
@@ -158,6 +215,7 @@ gist upper ontology (`ontologySuite.modellingGuidance`, default `"gist"`):
 | Ontology Suite: Infer Ontology + Query from CSV... | Draft an ontology + query from a raw CSV |
 | Ontology Suite: Run Deep Validation (Python CLI) | Optional full-OWL2-DL fallback |
 | Ontology Suite: Run Full Triplify (Python CLI / oxi-gen) | Production-scale triplification |
+| Ontology Suite: Convert / Save As Serialization... | Convert the active document to another format |
 
 ## Settings
 
@@ -173,21 +231,45 @@ gist upper ontology (`ontologySuite.modellingGuidance`, default `"gist"`):
 1. Open this folder in VS Code and press `F5` (runs `npm run compile` first,
    via `.vscode/launch.json`/`tasks.json`) — launches an Extension
    Development Host with the extension loaded.
-2. In that window, open the `examples/` folder and try `ontology/domain.ttl`,
-   `queries/animals.rq`, and the commands above.
+2. In that window, open `examples/tutorial/` and work through
+   **[TUTORIAL.md](TUTORIAL.md)** — every feature, step by step, against a
+   coherent example ontology plus a real gist v11→v14.1 upstream-migration
+   scenario.
 3. Alternatively, install the packaged extension directly:
-   `code --install-extension ontology-dev-suite-0.1.0.vsix` (built via
+   `code --install-extension ontology-dev-suite-0.2.0.vsix` (build it with
    `npx @vscode/vsce package`).
 
-## Verification
+## Testing
 
-Since driving the actual VS Code GUI isn't possible in the environment this
-was built in, the core logic (import resolution, the checks engine, sketch/
-prefix-alignment, the live triplify preview, CSV profiling, and the class/
-property hierarchy builder) was verified with standalone Node scripts
-against `examples/`, confirmed to produce correct, real output — not just
-"compiles". `npm run typecheck`, `npm run lint`, and `npm run compile` all
-pass clean.
+Two tiers, both real and both passing as of this writing:
+
+- **`npm test`** (Vitest) — 98 tests across 22 files covering every
+  pure-logic module: parsing, all six serializations' round-trips
+  (including the Manchester class-expression engine against real OWL2
+  restrictions), import resolution (including the gist v11→v14.1 drift-
+  and-fix scenario below), the checks engine (SPARQL/SHACL/reasoning/
+  guidance), triplification (sketch/conformance/live-preview/CSV
+  profiling), and the completion-position heuristics. Fast (~10s), no VS
+  Code required.
+- **`npm run test:integration`** (`@vscode/test-cli` + `@vscode/test-electron`)
+  — launches a real, headless VS Code Extension Development Host and
+  exercises the actual extension: activation, command registration,
+  language assignment, and a full **Run Local Checks** run against
+  `examples/tutorial/clinic.ttl` asserting real diagnostics land in the
+  Problems panel. Slower (~35s) and requires downloading a VS Code test
+  binary on first run.
+
+Both suites — and the manual walkthrough in `TUTORIAL.md` — use the same
+`examples/` fixtures, so nothing in the tutorial is aspirational; if it's
+described as working, a test asserts it.
+
+Building this test suite surfaced two real bugs, both fixed (see
+`CHANGELOG.md`): `shacl-engine` crashing on some check shapes against a
+real ontology (fixed via per-shapes-file isolation), and `findPair` not
+searching sibling `csv/`/`queries/` directories (the exact layout every
+example fixture in this repo uses, including the ones that shipped in
+0.1.0 — meaning the Query Workbench's live preview never actually found
+its paired CSV until this was caught by a test).
 
 ## Packaging notes
 

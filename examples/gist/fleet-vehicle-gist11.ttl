@@ -1,0 +1,55 @@
+@prefix ex: <http://example.org/fleet#> .
+@prefix gist: <https://ontologies.semanticarts.com/gist/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# A small extension ontology "written for gist11" -- genuinely imports and
+# uses gist11.0.0 (gistCore11.0.0.ttl, vendored alongside this file so the
+# import resolves locally), using real gist11 classes/properties
+# (gist:Organization, gist:PhysicalIdentifiableItem, gist:owns) under
+# gist11's actual namespace (https://ontologies.semanticarts.com/gist/).
+#
+# Used to demonstrate what happens when this is later checked against
+# gist14.1.0 instead: gist moved its namespace from
+# ontologies.semanticarts.com to w3id.org/semanticarts/ns/ontology/gist/
+# between v11 and v14.1.0 (confirmed directly in the two vendored files,
+# not assumed) -- the classes/properties still exist under the same local
+# names in gist14.1.0, but `gist:` bound to the *old* namespace here no
+# longer resolves against it at all. See TUTORIAL.md's "upgrading against
+# a moved upstream ontology" section.
+
+<http://example.org/fleet>
+  a owl:Ontology ;
+  owl:imports <https://ontologies.semanticarts.com/o/gistCore11.0.0> ;
+  owl:versionInfo "0.1.0"^^xsd:string ;
+  .
+
+ex:Vehicle
+  a owl:Class ;
+  rdfs:subClassOf gist:PhysicalIdentifiableItem ;
+  rdfs:label "Vehicle"^^xsd:string ;
+  .
+
+ex:Fleet
+  a owl:Class ;
+  rdfs:subClassOf gist:Organization ;
+  rdfs:label "Fleet"^^xsd:string ;
+  .
+
+ex:registrationNumber
+  a owl:DatatypeProperty ;
+  rdfs:domain ex:Vehicle ;
+  rdfs:range xsd:string ;
+  rdfs:label "registration number"^^xsd:string ;
+  .
+
+ex:fleet1
+  a ex:Fleet ;
+  gist:owns ex:van1 ;
+  .
+
+ex:van1
+  a ex:Vehicle ;
+  ex:registrationNumber "AB12 CDE"^^xsd:string ;
+  .

@@ -1,6 +1,6 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { parseTurtle } from '../rdf/parseDocument';
+import { parseN3Family } from '../rdf/formats/n3Family';
 import { resolveImports } from '../ontology/resolveImports';
 import { expand } from '../rdf/vocab';
 
@@ -35,19 +35,25 @@ export class LiveDiagnosticsProvider implements vscode.Disposable {
   }
 
   private scheduleValidate(document: vscode.TextDocument, delay = DEBOUNCE_MS): void {
-    if (document.languageId !== 'turtle') return;
+    // Scoped to Turtle/TriG -- both parse synchronously/fast via N3, so live
+    // per-edit diagnostics stay cheap. N-Triples/N-Quads have no @prefix/
+    // owl:imports to check; RDF/XML and Manchester Syntax are rarely
+    // hand-edited and go through the (async) universal reader elsewhere
+    // (Run Local Checks, Show Metrics, Convert, Graph View, Query Workbench).
+    if (document.languageId !== 'turtle' && document.languageId !== 'trig') return;
     const key = document.uri.toString();
     const existing = this.timers.get(key);
     if (existing) clearTimeout(existing);
     this.timers.set(
       key,
-      setTimeout(() => this.validate(document), delay),
+      setTimeout(() => void this.validate(document), delay),
     );
   }
 
-  private validate(document: vscode.TextDocument): void {
+  private async validate(document: vscode.TextDocument): Promise<void> {
     const text = document.getText();
-    const parsed = parseTurtle(document.uri.toString(), text);
+    const format = document.languageId === 'trig' ? 'trig' : 'turtle';
+    const parsed = parseN3Family(text, format);
     const diagnostics: vscode.Diagnostic[] = [];
 
     for (const err of parsed.errors) {
@@ -57,7 +63,7 @@ export class LiveDiagnosticsProvider implements vscode.Disposable {
     }
 
     if (document.uri.scheme === 'file') {
-      const { report } = resolveImports(document.uri.fsPath, parsed.quads, path.dirname(document.uri.fsPath));
+      const { report } = await resolveImports(document.uri.fsPath, parsed.quads, path.dirname(document.uri.fsPath));
       for (const unresolved of report.unresolved) {
         const line = findImportLine(text, unresolved);
         const range = new vscode.Range(line, 0, line, document.lineAt(line).text.length);

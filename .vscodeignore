@@ -1,10 +1,14 @@
 # Source is bundled into dist/extension.js by esbuild -- not needed at runtime.
 src/**
+out/**
 .vscode/**
+.vscode-test.mjs
 .gitignore
 eslint.config.js
 esbuild.js
+esbuild.test.js
 tsconfig.json
+vitest.config.mts
 *.tsbuildinfo
 
 # node_modules IS shipped (intentionally -- see esbuild.js's `packages: 'external'`

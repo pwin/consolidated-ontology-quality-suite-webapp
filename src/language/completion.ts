@@ -3,6 +3,8 @@ import { parseTurtle, parseSparqlPrefixes } from '../rdf/parseDocument';
 import { shrink, WELL_KNOWN_PREFIXES } from '../rdf/vocab';
 import { parseCsv } from '../triplify/csv';
 import { findPair } from '../triplify/discovery';
+import { detectPosition, expectedKinds } from './completionContext';
+import type { TermKind } from '../rdf/ontologyModel';
 import type { TermIndex } from './termIndex';
 
 export function registerCompletionProvider(index: TermIndex): vscode.Disposable {
@@ -41,7 +43,11 @@ export function registerCompletionProvider(index: TermIndex): vscode.Disposable 
         }
       }
 
-      // Term completion after a known prefix: classes/properties from the workspace-wide index.
+      // Term completion after a known prefix: classes/properties from the workspace-wide index,
+      // filtered by cursor position (predicate slot -> properties only, object of `a` -> classes
+      // only, etc. -- see completionContext.ts) so a large vocabulary doesn't drown the list in
+      // kinds that can't be syntactically valid here. Filtering fails open: anything the position
+      // detector can't confidently classify shows every kind, same as before.
       const curieMatch = /([A-Za-z][\w-]*):(\w*)$/.exec(linePrefix);
       if (curieMatch) {
         await index.ensureBuilt();
@@ -49,8 +55,13 @@ export function registerCompletionProvider(index: TermIndex): vscode.Disposable 
         const declared = document.languageId === 'turtle' ? parseTurtle(document.uri.toString(), document.getText()).prefixes : parseSparqlPrefixes(document.getText());
         const ns = declared[prefix] ?? WELL_KNOWN_PREFIXES[prefix];
         if (ns) {
+          const textBeforeCursor = document.getText(new vscode.Range(new vscode.Position(0, 0), position));
+          const allPrefixes = { ...WELL_KNOWN_PREFIXES, ...declared };
+          const allowedKinds = expectedKinds(detectPosition(textBeforeCursor), allPrefixes);
+
           for (const term of index.getModel().terms.values()) {
             if (!term.iri.startsWith(ns)) continue;
+            if (allowedKinds && !term.kinds.some((k) => allowedKinds.includes(k))) continue;
             const local = term.iri.slice(ns.length);
             const item = new vscode.CompletionItem(local, kindFor(term.kinds));
             item.detail = term.label ?? shrink(term.iri, declared);
@@ -67,7 +78,7 @@ export function registerCompletionProvider(index: TermIndex): vscode.Disposable 
   return vscode.languages.registerCompletionItemProvider([{ language: 'turtle' }, { language: 'sparql-construct' }], provider, ':', '?');
 }
 
-function kindFor(kinds: string[]): vscode.CompletionItemKind {
+function kindFor(kinds: TermKind[]): vscode.CompletionItemKind {
   if (kinds.includes('class')) return vscode.CompletionItemKind.Class;
   if (kinds.includes('objectProperty') || kinds.includes('datatypeProperty')) return vscode.CompletionItemKind.Property;
   if (kinds.includes('individual')) return vscode.CompletionItemKind.Value;

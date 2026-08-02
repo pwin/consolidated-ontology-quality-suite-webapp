@@ -1,0 +1,48 @@
+@prefix ex: <http://example.org/fleet#> .
+@prefix gist: <https://w3id.org/semanticarts/ns/ontology/gist/> .
+@prefix owl: <http://www.w3.org/2002/07/owl#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# The "migrated" counterpart of fleet-vehicle-gist11.ttl: identical content,
+# but re-pointed at gist14.1.0 -- both `owl:imports` and the `gist:` prefix
+# binding. This is the actual fix for the drift scenario in TUTORIAL.md:
+# gist kept gist:Organization/gist:PhysicalIdentifiableItem/gist:owns under
+# the *same local names* across the ontologies.semanticarts.com ->
+# w3id.org namespace migration, so updating the one @prefix line (and the
+# owl:imports target) is sufficient -- nothing else in this file changes.
+
+<http://example.org/fleet>
+  a owl:Ontology ;
+  owl:imports <https://w3id.org/semanticarts/ontology/gistCore14.1.0> ;
+  owl:versionInfo "0.2.0"^^xsd:string ;
+  .
+
+ex:Vehicle
+  a owl:Class ;
+  rdfs:subClassOf gist:PhysicalIdentifiableItem ;
+  rdfs:label "Vehicle"^^xsd:string ;
+  .
+
+ex:Fleet
+  a owl:Class ;
+  rdfs:subClassOf gist:Organization ;
+  rdfs:label "Fleet"^^xsd:string ;
+  .
+
+ex:registrationNumber
+  a owl:DatatypeProperty ;
+  rdfs:domain ex:Vehicle ;
+  rdfs:range xsd:string ;
+  rdfs:label "registration number"^^xsd:string ;
+  .
+
+ex:fleet1
+  a ex:Fleet ;
+  gist:owns ex:van1 ;
+  .
+
+ex:van1
+  a ex:Vehicle ;
+  ex:registrationNumber "AB12 CDE"^^xsd:string ;
+  .

@@ -1,7 +1,22 @@
 import { Parser, Quad } from 'n3';
 import type { ParsedDocument, PrefixMap } from '../types';
+import { detectFormat, parseRdf } from './serialization';
 
 const LINE_FROM_MESSAGE = /on line (\d+)/i;
+
+/**
+ * Universal, format-aware entry point (v0.2.0): detects the serialization
+ * from the file extension (content-sniffed for the ambiguous `.owl` case)
+ * and parses accordingly -- Turtle/TriG/N-Triples/N-Quads via N3, RDF/XML
+ * via rdfxml-streaming-parser, OWL Manchester Syntax via the best-effort
+ * reader in rdf/formats/manchester.ts. Prefer this over `parseTurtle` for
+ * any file read from disk that isn't already known to be Turtle.
+ */
+export async function readOntologyDocument(filePath: string, text: string): Promise<ParsedDocument> {
+  const format = detectFormat(filePath, text) ?? 'turtle';
+  const { quads, prefixes, errors } = await parseRdf(text, format);
+  return { uri: filePath, text, quads, prefixes, errors };
+}
 
 /**
  * Parses a Turtle document with N3, tolerating a trailing syntax error by

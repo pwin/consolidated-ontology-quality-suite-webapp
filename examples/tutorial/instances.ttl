@@ -1,0 +1,22 @@
+@prefix ex: <http://example.org/clinic#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+# A hand-saved snapshot of what triplifying csv/appointments.csv through
+# queries/appointments.rq produces (see TUTORIAL.md) -- used as the data
+# the competency questions in this folder check against. appointment-2 is
+# *deliberately* missing ex:treatedBy, to give
+# every-appointment-has-vet.cq.rq a real gap to catch (a red test on
+# purpose -- see the tutorial's "competency questions" section).
+
+ex:appointment-1
+  a ex:Appointment ;
+  ex:forAnimal ex:animal-Rex ;
+  ex:treatedBy ex:vet-DrPatel ;
+  ex:hasAppointmentDate "2026-01-14"^^xsd:date ;
+  .
+
+ex:appointment-2
+  a ex:Appointment ;
+  ex:forAnimal ex:animal-Whiskers ;
+  ex:hasAppointmentDate "2026-01-15"^^xsd:date ;
+  .

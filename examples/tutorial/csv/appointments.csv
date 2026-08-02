@@ -1,0 +1,4 @@
+appointment_id,animal_name,vet_name,appointment_date,notes
+1,Rex,Dr Patel,2026-01-14,Annual checkup
+2,Whiskers,Dr Ito,2026-01-15,Vaccination booster
+3,Bella,Dr Patel,2026-01-16,Post-surgery follow-up

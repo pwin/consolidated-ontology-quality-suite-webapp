@@ -1,0 +1,29 @@
+<http://example.org/demo> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#Ontology> .
+<http://example.org/demo> <http://www.w3.org/2002/07/owl#versionInfo> "0.1.0" .
+<http://example.org/demo> <http://www.w3.org/2004/02/skos/core#prefLabel> "Demo Ontology" .
+<http://example.org/demo#Mammal> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#Class> .
+<http://example.org/demo#Mammal> <http://www.w3.org/2000/01/rdf-schema#label> "Mammal" .
+<http://example.org/demo#Mammal> <http://www.w3.org/2004/02/skos/core#definition> "A warm-blooded vertebrate animal." .
+<http://example.org/demo#Dog> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#Class> .
+<http://example.org/demo#Dog> <http://www.w3.org/2000/01/rdf-schema#subClassOf> <http://example.org/demo#Mammal> .
+<http://example.org/demo#Dog> <http://www.w3.org/2000/01/rdf-schema#label> "Dog" .
+<http://example.org/demo#Cat> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#Class> .
+<http://example.org/demo#Cat> <http://www.w3.org/2000/01/rdf-schema#subClassOf> <http://example.org/demo#Mammal> .
+<http://example.org/demo#Cat> <http://www.w3.org/2000/01/rdf-schema#label> "Cat" .
+<http://example.org/demo#Puppy> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#Class> .
+<http://example.org/demo#Puppy> <http://www.w3.org/2000/01/rdf-schema#subClassOf> <http://example.org/demo#Dog> .
+<http://example.org/demo#Puppy> <http://www.w3.org/2000/01/rdf-schema#label> "Puppy" .
+<http://example.org/demo#hasBirthDate> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#DatatypeProperty> .
+<http://example.org/demo#hasBirthDate> <http://www.w3.org/2000/01/rdf-schema#domain> <http://example.org/demo#Mammal> .
+<http://example.org/demo#hasBirthDate> <http://www.w3.org/2000/01/rdf-schema#range> <http://www.w3.org/2001/XMLSchema#date> .
+<http://example.org/demo#hasBirthDate> <http://www.w3.org/2000/01/rdf-schema#label> "has birth date" .
+<http://example.org/demo#hasName> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#DatatypeProperty> .
+<http://example.org/demo#hasName> <http://www.w3.org/2000/01/rdf-schema#domain> <http://example.org/demo#Mammal> .
+<http://example.org/demo#hasName> <http://www.w3.org/2000/01/rdf-schema#range> <http://www.w3.org/2001/XMLSchema#string> .
+<http://example.org/demo#hasName> <http://www.w3.org/2000/01/rdf-schema#label> "has name" .
+<http://example.org/demo#hasOwner> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#ObjectProperty> .
+<http://example.org/demo#hasOwner> <http://www.w3.org/2000/01/rdf-schema#domain> <http://example.org/demo#Mammal> .
+<http://example.org/demo#hasOwner> <http://www.w3.org/2000/01/rdf-schema#label> "has owner" .
+<http://example.org/demo#hasPrimaryOwner> <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#ObjectProperty> .
+<http://example.org/demo#hasPrimaryOwner> <http://www.w3.org/2000/01/rdf-schema#subPropertyOf> <http://example.org/demo#hasOwner> .
+<http://example.org/demo#hasPrimaryOwner> <http://www.w3.org/2000/01/rdf-schema#label> "has primary owner" .

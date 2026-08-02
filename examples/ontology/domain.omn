@@ -1,0 +1,40 @@
+Prefix: ex: <http://example.org/demo#>
+Prefix: owl: <http://www.w3.org/2002/07/owl#>
+Prefix: rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+Prefix: skos: <http://www.w3.org/2004/02/skos/core#>
+Prefix: xsd: <http://www.w3.org/2001/XMLSchema#>
+
+Ontology: <http://example.org/demo>
+
+Class: ex:Mammal
+    Annotations: rdfs:label "Mammal", skos:definition "A warm-blooded vertebrate animal."
+
+Class: ex:Dog
+    SubClassOf: ex:Mammal
+    Annotations: rdfs:label "Dog"
+
+Class: ex:Cat
+    SubClassOf: ex:Mammal
+    Annotations: rdfs:label "Cat"
+
+Class: ex:Puppy
+    SubClassOf: ex:Dog
+    Annotations: rdfs:label "Puppy"
+
+DataProperty: ex:hasBirthDate
+    Domain: ex:Mammal
+    Range: xsd:date
+    Annotations: rdfs:label "has birth date"
+
+DataProperty: ex:hasName
+    Domain: ex:Mammal
+    Range: xsd:string
+    Annotations: rdfs:label "has name"
+
+ObjectProperty: ex:hasOwner
+    Domain: ex:Mammal
+    Annotations: rdfs:label "has owner"
+
+ObjectProperty: ex:hasPrimaryOwner
+    SubPropertyOf: ex:hasOwner
+    Annotations: rdfs:label "has primary owner"

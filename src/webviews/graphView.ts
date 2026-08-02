@@ -1,6 +1,6 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { parseTurtle } from '../rdf/parseDocument';
+import { readOntologyDocument } from '../rdf/parseDocument';
 import { resolveImports } from '../ontology/resolveImports';
 import { generateDot, GraphOptions } from '../graph/dotGenerator';
 import { renderDotToSvg } from '../graph/vizRenderer';
@@ -9,8 +9,8 @@ import { htmlShell } from './webviewUtil';
 
 export async function openGraphView(fileUri: vscode.Uri): Promise<void> {
   const text = new TextDecoder('utf-8').decode(await vscode.workspace.fs.readFile(fileUri));
-  const doc = parseTurtle(fileUri.toString(), text);
-  const { mergedQuads } = resolveImports(fileUri.fsPath, doc.quads, path.dirname(fileUri.fsPath));
+  const doc = await readOntologyDocument(fileUri.fsPath, text);
+  const { mergedQuads } = await resolveImports(fileUri.fsPath, doc.quads, path.dirname(fileUri.fsPath));
 
   const subjects = Array.from(new Set(mergedQuads.filter((q) => q.subject.termType === 'NamedNode').map((q) => q.subject.value))).sort();
   if (subjects.length === 0) {

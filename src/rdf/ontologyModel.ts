@@ -12,10 +12,17 @@ import {
   RDFS_DOMAIN,
   RDFS_LABEL,
   RDFS_RANGE,
+  RDFS_ISDEFINEDBY,
   RDFS_SUBCLASS_OF,
   RDFS_SUBPROPERTY_OF,
   SKOS_DEFINITION,
+  SKOS_EXAMPLE,
+  SKOS_PREF_LABEL,
+  SKOS_SCOPE_NOTE,
 } from './vocab';
+
+/** Purely documentary predicates -- never count as "own structure" for the gist:Category heuristic (MDL-003). */
+const ANNOTATION_ONLY_PREDICATES = new Set([SKOS_PREF_LABEL, SKOS_SCOPE_NOTE, SKOS_EXAMPLE, RDFS_ISDEFINEDBY]);
 
 export type TermKind = 'class' | 'objectProperty' | 'datatypeProperty' | 'annotationProperty' | 'individual' | 'ontology';
 
@@ -140,6 +147,7 @@ export function buildOntologyModel(quads: Quad[]): OntologyModel {
         if (obj.termType === 'NamedNode') t.inverseOf.push(obj.value);
         break;
       default:
+        if (ANNOTATION_ONLY_PREDICATES.has(pred)) break;
         // Any other outgoing property restriction/axiom on this term counts
         // as "own structure" for the gist:Category heuristic (MDL-003).
         t.hasOwnStructure = true;

@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rdf:RDF
+  xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+  xmlns:ex="http://example.org/demo#"
+  xmlns:owl="http://www.w3.org/2002/07/owl#"
+  xmlns:rdfs="http://www.w3.org/2000/01/rdf-schema#"
+  xmlns:skos="http://www.w3.org/2004/02/skos/core#"
+  xmlns:xsd="http://www.w3.org/2001/XMLSchema#"
+  xmlns:ns0="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="http://example.org/demo">
+    <ns0:type rdf:resource="http://www.w3.org/2002/07/owl#Ontology"/>
+    <owl:versionInfo>0.1.0</owl:versionInfo>
+    <skos:prefLabel>Demo Ontology</skos:prefLabel>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://example.org/demo#Mammal">
+    <ns0:type rdf:resource="http://www.w3.org/2002/07/owl#Class"/>
+    <rdfs:label>Mammal</rdfs:label>
+    <skos:definition>A warm-blooded vertebrate animal.</skos:definition>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://example.org/demo#Dog">
+    <ns0:type rdf:resource="http://www.w3.org/2002/07/owl#Class"/>
+    <rdfs:subClassOf rdf:resource="http://example.org/demo#Mammal"/>
+    <rdfs:label>Dog</rdfs:label>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://example.org/demo#Cat">
+    <ns0:type rdf:resource="http://www.w3.org/2002/07/owl#Class"/>
+    <rdfs:subClassOf rdf:resource="http://example.org/demo#Mammal"/>
+    <rdfs:label>Cat</rdfs:label>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://example.org/demo#Puppy">
+    <ns0:type rdf:resource="http://www.w3.org/2002/07/owl#Class"/>
+    <rdfs:subClassOf rdf:resource="http://example.org/demo#Dog"/>
+    <rdfs:label>Puppy</rdfs:label>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://example.org/demo#hasBirthDate">
+    <ns0:type rdf:resource="http://www.w3.org/2002/07/owl#DatatypeProperty"/>
+    <rdfs:domain rdf:resource="http://example.org/demo#Mammal"/>
+    <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#date"/>
+    <rdfs:label>has birth date</rdfs:label>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://example.org/demo#hasName">
+    <ns0:type rdf:resource="http://www.w3.org/2002/07/owl#DatatypeProperty"/>
+    <rdfs:domain rdf:resource="http://example.org/demo#Mammal"/>
+    <rdfs:range rdf:resource="http://www.w3.org/2001/XMLSchema#string"/>
+    <rdfs:label>has name</rdfs:label>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://example.org/demo#hasOwner">
+    <ns0:type rdf:resource="http://www.w3.org/2002/07/owl#ObjectProperty"/>
+    <rdfs:domain rdf:resource="http://example.org/demo#Mammal"/>
+    <rdfs:label>has owner</rdfs:label>
+  </rdf:Description>
+  <rdf:Description rdf:about="http://example.org/demo#hasPrimaryOwner">
+    <ns0:type rdf:resource="http://www.w3.org/2002/07/owl#ObjectProperty"/>
+    <rdfs:subPropertyOf rdf:resource="http://example.org/demo#hasOwner"/>
+    <rdfs:label>has primary owner</rdfs:label>
+  </rdf:Description>
+</rdf:RDF>
