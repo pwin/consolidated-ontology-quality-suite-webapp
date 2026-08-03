@@ -31,3 +31,12 @@ ex:hasName
   rdfs:range xsd:string ;
   rdfs:label "has name"^^xsd:string ;
   .
+
+# Shared classification/category type -- see clinic.ttl's MDL-003 repair
+# demo, which retypes ex:AppointmentType from owl:Class to this via
+# .ontology-suite/standards.json's project-local categoryClass.
+ex:Classification
+  a owl:Class ;
+  rdfs:label "Classification"^^xsd:string ;
+  rdfs:comment "A type used purely for categorization, with no independent structure of its own -- see gist:Category."^^xsd:string ;
+  .

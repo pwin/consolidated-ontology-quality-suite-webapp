@@ -1,0 +1,7 @@
+{
+  "rules": [
+    { "appliesTo": "owl:Class", "requires": ["rdfs:label"] },
+    { "appliesTo": "owl:ObjectProperty", "requires": ["rdfs:label", "rdfs:domain", "rdfs:range"] },
+    { "appliesTo": "owl:DatatypeProperty", "requires": ["rdfs:label", "rdfs:domain", "rdfs:range"] }
+  ]
+}

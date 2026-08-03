@@ -8,12 +8,17 @@ import { runSparqlChecks } from './sparqlRunner';
 import { runShaclChecks } from './shaclRunner';
 import { runReasoningChecks } from './reasoningRunner';
 import { runModellingGuidance } from './modellingGuidance';
+import { evaluateClassRules } from './classRules';
+import { loadClassRulesConfig } from './classRulesLoader';
 import { mergeResultRows } from './merge';
 import { CHECKS_DIAGNOSTIC_SOURCE, resultRowsToDiagnostics } from './toDiagnostics';
+import type { ResultRow } from '../types';
 
 export class LocalChecksEngine {
   private readonly diagnostics = vscode.languages.createDiagnosticCollection(CHECKS_DIAGNOSTIC_SOURCE);
   private registryCache: { rootDir: string; registry: Registry } | undefined;
+  /** Diagnostic identity -> the ResultRow it was rendered from, so the Quick Fix CodeActionProvider can recover focusNode/path/value without re-parsing the diagnostic message. */
+  readonly rowsByDiagnostic = new WeakMap<vscode.Diagnostic, ResultRow>();
 
   constructor(private readonly extensionPath: string) {}
 
@@ -21,9 +26,18 @@ export class LocalChecksEngine {
     this.diagnostics.dispose();
   }
 
-  private getRegistry(): Registry {
+  private getRegistryRootDir(): string {
     const configured = vscode.workspace.getConfiguration('ontologySuite').get<string>('checksRegistryPath', '');
-    const rootDir = configured && configured.trim().length > 0 ? configured : path.join(this.extensionPath, 'resources', 'checks-registry');
+    return configured && configured.trim().length > 0 ? configured : path.join(this.extensionPath, 'resources', 'checks-registry');
+  }
+
+  /** Directory containing the repair (*.ru) templates + manifest.json used by checks/repairEngine.ts. */
+  getRepairsRootDir(): string {
+    return path.join(this.getRegistryRootDir(), 'repairs');
+  }
+
+  private getRegistry(): Registry {
+    const rootDir = this.getRegistryRootDir();
     if (this.registryCache?.rootDir === rootDir) return this.registryCache.registry;
     const registry = loadRegistry(rootDir);
     this.registryCache = { rootDir, registry };
@@ -66,8 +80,11 @@ export class LocalChecksEngine {
         progress.report({ message: 'modelling guidance', increment: 20 });
         const guidanceRows = guidanceMode === 'off' ? [] : runModellingGuidance(mergedQuads);
 
-        const merged = mergeResultRows(sparqlRows, shaclRows, reasoningRows, guidanceRows);
-        const fileDiagnostics = resultRowsToDiagnostics(merged, doc);
+        const classRulesConfig = await loadClassRulesConfig();
+        const projectRuleRows = evaluateClassRules(mergedQuads, classRulesConfig, doc.prefixes);
+
+        const merged = mergeResultRows(sparqlRows, shaclRows, reasoningRows, guidanceRows, projectRuleRows);
+        const fileDiagnostics = resultRowsToDiagnostics(merged, doc, this.rowsByDiagnostic);
         this.diagnostics.set(fileUri, fileDiagnostics);
 
         progress.report({ message: 'done', increment: 10 });

@@ -114,3 +114,11 @@ ex:hasAppointmentDate
   rdfs:range xsd:date ;
   rdfs:label "has appointment date"^^xsd:string ;
   .
+
+# PRJ-REQUIRED demo: missing rdfs:label -- flagged by this project's
+# .ontology-suite/class-rules.json ("every owl:Class needs rdfs:label"),
+# and auto-fixable via Quick Fix (derives "Vaccination" from the local name).
+ex:Vaccination
+  a owl:Class ;
+  rdfs:subClassOf ex:Appointment ;
+  .
