@@ -1,0 +1,32 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Ontology Suite project class/property rules",
+  "description": "Minimum-required-content rules for this project, e.g. every owl:Class needs rdfs:label and rdfs:comment. Findings show up in the Problems panel and, where a safe default value exists (rdfs:label, skos:prefLabel), are offered as a Quick Fix.",
+  "type": "object",
+  "required": ["rules"],
+  "additionalProperties": false,
+  "properties": {
+    "rules": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["appliesTo", "requires"],
+        "additionalProperties": false,
+        "properties": {
+          "appliesTo": {
+            "type": "string",
+            "description": "CURIE or full IRI of the rdf:type this rule applies to.",
+            "examples": ["owl:Class", "owl:ObjectProperty", "owl:DatatypeProperty", "owl:AnnotationProperty", "gist:Category"]
+          },
+          "requires": {
+            "type": "array",
+            "description": "CURIEs or full IRIs of predicates that must appear at least once on every matching subject.",
+            "items": { "type": "string" },
+            "minItems": 1,
+            "examples": [["rdfs:label", "rdfs:comment"], ["rdfs:label", "rdfs:domain", "rdfs:range"]]
+          }
+        }
+      }
+    }
+  }
+}

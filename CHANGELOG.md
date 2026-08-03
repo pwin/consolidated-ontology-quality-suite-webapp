@@ -1,5 +1,85 @@
 # Changelog
 
+## 0.3.0
+
+### Quick Fix: SPARQL-based repair, in the same spirit as Schematron Quick Fix
+
+Findings from the local checks engine can now offer a real, one-click
+lightbulb fix, not just a diagnosis.
+
+- **`checks/repairEngine.ts`**: each fixable check has a real SPARQL 1.1
+  Update template (`resources/checks-registry/repairs/*.ru`). The
+  finding's own `ResultRow` (`focusNode`/`path`/`value` -- the same
+  normalized shape every engine already produces) is bound into the
+  template via an injected `VALUES` clause, alongside a project's
+  resolved standards and a `?derivedLabel` humanized from the focus
+  node's local name, then executed as a real SPARQL Update against an
+  isolated in-memory Oxigraph store built from *only the open document's
+  own quads* -- a fix never reaches across file boundaries into an
+  imported ontology, and safely no-ops (no edit at all) if the triple it
+  targets isn't actually present locally.
+- **15 checks covered**: `STR-001/002/005/007/008` (declare an
+  undeclared class/property), `QUA-001/002/004/005/007` (missing
+  label/prefLabel/versionInfo/versionIRI/ontology declaration),
+  `LOG-003`/`MDL-002` (policy-driven: which of a redundant pair of axioms
+  to keep, and whether `equivalentClass` becomes `subClassOf` or
+  `skos:closeMatch`), `MDL-001` (remove a named inverse property),
+  `MDL-003` (retype to the project's category class), `STY-003` (tag an
+  untagged label with the project's default language). `DAT-003` and
+  `CNF-001`/`CNF-002` were scoped out: the first is a genuine judgment
+  call (RDF is set-based, so "duplicate" literals differing only in type
+  aren't safely mergeable by a machine), the other two don't exist as
+  SPARQL/SHACL files in this engine at all (Python-native only upstream).
+- **`checks/projectStandards.ts`**: a workspace-local
+  `.ontology-suite/standards.json` (path configurable via
+  `ontologySuite.projectStandardsPath`) supplies the project-specific
+  values that complete a repair -- default language tag, category class,
+  `equivalentClass`/redundant-axiom policy, default ontology base
+  IRI/version. This is the flagship scenario the feature was built for:
+  the *same* `MDL-003` finding retypes a class to `gist:Category` on one
+  project and to a project-local `ex:Classification` on another, purely
+  from configuration.
+- **`checks/classRules.ts`** + **`checks/classRulesLoader.ts`**: a second,
+  simpler project-configuration surface -- `.ontology-suite/class-rules.json`
+  declares "minimum required content" rules (e.g. every `owl:Class` needs
+  `rdfs:label`; every `owl:ObjectProperty` needs `rdfs:domain`+`rdfs:range`)
+  as plain JSON rather than hand-written SHACL, so VS Code's built-in JSON
+  language support gives autocomplete/validation for free (schema at
+  `resources/checks-registry/class-rules.schema.json`, wired through
+  `contributes.jsonValidation`). Findings (`PRJ-REQUIRED`) flow through the
+  same diagnostics/repair pipeline as every other check -- a missing
+  `rdfs:label`/`skos:prefLabel` is auto-fixable the same way `QUA-001`/
+  `QUA-004` are; structural predicates like `rdfs:domain`/`rdfs:range` have
+  no safe auto-generated value and are correctly left as a flagged finding
+  with no Quick Fix offered.
+- **Every repair is preview-then-apply, with no auto-apply path anywhere**:
+  selecting a Quick Fix opens a modal listing the exact triples (`+`/`-`,
+  CURIE-shrunk) it would add/remove, names the specific check, and warns
+  explicitly when a fix reformats the whole file (the `replace`-kind
+  fixes -- anything that deletes an existing triple -- can't in general be
+  spliced into arbitrary hand-authored Turtle without a real
+  parser-preserving editor, so those reserialize the whole document
+  instead of appending). Nothing is written until "Apply Fix" is clicked;
+  dismissing the modal in any way makes no change. `insert`-kind fixes
+  (the majority) append a new Turtle block instead, preserving the rest of
+  the file's formatting/comments exactly, the same approach `ontology/
+  scaffold.ts`'s Add Class/Add Property commands already use.
+- **New settings**: `ontologySuite.projectStandardsPath` (default
+  `.ontology-suite/standards.json`), `ontologySuite.projectRulesPath`
+  (default `.ontology-suite/class-rules.json`).
+- **`examples/tutorial/`**: `.ontology-suite/standards.json` and
+  `.ontology-suite/class-rules.json` fixtures, plus a small addition to
+  `core.ttl`/`clinic.ttl` (`ex:Classification`, `ex:Vaccination`) so the
+  tutorial's existing `MDL-001`/`002`/`003` smells have real, working
+  Quick Fixes to demonstrate, and the new `PRJ-REQUIRED` check has a
+  genuine missing-label finding to fix.
+- 23 new unit tests (`repairEngine.test.ts`, `classRules.test.ts`,
+  `projectStandardsCore.test.ts`) covering every template, both policy
+  branches of `LOG-003`/`MDL-002`, the label-only auto-fix boundary on
+  `PRJ-REQUIRED`, and the cross-file safe-no-op case.
+- Marketplace packaging metadata added: `license` (MIT, matching the
+  existing `LICENSE` file), `icon`, `repository`.
+
 ## 0.2.0
 
 ### Test suite and tutorial

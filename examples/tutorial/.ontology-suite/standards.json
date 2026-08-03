@@ -1,0 +1,12 @@
+{
+  "defaultLanguageTag": "en",
+  "categoryClass": "ex:Classification",
+  "prefixes": {
+    "ex": "http://example.org/clinic#"
+  },
+  "equivalentClassPolicy": "subClassOf",
+  "redundantEquivalencePolicy": "keepEquivalentClass",
+  "defaultOntologyBaseIri": "http://example.org/clinic#",
+  "defaultVersionInfo": "0.2.0",
+  "versionIriTemplate": "{ontologyIri}/{version}"
+}

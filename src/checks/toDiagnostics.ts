@@ -19,7 +19,7 @@ export const CHECKS_DIAGNOSTIC_SOURCE = 'ontology-suite';
  * full IRI starting a line (the conventional Turtle subject-block style),
  * falling back to line 0 with the IRI spelled out in the message.
  */
-export function resultRowsToDiagnostics(rows: ResultRow[], doc: ParsedDocument): vscode.Diagnostic[] {
+export function resultRowsToDiagnostics(rows: ResultRow[], doc: ParsedDocument, rowsByDiagnostic?: WeakMap<vscode.Diagnostic, ResultRow>): vscode.Diagnostic[] {
   const diagnostics: vscode.Diagnostic[] = [];
   const lines = doc.text.split(/\r?\n/);
 
@@ -42,6 +42,7 @@ export function resultRowsToDiagnostics(rows: ResultRow[], doc: ParsedDocument):
       ];
     }
     diagnostics.push(diagnostic);
+    rowsByDiagnostic?.set(diagnostic, row);
   }
   return diagnostics;
 }

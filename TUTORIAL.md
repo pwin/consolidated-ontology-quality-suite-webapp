@@ -12,7 +12,7 @@ This walks through every major feature using two real fixture sets:
 - **`examples/gist/`** — two real, unmodified releases of Semantic Arts'
   `gist` upper ontology (v11.0.0 and v14.1.0, vendored from
   `consolidated_ontology_suite`), used for a genuine "was this written
-  against an older upstream ontology?" scenario in [Part 9](#part-9-a-real-upstream-ontology-migration-gist-v11--v141).
+  against an older upstream ontology?" scenario in [Part 10](#part-10-a-real-upstream-ontology-migration-gist-v11--v141).
 
 Everything here is also exercised by the automated test suite
 (`npm test`) — see the `*.test.ts` file next to the relevant module if you
@@ -65,7 +65,53 @@ You'll also see real SPARQL/SHACL structural and style findings (missing
 registry `consolidated_ontology_suite` ships, just run by Oxigraph and
 `shacl-engine` instead of a Python subprocess.
 
-## Part 3: Validate with the reasoner
+You'll also see a `PRJ-REQUIRED` finding on `ex:Vaccination`: it's missing
+`rdfs:label`. That's not from the vendored registry — it's from *this
+project's own* `.ontology-suite/class-rules.json`, which declares "every
+`owl:Class` needs `rdfs:label`" (see [Part 3](#part-3-quick-fix-the-findings)).
+
+## Part 3: Quick Fix the findings
+
+Click on the `MDL-001` diagnostic for `ex:isOwnerOf` (or put the cursor on
+that line) and open the Quick Fix menu (the lightbulb, or `Ctrl+.`/`Cmd+.`).
+You'll see **"Ontology Suite: Fix MDL-001 (Remove the named inverse
+property)"**. Selecting it opens a modal showing exactly what would change:
+
+```
+- ex:isOwnerOf owl:inverseOf ex:hasOwner
+```
+
+Nothing is written until you click **"Apply Fix"** — cancel it and try the
+other three fixable findings from Part 2 instead:
+
+| Finding | Quick Fix does | Where the project-specific part comes from |
+|---|---|---|
+| `MDL-002` on `ex:Veterinarian` | Deletes `owl:equivalentClass ex:AnimalDoctor`, inserts `rdfs:subClassOf` instead | `equivalentClassPolicy` in `.ontology-suite/standards.json` (`"subClassOf"` here — set it to `"closeMatch"` and the same finding would insert `skos:closeMatch` instead) |
+| `MDL-003` on `ex:AppointmentType` | Deletes `a owl:Class`, inserts `a ex:Classification` | `categoryClass` in `.ontology-suite/standards.json` — this project defined its own `ex:Classification` term (in `core.ttl`) instead of using the built-in default, `gist:Category` |
+| `PRJ-REQUIRED` on `ex:Vaccination` | Inserts `rdfs:label "Vaccination"@en` | `defaultLanguageTag` in `.ontology-suite/standards.json`; the label text itself is derived from the local name (`Vaccination` → `Vaccination`, or `hasOwner` → `has Owner` for camelCase names) |
+
+Try changing `.ontology-suite/standards.json`'s `categoryClass` to
+`"gist:Category"` and re-running the `MDL-003` fix on a fresh copy of
+`clinic.ttl` — the Quick Fix now proposes `a gist:Category` instead,
+with zero code changes: the repair template
+(`resources/checks-registry/repairs/MDL-003.ru`) is a real SPARQL Update
+that only knows about `?focusNode` and `?categoryClass` — which class
+that resolves to is entirely this project's call.
+
+Two things worth trying to see the safety rails:
+- Open `core.ttl` on its own (not via `clinic.ttl`'s import) and look for
+  an `MDL-003` finding on `ex:Person` or `ex:Animal` — those *are*
+  declared there, so the fix works normally. But if you somehow triggered
+  the same fix from `clinic.ttl` (where `ex:Animal`/`ex:Person` are only
+  *used*, not *declared*), it would show 0 triples changed and decline to
+  apply anything — a Quick Fix only ever edits the document you're
+  actually looking at, never an imported file.
+- `PRJ-REQUIRED` also fires on `ex:isOwnerOf` (missing `rdfs:domain`/
+  `rdfs:range`) — but no Quick Fix is offered for it. There's no safe
+  value to invent for a domain/range class, so `class-rules.json`'s
+  `requires` list is honest about flagging it without pretending to fix it.
+
+## Part 4: Validate with the reasoner
 
 Open `reasoning-demo.ttl` (kept separate from `clinic.ttl` so its findings
 aren't mixed in) and run **Run Local Checks** again. You'll see:
@@ -84,14 +130,14 @@ non-inferred) and re-run — the same finding still appears, now for a more
 obvious reason. Then remove the `ex:rex a ex:Cat` triple entirely and
 re-run — `REA-DISJOINT` disappears.
 
-## Part 4: Visualize
+## Part 5: Visualize
 
 With `clinic.ttl` active, run **"Ontology Suite: Visualize Subject Graph"**,
 pick a few classes (or accept the default first-10), and you'll get a real
 rendered SVG (via `@viz-js/viz`, the actual Graphviz WASM build — the same
 mechanism that generated the image in the main `README.md`).
 
-## Part 5: Metrics & DL expressivity
+## Part 6: Metrics & DL expressivity
 
 Run **"Ontology Suite: Show Metrics & DL Expressivity"** on `clinic.ttl`.
 You'll get a Markdown report with OntoQA-style schema metrics (class
@@ -107,7 +153,7 @@ and drops out of all three lighter profiles.
 The same expressivity/profile badge also lives in the status bar whenever
 an RDF file is active — click it to open the same report.
 
-## Part 6: TARQL-style triplification
+## Part 7: TARQL-style triplification
 
 Open `queries/appointments.rq` — a CONSTRUCT query for
 `csv/appointments.csv` (paired by filename convention). Run **"Ontology
@@ -130,7 +176,7 @@ Once you're happy with a query, **"Run Full Triplify"** hands the real CSV
 folder off to the Python CLI's `oxi-gen` binary for production-scale
 output (optional — only if `consolidated_ontology_suite` is installed).
 
-## Part 7: Competency questions as tests
+## Part 8: Competency questions as tests
 
 `instances.ttl` is a hand-saved snapshot of what triplifying
 `appointments.csv` would produce — with `appointment-2` **deliberately**
@@ -149,7 +195,7 @@ Fix it yourself: add `ex:treatedBy ex:vet-DrIto` to `ex:appointment-2` in
 `instances.ttl`, save, and re-run the tests — `every-appointment-has-vet`
 turns green.
 
-## Part 8: Convert between serializations
+## Part 9: Convert between serializations
 
 With any RDF file active, run **"Ontology Suite: Convert / Save As
 Serialization..."** and pick a target format. Try converting `clinic.ttl`
@@ -165,7 +211,7 @@ instead — it has `someValuesFrom`, `intersectionOf`, and
 `qualifiedCardinality` restrictions that all survive the round trip
 losslessly (verified in `rdf/formats/classExpression.test.ts`).
 
-## Part 9: A real upstream-ontology migration (gist v11 → v14.1)
+## Part 10: A real upstream-ontology migration (gist v11 → v14.1)
 
 This is the most "real-world" scenario in the tutorial: **`examples/gist/`**
 vendors two actual, unmodified `gist` releases —
@@ -209,9 +255,9 @@ to see it run automatically rather than by hand.
 
 - `README.md` — full command/settings reference, architecture diagram,
   packaging notes.
-- `CHANGELOG.md` — what changed between 0.1.0 and 0.2.0, including two
+- `CHANGELOG.md` — what changed across 0.1.0, 0.2.0, and 0.3.0, including
   real bugs found and fixed while building this tutorial (`shacl-engine`
   crashing on some check shapes; `findPair` not searching sibling `csv/`/
-  `queries/` directories).
+  `queries/` directories) and the Quick Fix repair engine added in 0.3.0.
 - `npm test` — the full automated suite these examples are also verified
-  against (98 tests as of this writing).
+  against (121 tests as of this writing).

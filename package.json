@@ -2,8 +2,14 @@
   "name": "ontology-dev-suite",
   "displayName": "Ontology Development Suite",
   "description": "Create ontologies (with imports) in Turtle, TriG, N-Triples, N-Quads, RDF/XML, or OWL Manchester Syntax, author TARQL-style CSV-to-RDF CONSTRUCT queries with live preview, and validate against a local SPARQL/SHACL/OWL2-RL checks engine.",
-  "version": "0.2.0",
-  "publisher": "local",
+  "version": "0.3.0",
+  "publisher": "pwin",
+  "license": "MIT",
+  "icon": "resources/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/pwin/consolidated-ontology-quality-suite-webapp"
+  },
   "private": true,
   "engines": {
     "vscode": "^1.125.0"
@@ -276,9 +282,25 @@
           "type": "number",
           "default": 20,
           "description": "Number of CSV rows sampled for the live triplify preview."
+        },
+        "ontologySuite.projectStandardsPath": {
+          "type": "string",
+          "default": ".ontology-suite/standards.json",
+          "description": "Workspace-relative path to project standards (default language tag, category class, versioning conventions, ...) used to complete Quick Fix repairs. File is optional -- built-in defaults apply if absent."
+        },
+        "ontologySuite.projectRulesPath": {
+          "type": "string",
+          "default": ".ontology-suite/class-rules.json",
+          "description": "Workspace-relative path to project rules for minimum required content on classes/properties (e.g. every owl:Class needs rdfs:label + rdfs:comment). File is optional -- no project rules apply if absent."
         }
       }
-    }
+    },
+    "jsonValidation": [
+      {
+        "fileMatch": "**/.ontology-suite/class-rules.json",
+        "url": "./resources/checks-registry/class-rules.schema.json"
+      }
+    ]
   },
   "scripts": {
     "compile": "node esbuild.js",

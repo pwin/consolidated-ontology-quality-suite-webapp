@@ -5,11 +5,17 @@ import { resolveImports } from './ontology/resolveImports';
 import { analyzeExpressivity } from './rdf/expressivity';
 import { renderMetricsMarkdown } from './ontology/metricsReport';
 import { FORMATS, RdfFormat, detectFormat, serializeRdf } from './rdf/serialization';
+import { shrink } from './rdf/vocab';
 import { newOntologyWizard, promptAddClass, promptAddProperty, renderAddClassTurtle, renderAddPropertyTurtle } from './ontology/scaffold';
 import { OntologyOutlineProvider } from './ontology/outline';
 import { LocalChecksEngine } from './checks/runLocalChecks';
 import { OntologySuiteClient } from './cli/ontologySuiteClient';
 import { resultRowsToDiagnostics, CHECKS_DIAGNOSTIC_SOURCE } from './checks/toDiagnostics';
+import { OntologyRepairCodeActionProvider, APPLY_REPAIR_COMMAND } from './checks/codeActionProvider';
+import { computeRepair, RepairOutcome } from './checks/repairEngine';
+import { applyRepair } from './checks/applyRepair';
+import { loadProjectStandards } from './checks/projectStandards';
+import type { ResultRow } from './types';
 import { profileCsv, draftFromProfile } from './triplify/csvProfiler';
 import { parseCsv } from './triplify/csv';
 import { QueryWorkbench } from './webviews/queryWorkbench';
@@ -51,6 +57,11 @@ export function activate(context: vscode.ExtensionContext): void {
     registerReferenceProvider(termIndex),
     registerRenameProvider(termIndex),
     registerDocumentSymbolProvider(),
+    vscode.languages.registerCodeActionsProvider(
+      ['turtle', 'trig', 'ntriples', 'nquads'],
+      new OntologyRepairCodeActionProvider(() => localChecks.getRepairsRootDir(), localChecks.rowsByDiagnostic),
+      { providedCodeActionKinds: OntologyRepairCodeActionProvider.providedCodeActionKinds },
+    ),
   );
 
   context.subscriptions.push(
@@ -185,6 +196,38 @@ export function activate(context: vscode.ExtensionContext): void {
       await localChecks.runForFile(uri);
     }),
 
+    // Every repair is preview-then-apply: computeRepair() only ever computes
+    // a candidate edit in memory -- nothing touches the document until the
+    // user explicitly confirms *this specific* diff in the modal below.
+    // There is no auto-apply / "fix all" path anywhere in the extension.
+    vscode.commands.registerCommand(APPLY_REPAIR_COMMAND, async (uri: vscode.Uri, row: ResultRow) => {
+      const document = await vscode.workspace.openTextDocument(uri);
+      const format = detectFormat(uri.fsPath, document.getText());
+      if (!format) return;
+      const parsed = await readOntologyDocument(uri.fsPath, document.getText());
+      const standards = await loadProjectStandards();
+      const outcome = computeRepair(localChecks.getRepairsRootDir(), row, parsed.quads, parsed.prefixes, standards);
+      if (!outcome || (outcome.addedQuads.length === 0 && outcome.removedQuads.length === 0)) {
+        void vscode.window.showInformationMessage('Ontology Suite: no automatic fix available for this finding (or the underlying triple no longer matches).');
+        return;
+      }
+
+      const diffLines = describeRepairDiff(outcome, parsed.prefixes);
+      const reformatWarning =
+        outcome.kind === 'replace' ? '\n\nThis reformats the whole file -- hand-authored formatting and comments will be lost.' : '';
+      const choice = await vscode.window.showWarningMessage(
+        `Apply fix for ${row.checkId}: ${outcome.title}?\n\n${diffLines}${reformatWarning}`,
+        { modal: true },
+        'Apply Fix',
+      );
+      if (choice !== 'Apply Fix') return;
+
+      await applyRepair(document, outcome, parsed.prefixes, format);
+      outlineProvider.refresh();
+      termIndex.invalidate();
+      void vscode.window.showInformationMessage(`Ontology Suite: applied fix -- ${outcome.title}.`);
+    }),
+
     vscode.commands.registerCommand('ontologySuite.showMetrics', async () => {
       const uri = activeRdfUri();
       if (!uri) return;
@@ -292,6 +335,28 @@ function replaceExtension(filePath: string, newExt: string): string {
   const dir = path.dirname(filePath);
   const base = path.basename(filePath, path.extname(filePath));
   return path.join(dir, `${base}${newExt}`);
+}
+
+const REPAIR_DIFF_PREVIEW_LIMIT = 8;
+
+/** Renders the exact triples a repair would add/remove, CURIE-shrunk, for the confirmation modal -- the user sees precisely what's about to change before authorizing it. */
+function describeRepairDiff(outcome: RepairOutcome, prefixes: Record<string, string>): string {
+  const term = (t: import('n3').Quad['object']): string => {
+    if (t.termType === 'Literal') {
+      const lit = t as import('n3').Literal;
+      return lit.language ? `"${lit.value}"@${lit.language}` : `"${lit.value}"`;
+    }
+    return shrink(t.value, prefixes);
+  };
+  const renderQuad = (q: import('n3').Quad) => `${shrink(q.subject.value, prefixes)} ${shrink(q.predicate.value, prefixes)} ${term(q.object)}`;
+
+  const lines: string[] = [];
+  for (const q of outcome.removedQuads.slice(0, REPAIR_DIFF_PREVIEW_LIMIT)) lines.push(`- ${renderQuad(q)}`);
+  for (const q of outcome.addedQuads.slice(0, REPAIR_DIFF_PREVIEW_LIMIT)) lines.push(`+ ${renderQuad(q)}`);
+  const shown = Math.min(outcome.removedQuads.length, REPAIR_DIFF_PREVIEW_LIMIT) + Math.min(outcome.addedQuads.length, REPAIR_DIFF_PREVIEW_LIMIT);
+  const total = outcome.removedQuads.length + outcome.addedQuads.length;
+  if (total > shown) lines.push(`… and ${total - shown} more`);
+  return lines.join('\n');
 }
 
 function choosePrimaryPrefix(prefixes: Record<string, string>): string {

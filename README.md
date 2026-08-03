@@ -65,6 +65,7 @@ flowchart LR
         SHACL["shacl-engine\n(SHACL-SPARQL, incl. sh:target)"]
         EYE["eyereasoner (EYE, WASM)\nOWL2-RL-ish inference\n+ contradiction detection"]
         GUIDE["Modelling guidance\nMDL-001/002/003\n(gist-informed)"]
+        REPAIR["Quick Fix repair engine\nSPARQL Update templates\n+ project standards"]
     end
 
     subgraph Views["Webviews"]
@@ -114,12 +115,18 @@ Validation" and "Full Triplify" commands, degrading gracefully if absent.
 
 **Validation**
 - *Run Local Checks*: the registry's 39 SPARQL + 6 SHACL-SPARQL checks,
-  OWL2-RL-ish inference/consistency, and gist-informed modelling guidance —
+  OWL2-RL-ish inference/consistency, gist-informed modelling guidance, and
+  this project's own [minimum-required-content rules](#project-rules-minimum-required-content) —
   merged into one Problems-panel view, entirely in-process.
 - *Run Deep Validation*: optional Python CLI fallback for full OWL2 DL
   reasoning (owlready2/HermiT).
 - Competency questions as VS Code tests: `.cq.rq` files (SPARQL ASK/SELECT
   + expected-result directives) show up in Test Explorer.
+- *Quick Fix*: 16 checks (see [Quick Fix](#quick-fix-schematron-quick-fix-style-repair))
+  offer a one-click lightbulb repair, computed from a real SPARQL Update
+  and completed by this project's own `.ontology-suite/standards.json`
+  where relevant — nothing is ever written without an explicit
+  "Apply Fix" confirmation showing the exact triples that will change.
 
 **Metrics**
 - *Show Metrics & DL Expressivity*: OntoQA-style schema metrics (class/
@@ -168,6 +175,55 @@ gist upper ontology (`ontologySuite.modellingGuidance`, default `"gist"`):
 | `MDL-001` | A named property declared solely as `owl:inverseOf` another named property — gist only ever scopes `owl:inverseOf` inline to one restriction, never as two top-level declared properties. |
 | `MDL-002` | `owl:equivalentClass` between two plain named classes with no logical definition — usually should be `rdfs:subClassOf` or a SKOS mapping instead. |
 | `MDL-003` | A class with no restrictions of its own — consider `gist:Category` instead, per gist's own scope note on the class. |
+
+### Quick Fix: Schematron-Quick-Fix-style repair
+
+16 checks (`STR-001/002/005/007/008`, `QUA-001/002/004/005/007`,
+`LOG-003`, `MDL-001/002/003`, `STY-003`, `PRJ-REQUIRED`) offer a real
+Quick Fix, the same idea as Schematron Quick Fix (SQF): the fix is
+declared alongside the check and draws on the same context the check's
+own finding already carries (`focusNode`/`path`/`value`), plus this
+project's own configuration where a fix needs a project-specific value —
+e.g. `MDL-003`'s "retype this class-with-no-structure as a category"
+fix uses *your* project's category class from
+`.ontology-suite/standards.json`, defaulting to `gist:Category` only if
+you haven't configured one.
+
+Every fix is preview-then-apply: selecting a Quick Fix opens a modal
+listing the exact triples it would add/remove before anything is
+written — there is no auto-apply or "fix all" path. Fixes that only add
+triples are appended as a new Turtle block, preserving the rest of the
+file's formatting/comments exactly; fixes that also remove an existing
+triple reserialize the whole document instead (can't in general splice a
+deletion into arbitrary hand-authored syntax) and say so explicitly in
+the confirmation modal. A fix only ever touches the *currently open*
+document's own triples — never an imported file — and safely no-ops if
+its target triple isn't actually present there.
+
+### Project rules: minimum required content
+
+`.ontology-suite/class-rules.json` (path configurable via
+`ontologySuite.projectRulesPath`) declares "every resource of this type
+needs these predicates" rules as plain JSON, autocompleted/validated by
+VS Code's built-in JSON language support (a bundled schema is wired
+through `contributes.jsonValidation` — no SHACL/Turtle authoring
+needed):
+
+```json
+{
+  "rules": [
+    { "appliesTo": "owl:Class", "requires": ["rdfs:label"] },
+    { "appliesTo": "owl:ObjectProperty", "requires": ["rdfs:label", "rdfs:domain", "rdfs:range"] }
+  ]
+}
+```
+
+Findings (`PRJ-REQUIRED`) flow through the same diagnostics/Quick-Fix
+pipeline as every other check — a missing `rdfs:label`/`skos:prefLabel`
+is auto-fixable (derives a label from the local name); structural
+predicates like `rdfs:domain`/`rdfs:range` have no safe machine-
+generated value, so those are correctly flagged with no Quick Fix
+offered.
 
 ## Serializations
 
@@ -225,6 +281,8 @@ other format and opens the result — warns first if the target is lossy.
 | `ontologySuite.pythonCliPath` | `"ontology-suite"` | CLI executable for the optional fallback |
 | `ontologySuite.checksRegistryPath` | `""` | Override the vendored registry with another checkout |
 | `ontologySuite.triplifyPreviewSampleSize` | `20` | CSV rows sampled for the live preview |
+| `ontologySuite.projectStandardsPath` | `.ontology-suite/standards.json` | Project values (category class, language tag, versioning, policy) that complete Quick Fix repairs |
+| `ontologySuite.projectRulesPath` | `.ontology-suite/class-rules.json` | Minimum-required-content rules for classes/properties (`PRJ-REQUIRED`) |
 
 ## Try it
 
@@ -236,21 +294,23 @@ other format and opens the result — warns first if the target is lossy.
    coherent example ontology plus a real gist v11→v14.1 upstream-migration
    scenario.
 3. Alternatively, install the packaged extension directly:
-   `code --install-extension ontology-dev-suite-0.2.0.vsix` (build it with
+   `code --install-extension ontology-dev-suite-0.3.0.vsix` (build it with
    `npx @vscode/vsce package`).
 
 ## Testing
 
 Two tiers, both real and both passing as of this writing:
 
-- **`npm test`** (Vitest) — 98 tests across 22 files covering every
+- **`npm test`** (Vitest) — 121 tests across 25 files covering every
   pure-logic module: parsing, all six serializations' round-trips
   (including the Manchester class-expression engine against real OWL2
   restrictions), import resolution (including the gist v11→v14.1 drift-
   and-fix scenario below), the checks engine (SPARQL/SHACL/reasoning/
-  guidance), triplification (sketch/conformance/live-preview/CSV
-  profiling), and the completion-position heuristics. Fast (~10s), no VS
-  Code required.
+  guidance/project rules), the Quick Fix repair engine (every template,
+  both policy branches of `LOG-003`/`MDL-002`, the cross-file safe-no-op
+  case), triplification (sketch/conformance/live-preview/CSV profiling),
+  and the completion-position heuristics. Fast (~10-15s), no VS Code
+  required.
 - **`npm run test:integration`** (`@vscode/test-cli` + `@vscode/test-electron`)
   — launches a real, headless VS Code Extension Development Host and
   exercises the actual extension: activation, command registration,
