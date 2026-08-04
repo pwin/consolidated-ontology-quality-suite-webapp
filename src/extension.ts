@@ -187,7 +187,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('ontologySuite.openGraphView', async () => {
       const uri = activeRdfUri();
       if (!uri) return;
-      await openGraphView(uri);
+      await openGraphView(uri, context.extensionPath);
     }),
 
     vscode.commands.registerCommand('ontologySuite.runLocalChecks', async () => {

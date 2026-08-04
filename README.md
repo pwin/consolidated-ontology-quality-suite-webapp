@@ -138,6 +138,30 @@ Validation" and "Full Triplify" commands, degrading gracefully if absent.
   lighter profile deliberately or use full OWL2 DL when you need the
   expressivity.
 
+**Visualization**
+- *Visualize Subject Graph*: a subject-neighborhood SVG rendered via
+  `@viz-js/viz` (the real Graphviz WASM build, not a mockup/screenshot),
+  scroll/pinch-to-zoom and drag-to-pan in the webview (a small hand-rolled
+  CSS-transform viewport — no bundled pan/zoom library, since the
+  webview's CSP only allows its own nonce'd inline script). Node
+  shapes/colors match `turtle-editor-viewer`'s own graph renderer: rounded
+  boxes, blue literals, orange blank nodes.
+- Four toggles for decluttering a large neighborhood: hide `rdf:type`
+  edges, hide annotation edges (`rdfs:label`/`comment`, `skos:definition`/
+  `example`), hide `rdfs:isDefinedBy` edges specifically, and **hide
+  imported terms' downstream** — an imported class/property referenced by
+  the document still appears as a leaf (so you can see *that* it's used),
+  but none of *its own* further connections from the imported ontology are
+  pulled in. Plus a layout-direction dropdown (`LR`/`RL`/`TB`/`BT`).
+- **Download SVG** or **Download PNG** — PNG rasterization runs via
+  `@resvg/resvg-wasm` in the extension host (Graphviz's own WASM build has
+  no PNG output at all — confirmed, only vector/text formats), with a
+  bundled Roboto font (`resources/fonts/`, SIL OFL 1.1) supplied
+  explicitly, since `resvg-wasm`'s system-font loading finds nothing in
+  this WASM/Node context and would otherwise silently render blank text
+  with no error. Saving a PNG also opens it in a new editor tab, so
+  download and view are the same action.
+
 **Editing assistance**
 - Autocomplete in `.ttl`/`.rq` is *position-aware*: after `a`/`rdf:type` it
   suggests classes only; in predicate position, properties only; after
@@ -329,7 +353,7 @@ that doesn't use gist turning `modellingGuidance` to `"off"` in committed
 
 Two tiers, both real and both passing as of this writing:
 
-- **`npm test`** (Vitest) — 121 tests across 25 files covering every
+- **`npm test`** (Vitest) — 128 tests across 26 files covering every
   pure-logic module: parsing, all six serializations' round-trips
   (including the Manchester class-expression engine against real OWL2
   restrictions), import resolution (including the gist v11→v14.1 drift-
@@ -337,8 +361,11 @@ Two tiers, both real and both passing as of this writing:
   guidance/project rules), the Quick Fix repair engine (every template,
   both policy branches of `LOG-003`/`MDL-002`, the cross-file safe-no-op
   case), triplification (sketch/conformance/live-preview/CSV profiling),
-  and the completion-position heuristics. Fast (~10-15s), no VS Code
-  required.
+  the completion-position heuristics, and the graph view's DOT generation
+  (every toggle/rankdir option) and PNG rasterization (a real
+  pixel-content check, not just PNG-signature validity — the check that
+  would have caught the blank-text font bug before it shipped). Fast
+  (~10-15s), no VS Code required.
 - **`npm run test:integration`** (`@vscode/test-cli` + `@vscode/test-electron`)
   — launches a real, headless VS Code Extension Development Host and
   exercises the actual extension: activation, command registration,

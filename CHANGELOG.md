@@ -1,5 +1,56 @@
 # Changelog
 
+## 0.5.0
+
+### Graph View: more decluttering controls, PNG export
+
+Four new controls in the graph webview's toolbar, on top of 0.4.0's
+pan/zoom and Download SVG:
+
+- **Hide `rdfs:isDefinedBy` edges** -- a dedicated checkbox, separate from
+  "Hide annotation edges": `isDefinedBy` is "which ontology defines this
+  term" bookkeeping that tends to point at a handful of hub nodes (the
+  ontologies themselves), cluttering the layout more than
+  label/comment/definition edges do.
+- **Layout direction dropdown** (`LR`/`RL`/`TB`/`BT`) -- previously
+  hardcoded to `LR`.
+- **Hide imported terms' downstream** -- stops traversal at the boundary
+  of the main document's own subjects. An imported class/property
+  referenced by the document still appears as a leaf node (so you can see
+  *that* it's used), but none of *its own* further connections from the
+  imported ontology are pulled in -- decluttering a large imported
+  upper/foundational ontology's internal structure out of the picture
+  without losing the fact that the main document references it. Still
+  expands normally if you explicitly pick an imported term as one of the
+  selected root subjects.
+- **Download PNG**, alongside the existing Download SVG. Graphviz's own
+  WASM build (`@viz-js/viz`) has no PNG output at all -- confirmed
+  directly: `renderString`'s `format` option only accepts vector/text
+  formats (svg, dot, json, ps, eps, ...), no rasterization plugin is
+  compiled in. PNG rasterization runs via `@resvg/resvg-wasm` (the WASM
+  sibling of the native `@resvg/resvg-js` this project tried once before
+  for the README's graph image and didn't keep as a dependency -- WASM
+  avoids the same cross-platform native-binary distribution problem here
+  too). Saving a PNG also opens it in a new editor tab via VS Code's
+  built-in image preview, so download and view are the same action rather
+  than two separate UIs.
+
+**Bug, found and fixed before it reached users**: the first PNG export
+attempt produced valid PNGs with correct shapes/colors/borders but
+completely blank text -- every node box empty. Root-caused via a real
+pixel-content check (not just PNG-signature validity, which is all the
+original test asserted): `resvg-wasm`'s `font.loadSystemFonts: true`
+default silently finds zero fonts in this Node/WASM context (WASM has no
+OS font-enumeration API the way native resvg-js's `fontdb` does), and
+resvg renders missing glyphs as nothing, with no error. Fixed by bundling
+an explicit font (`resources/fonts/roboto-latin-400-normal.woff2`, Roboto,
+SIL OFL 1.1 -- license text alongside it) and supplying it via
+`font.fontBuffers`; confirmed resvg's font parser accepts WOFF2 directly,
+no raw TTF/OTF needed. The regression test added alongside the fix
+inspects actual rendered pixel darkness in the text region, specifically
+because a PNG-signature-only check is exactly what let this ship in the
+first place.
+
 ## 0.4.0
 
 ### New checks: `CNF-003`/`CNF-004`, real implementations for the first time
