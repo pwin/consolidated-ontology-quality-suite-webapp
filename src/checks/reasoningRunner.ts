@@ -2,7 +2,8 @@ import * as fs from 'node:fs';
 import { Parser, Quad, Writer } from 'n3';
 import type { ResultRow } from '../types';
 
-const OQR = 'https://ontology-dev-suite.local/reasoning#';
+/** This engine's own internal bookkeeping namespace (contradiction/reason/class1/class2/other) -- not real ontology vocabulary, so consumers of computeInferredClosure that visualize/display the closure (e.g. graphView.ts's "Show inferred" overlay) should filter it out rather than show it as if it were a genuine domain-level inference. */
+export const OQR = 'https://ontology-dev-suite.local/reasoning#';
 const OQR_CONTRADICTION = `${OQR}contradiction`;
 const OQR_REASON = `${OQR}reason`;
 const OQR_CLASS1 = `${OQR}class1`;
@@ -24,21 +25,39 @@ const REASON_MESSAGES: Record<string, (get: (p: string) => string | undefined) =
  * the Python CLI's deep-validation fallback.
  */
 export async function runReasoningChecks(quads: Quad[], rulesPath: string): Promise<ResultRow[]> {
+  const resultText = await computeDeductiveClosureText(quads, rulesPath);
+  if (resultText === undefined) return [];
+  return extractContradictions(resultText);
+}
+
+/**
+ * Full EYE deductive closure (asserted quads + everything core-rules.n3 can derive from them),
+ * parsed back into quads -- e.g. for the Graph View's "Show inferred" overlay (graphView.ts),
+ * which needs the whole closure to diff against the asserted graph, not just the contradiction
+ * findings runReasoningChecks extracts from the same closure text.
+ */
+export async function computeInferredClosure(quads: Quad[], rulesPath: string): Promise<Quad[]> {
+  const resultText = await computeDeductiveClosureText(quads, rulesPath);
+  if (resultText === undefined) return [];
+  try {
+    return new Parser().parse(resultText);
+  } catch {
+    return [];
+  }
+}
+
+async function computeDeductiveClosureText(quads: Quad[], rulesPath: string): Promise<string | undefined> {
   const { n3reasoner } = await import('eyereasoner');
   const rules = fs.readFileSync(rulesPath, 'utf8');
   const dataText = await serializeToTurtle(quads);
   const combined = `${rules}\n${dataText}`;
 
-  let resultText: string;
   try {
-    resultText = (await n3reasoner(combined, undefined, { output: 'deductive_closure', outputType: 'string' })) as string;
+    return (await n3reasoner(combined, undefined, { output: 'deductive_closure', outputType: 'string' })) as string;
   } catch (err) {
-     
     console.error('[ontologySuite] EYE reasoner run failed:', err);
-    return [];
+    return undefined;
   }
-
-  return extractContradictions(resultText);
 }
 
 function serializeToTurtle(quads: Quad[]): Promise<string> {

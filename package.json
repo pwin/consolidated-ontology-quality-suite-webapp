@@ -2,7 +2,7 @@
   "name": "ontology-dev-suite",
   "displayName": "Ontology Development Suite",
   "description": "Create ontologies (with imports) in Turtle, TriG, N-Triples, N-Quads, RDF/XML, or OWL Manchester Syntax, author TARQL-style CSV-to-RDF CONSTRUCT queries with live preview, and validate against a local SPARQL/SHACL/OWL2-RL checks engine.",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "publisher": "pwin",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -153,6 +153,20 @@
         "title": "Ontology Suite: Add Property..."
       },
       {
+        "command": "ontologySuite.addSubclass",
+        "title": "Ontology Suite: Add Subclass...",
+        "icon": "$(add)"
+      },
+      {
+        "command": "ontologySuite.addSiblingClass",
+        "title": "Ontology Suite: Add Sibling Class..."
+      },
+      {
+        "command": "ontologySuite.addSubProperty",
+        "title": "Ontology Suite: Add Sub-property...",
+        "icon": "$(add)"
+      },
+      {
         "command": "ontologySuite.openQueryWorkbench",
         "title": "Ontology Suite: Open Query Workbench"
       },
@@ -187,6 +201,10 @@
       {
         "command": "ontologySuite.convertFormat",
         "title": "Ontology Suite: Convert / Save As Serialization..."
+      },
+      {
+        "command": "ontologySuite.runOntologyScript",
+        "title": "Ontology Suite: Run Ontology Script (.ontology.ts)"
       }
     ],
     "menus": {
@@ -223,6 +241,21 @@
         },
         {
           "command": "ontologySuite.convertFormat"
+        },
+        {
+          "command": "ontologySuite.runOntologyScript"
+        },
+        {
+          "command": "ontologySuite.addSubclass",
+          "when": "false"
+        },
+        {
+          "command": "ontologySuite.addSiblingClass",
+          "when": "false"
+        },
+        {
+          "command": "ontologySuite.addSubProperty",
+          "when": "false"
         }
       ],
       "view/title": [
@@ -245,6 +278,31 @@
         {
           "command": "ontologySuite.addProperty",
           "when": "view == ontologySuite.outline && viewItem == ontologyRoot"
+        },
+        {
+          "command": "ontologySuite.addSubclass",
+          "when": "view == ontologySuite.outline && viewItem == classTerm",
+          "group": "inline"
+        },
+        {
+          "command": "ontologySuite.addSubclass",
+          "when": "view == ontologySuite.outline && viewItem == classTerm",
+          "group": "1_add"
+        },
+        {
+          "command": "ontologySuite.addSiblingClass",
+          "when": "view == ontologySuite.outline && viewItem == classTerm",
+          "group": "1_add"
+        },
+        {
+          "command": "ontologySuite.addSubProperty",
+          "when": "view == ontologySuite.outline && (viewItem == objectPropertyTerm || viewItem == datatypePropertyTerm)",
+          "group": "inline"
+        },
+        {
+          "command": "ontologySuite.addSubProperty",
+          "when": "view == ontologySuite.outline && (viewItem == objectPropertyTerm || viewItem == datatypePropertyTerm)",
+          "group": "1_add"
         }
       ]
     },
@@ -336,7 +394,6 @@
     "@typescript-eslint/parser": "^8.65.0",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
-    "esbuild": "^0.28.1",
     "eslint": "^10.8.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10"
@@ -346,6 +403,7 @@
     "@resvg/resvg-wasm": "^2.6.2",
     "@viz-js/viz": "^3.28.0",
     "@zazuko/env-node": "^3.1.0",
+    "esbuild": "^0.28.1",
     "eyereasoner": "^21.1.16",
     "n3": "^2.1.1",
     "oxigraph": "^0.5.9",

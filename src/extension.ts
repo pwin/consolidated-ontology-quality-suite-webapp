@@ -6,8 +6,19 @@ import { analyzeExpressivity } from './rdf/expressivity';
 import { renderMetricsMarkdown } from './ontology/metricsReport';
 import { FORMATS, RdfFormat, detectFormat, serializeRdf } from './rdf/serialization';
 import { shrink, GIST } from './rdf/vocab';
-import { newOntologyWizard, promptAddClass, promptAddProperty, renderAddClassTurtle, renderAddPropertyTurtle } from './ontology/scaffold';
-import { OntologyOutlineProvider } from './ontology/outline';
+import {
+  newOntologyWizard,
+  promptAddClass,
+  promptAddProperty,
+  renderAddClassTurtle,
+  renderAddPropertyTurtle,
+  promptClassNameAndLabel,
+  promptClassRestriction,
+  renderAddClassWithParentsTurtle,
+  promptAddSubProperty,
+  renderAddSubPropertyTurtle,
+} from './ontology/scaffold';
+import { OntologyOutlineProvider, OntologyOutlineDragAndDropController, TermOutlineNode } from './ontology/outline';
 import { LocalChecksEngine } from './checks/runLocalChecks';
 import { OntologySuiteClient } from './cli/ontologySuiteClient';
 import { resultRowsToDiagnostics, CHECKS_DIAGNOSTIC_SOURCE } from './checks/toDiagnostics';
@@ -28,6 +39,7 @@ import { registerDefinitionProvider, registerReferenceProvider, registerRenamePr
 import { registerDocumentSymbolProvider } from './language/documentSymbols';
 import { LiveDiagnosticsProvider } from './language/liveDiagnostics';
 import { CompetencyQuestionProvider } from './tests/competencyQuestionProvider';
+import { runOntologyScript } from './scripting/runScript';
 
 export function activate(context: vscode.ExtensionContext): void {
   const termIndex = new TermIndex();
@@ -41,6 +53,27 @@ export function activate(context: vscode.ExtensionContext): void {
   const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   statusBarItem.command = 'ontologySuite.showMetrics';
 
+  const outlineDragAndDrop = new OntologyOutlineDragAndDropController(async (dragged, newParent) => {
+    const uri = outlineProvider.getActiveUri();
+    if (!uri) return;
+    const editor = vscode.window.visibleTextEditors.find((e) => e.document.uri.toString() === uri.toString()) ?? (await vscode.window.showTextDocument(uri));
+    const prefixes = parseTurtle(uri.toString(), editor.document.getText()).prefixes;
+    const predicate = dragged.groupKind === 'class' ? 'rdfs:subClassOf' : 'rdfs:subPropertyOf';
+    const childCurie = shrink(dragged.term.iri, prefixes);
+    const parentCurie = shrink(newParent.term.iri, prefixes);
+
+    const edit = new vscode.WorkspaceEdit();
+    const endPos = new vscode.Position(editor.document.lineCount, 0);
+    edit.insert(uri, endPos, `\n${childCurie}\n  ${predicate} ${parentCurie} ;\n  .\n`);
+    await vscode.workspace.applyEdit(edit);
+    outlineProvider.refresh();
+    termIndex.invalidate();
+    void vscode.window.showInformationMessage(
+      `Added ${childCurie} ${predicate} ${parentCurie}. This adds a parent, not a move -- ${childCurie} keeps any existing parent(s) too; edit the file directly to remove one if you want a true reparent.`,
+    );
+  });
+  const outlineTreeView = vscode.window.createTreeView('ontologySuite.outline', { treeDataProvider: outlineProvider, dragAndDropController: outlineDragAndDrop });
+
   context.subscriptions.push(
     liveDiagnostics,
     localChecks,
@@ -49,7 +82,7 @@ export function activate(context: vscode.ExtensionContext): void {
     cqProvider,
     cliDiagnostics,
     statusBarItem,
-    vscode.window.registerTreeDataProvider('ontologySuite.outline', outlineProvider),
+    outlineTreeView,
     registerHoverProvider(termIndex),
     registerCompletionProvider(termIndex),
     registerManchesterCompletionProvider(termIndex),
@@ -158,6 +191,85 @@ export function activate(context: vscode.ExtensionContext): void {
       const edit = new vscode.WorkspaceEdit();
       const endPos = new vscode.Position(editor.document.lineCount, 0);
       edit.insert(uri, endPos, renderAddPropertyTurtle(opts));
+      await vscode.workspace.applyEdit(edit);
+      outlineProvider.refresh();
+      termIndex.invalidate();
+    }),
+
+    vscode.commands.registerCommand('ontologySuite.addSubclass', async (node?: TermOutlineNode) => {
+      if (!node || node.kind !== 'term') {
+        void vscode.window.showErrorMessage('Right-click a class in the Ontology Outline to add a subclass of it.');
+        return;
+      }
+      const uri = outlineProvider.getActiveUri();
+      if (!uri) return;
+      const editor = vscode.window.visibleTextEditors.find((e) => e.document.uri.toString() === uri.toString()) ?? (await vscode.window.showTextDocument(uri));
+      const prefixes = node.prefixes;
+      const parentLabel = node.term.label ?? shrink(node.term.iri, prefixes);
+
+      const names = await promptClassNameAndLabel(`subclass of ${parentLabel}`);
+      if (!names) return;
+      const restrictionExpr = await promptClassRestriction();
+
+      const localPrefix = choosePrimaryPrefix(prefixes);
+      const turtle = await renderAddClassWithParentsTurtle(
+        { className: names.className, label: names.label, prefix: localPrefix, parentIris: [node.term.iri], restrictionExpr },
+        prefixes,
+      );
+      const edit = new vscode.WorkspaceEdit();
+      edit.insert(uri, new vscode.Position(editor.document.lineCount, 0), turtle);
+      await vscode.workspace.applyEdit(edit);
+      outlineProvider.refresh();
+      termIndex.invalidate();
+    }),
+
+    vscode.commands.registerCommand('ontologySuite.addSiblingClass', async (node?: TermOutlineNode) => {
+      if (!node || node.kind !== 'term') {
+        void vscode.window.showErrorMessage('Right-click a class in the Ontology Outline to add a sibling of it.');
+        return;
+      }
+      const uri = outlineProvider.getActiveUri();
+      if (!uri) return;
+      const editor = vscode.window.visibleTextEditors.find((e) => e.document.uri.toString() === uri.toString()) ?? (await vscode.window.showTextDocument(uri));
+      const prefixes = node.prefixes;
+      const siblingLabel = node.term.label ?? shrink(node.term.iri, prefixes);
+
+      const names = await promptClassNameAndLabel(`sibling of ${siblingLabel}`);
+      if (!names) return;
+      const restrictionExpr = await promptClassRestriction();
+
+      const localPrefix = choosePrimaryPrefix(prefixes);
+      // Same named parent(s) the sibling itself has (possibly none, if the sibling is a root class).
+      const turtle = await renderAddClassWithParentsTurtle(
+        { className: names.className, label: names.label, prefix: localPrefix, parentIris: node.term.subClassOf, restrictionExpr },
+        prefixes,
+      );
+      const edit = new vscode.WorkspaceEdit();
+      edit.insert(uri, new vscode.Position(editor.document.lineCount, 0), turtle);
+      await vscode.workspace.applyEdit(edit);
+      outlineProvider.refresh();
+      termIndex.invalidate();
+    }),
+
+    vscode.commands.registerCommand('ontologySuite.addSubProperty', async (node?: TermOutlineNode) => {
+      if (!node || node.kind !== 'term' || (node.groupKind !== 'objectProperty' && node.groupKind !== 'datatypeProperty')) {
+        void vscode.window.showErrorMessage('Right-click an object or datatype property in the Ontology Outline to add a sub-property of it.');
+        return;
+      }
+      const uri = outlineProvider.getActiveUri();
+      if (!uri) return;
+      const editor = vscode.window.visibleTextEditors.find((e) => e.document.uri.toString() === uri.toString()) ?? (await vscode.window.showTextDocument(uri));
+      const prefixes = node.prefixes;
+      const parentLabel = node.term.label ?? shrink(node.term.iri, prefixes);
+      const kind = node.groupKind === 'objectProperty' ? 'ObjectProperty' : 'DatatypeProperty';
+
+      const names = await promptAddSubProperty(`sub-property of ${parentLabel}`);
+      if (!names) return;
+
+      const localPrefix = choosePrimaryPrefix(prefixes);
+      const turtle = renderAddSubPropertyTurtle({ propertyName: names.propertyName, label: names.label, kind, prefix: localPrefix, parentIri: node.term.iri }, prefixes);
+      const edit = new vscode.WorkspaceEdit();
+      edit.insert(uri, new vscode.Position(editor.document.lineCount, 0), turtle);
       await vscode.workspace.applyEdit(edit);
       outlineProvider.refresh();
       termIndex.invalidate();
@@ -285,6 +397,15 @@ export function activate(context: vscode.ExtensionContext): void {
       } catch {
         /* errors already surfaced via the CLI client's own error message / output channel */
       }
+    }),
+
+    vscode.commands.registerCommand('ontologySuite.runOntologyScript', async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor || !editor.document.uri.fsPath.endsWith('.ts')) {
+        void vscode.window.showErrorMessage('Open a .ontology.ts script file first (a plain .ts file using the ontology-suite/dsl API -- see TUTORIAL.md).');
+        return;
+      }
+      await runOntologyScript(editor.document.uri, context.extensionPath);
     }),
 
     vscode.commands.registerCommand('ontologySuite.convertFormat', async () => {

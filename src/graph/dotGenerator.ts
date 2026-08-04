@@ -55,6 +55,13 @@ export function generateDot(
   /** Subjects declared in the main document itself (pre-import-merge) -- required only when
    *  `hideImportedDownstream` is set; a term not in this set is treated as "imported". */
   localSubjects?: ReadonlySet<string>,
+  /** Quad keys (see quadKey()) present in the reasoner's deductive closure but not in `quads`
+   *  itself -- rendered as dashed purple edges instead of the default solid black, so an
+   *  inferred relationship (e.g. a subclass link entailed through the class hierarchy, not
+   *  directly asserted) is visually distinct from what the document actually states. Edge
+   *  styling only, not node styling: the inferred/asserted distinction is fundamentally about
+   *  axioms/relationships, which map onto edges here, not the nodes themselves. */
+  inferredKeys?: ReadonlySet<string>,
 ): string {
   const opts = { ...DEFAULT_OPTIONS, ...options };
   const bySubject = new Map<string, Quad[]>();
@@ -125,6 +132,10 @@ export function generateDot(
 
     const predLabel = opts.showPrefixes ? shrink(q.predicate.value, prefixes) : q.predicate.value;
 
+    // Dashed purple for an inferred-only relationship (present in the reasoner's closure but
+    // not asserted in the document itself); the default solid black edge style otherwise.
+    const edgeStyle = inferredKeys?.has(quadKey(q)) ? ', style=dashed, color="purple", fontcolor="purple"' : '';
+
     if (q.object.termType === 'NamedNode' || q.object.termType === 'BlankNode') {
       const oid = idFor(q.object.value);
       if (!rendered.has(oid)) {
@@ -132,7 +143,7 @@ export function generateDot(
         lines.push(`  ${oid} [label=${dotQuote(labelFor(q.object.value, q.object.termType))}${attrsFor(q.object.termType)}];`);
       }
       const sid = idFor(q.subject.value);
-      lines.push(`  ${sid} -> ${oid} [label=${dotQuote(predLabel)}];`);
+      lines.push(`  ${sid} -> ${oid} [label=${dotQuote(predLabel)}${edgeStyle}];`);
     } else {
       // Literal object: rendered as its own small node (so long values don't clutter the edge
       // label), in blue -- matching turtle-editor-viewer's literal color convention.
@@ -140,7 +151,7 @@ export function generateDot(
       const literalText = q.object.value.length > 40 ? `${q.object.value.slice(0, 37)}...` : q.object.value;
       lines.push(`  ${lid} [label=${dotQuote(literalText)}, color="blue", fontcolor="blue"];`);
       const sid = idFor(q.subject.value);
-      lines.push(`  ${sid} -> ${lid} [label=${dotQuote(predLabel)}];`);
+      lines.push(`  ${sid} -> ${lid} [label=${dotQuote(predLabel)}${edgeStyle}];`);
     }
   }
 
@@ -150,6 +161,12 @@ export function generateDot(
 
 function dotQuote(s: string): string {
   return `"${s.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+/** Stable per-triple identity for diffing an asserted graph against a reasoner's closure (see graphView.ts's "Show inferred" option) -- literal-aware so a literal and a same-string resource can't collide. */
+export function quadKey(q: Quad): string {
+  const objectKey = q.object.termType === 'Literal' ? `"${q.object.value}"@${(q.object as import('n3').Literal).language ?? ''}^^${(q.object as import('n3').Literal).datatype?.value ?? ''}` : q.object.value;
+  return `${q.subject.value}|${q.predicate.value}|${objectKey}`;
 }
 
 /** RDF collections (rdf:first/rdf:rest chains) are common enough in restrictions to special-case for readability; kept simple for v1 -- flagged nodes, not fully unrolled into a record shape like the source project did. */

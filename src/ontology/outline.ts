@@ -4,12 +4,16 @@ import { buildOntologyModel, OntologyModel, TermInfo } from '../rdf/ontologyMode
 import { buildHierarchyIndex, childrenOf } from '../rdf/hierarchy';
 import { shrink } from '../rdf/vocab';
 
-type GroupKind = 'class' | 'objectProperty' | 'datatypeProperty' | 'individual';
+export type GroupKind = 'class' | 'objectProperty' | 'datatypeProperty' | 'individual';
 
-type OutlineNode =
+export type OutlineNode =
   | { kind: 'root'; uri: vscode.Uri }
   | { kind: 'group'; groupKind: GroupKind; label: string; model: OntologyModel; prefixes: Record<string, string> }
   | { kind: 'term'; term: TermInfo; groupKind: GroupKind; model: OntologyModel; prefixes: Record<string, string>; ancestorPath: ReadonlySet<string> };
+
+export type TermOutlineNode = Extract<OutlineNode, { kind: 'term' }>;
+
+const DND_MIME_TYPE = 'application/vnd.code.tree.ontologysuite.outline';
 
 /**
  * Explorer-integrated Ontology Outline for the active .ttl document:
@@ -23,6 +27,11 @@ export class OntologyOutlineProvider implements vscode.TreeDataProvider<OutlineN
   readonly onDidChangeTreeData = this.onDidChangeTreeDataEmitter.event;
 
   private activeUri: vscode.Uri | undefined;
+
+  getActiveUri(): vscode.Uri | undefined {
+    return this.activeUri;
+  }
+
   /** Rebuilt once per refresh() cycle, not once per tree-node expansion -- expanding a hierarchy is O(nodes), not O(nodes^2). */
   private context: { uri: vscode.Uri; model: OntologyModel; prefixes: Record<string, string> } | undefined;
   private hierarchyCache = new Map<Exclude<GroupKind, 'individual'>, ReturnType<typeof buildHierarchyIndex>>();
@@ -92,6 +101,9 @@ export class OntologyOutlineProvider implements vscode.TreeDataProvider<OutlineN
     item.tooltip = element.term.comment ?? element.term.definition ?? element.term.iri;
     item.iconPath = new vscode.ThemeIcon(iconForKind(element.groupKind));
     item.command = { command: 'ontologySuite.revealTerm', title: 'Reveal', arguments: [element.term.iri] };
+    // Drives view/item/context "when" clauses -- Add Subclass/Add Sibling Class only offered on
+    // class nodes, Add Sub-property only on object/datatype property nodes, neither on individuals.
+    item.contextValue = contextValueForKind(element.groupKind);
     return item;
   }
 
@@ -152,6 +164,40 @@ export class OntologyOutlineProvider implements vscode.TreeDataProvider<OutlineN
   }
 }
 
+/**
+ * Drag a class onto another class (or a property onto another property of the
+ * same kind) to add it as an *additional* rdfs:subClassOf/subPropertyOf
+ * parent -- deliberately additive, never a move: this codebase's scaffold
+ * commands only ever append new statements, never locate-and-rewrite an
+ * existing one, so a dragged term keeps whatever parents it already had.
+ * True re-parenting (removing the old parent) is a manual edit; the
+ * onReparent callback's confirmation message says so explicitly.
+ */
+export class OntologyOutlineDragAndDropController implements vscode.TreeDragAndDropController<OutlineNode> {
+  readonly dropMimeTypes = [DND_MIME_TYPE];
+  readonly dragMimeTypes = [DND_MIME_TYPE];
+
+  constructor(private readonly onReparent: (dragged: TermOutlineNode, newParent: TermOutlineNode) => void | Promise<void>) {}
+
+  handleDrag(source: readonly OutlineNode[], dataTransfer: vscode.DataTransfer): void {
+    const draggable = source.filter((n): n is TermOutlineNode => n.kind === 'term' && n.groupKind !== 'individual');
+    if (draggable.length === 0) return;
+    dataTransfer.set(DND_MIME_TYPE, new vscode.DataTransferItem(draggable));
+  }
+
+  async handleDrop(target: OutlineNode | undefined, dataTransfer: vscode.DataTransfer): Promise<void> {
+    if (!target || target.kind !== 'term') return;
+    const transferItem = dataTransfer.get(DND_MIME_TYPE);
+    if (!transferItem) return;
+    const dragged = transferItem.value as TermOutlineNode[];
+    for (const d of dragged) {
+      if (d.groupKind !== target.groupKind) continue; // classes onto classes, same-kind properties onto same-kind properties only
+      if (d.term.iri === target.term.iri) continue; // no self-parenting
+      await this.onReparent(d, target);
+    }
+  }
+}
+
 function countGroup(model: OntologyModel, groupKind: GroupKind): number {
   return [...model.terms.values()].filter((t) => t.kinds.includes(groupKind)).length;
 }
@@ -160,4 +206,11 @@ function iconForKind(kind: GroupKind): string {
   if (kind === 'class') return 'symbol-class';
   if (kind === 'objectProperty' || kind === 'datatypeProperty') return 'symbol-property';
   return 'symbol-object';
+}
+
+function contextValueForKind(kind: GroupKind): string {
+  if (kind === 'class') return 'classTerm';
+  if (kind === 'objectProperty') return 'objectPropertyTerm';
+  if (kind === 'datatypeProperty') return 'datatypePropertyTerm';
+  return 'individualTerm';
 }

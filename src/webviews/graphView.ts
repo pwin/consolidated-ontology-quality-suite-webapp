@@ -1,10 +1,12 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
+import { Quad } from 'n3';
 import { readOntologyDocument } from '../rdf/parseDocument';
 import { resolveImports } from '../ontology/resolveImports';
-import { generateDot, GraphOptions, GraphRankdir } from '../graph/dotGenerator';
+import { generateDot, quadKey, GraphOptions, GraphRankdir } from '../graph/dotGenerator';
 import { renderDotToSvg } from '../graph/vizRenderer';
 import { renderSvgToPng } from '../graph/pngRenderer';
+import { computeInferredClosure, OQR } from '../checks/reasoningRunner';
 import { shrink } from '../rdf/vocab';
 import { htmlShell } from './webviewUtil';
 
@@ -42,12 +44,41 @@ export async function openGraphView(fileUri: vscode.Uri, extensionPath: string):
     maxDepth: 3,
     rankdir: 'LR',
   };
+  let showInferred = false;
+  // Computed lazily (EYE reasoner startup + run has real cost -- see reasoningRunner.ts's own
+  // notes elsewhere in this project) and cached for this panel's lifetime: mergedQuads never
+  // changes after the panel opens, so the closure only needs computing once, on first request.
+  let inferredCache: { combinedQuads: Quad[]; inferredKeys: Set<string> } | undefined;
+  const rulesPath = path.join(extensionPath, 'resources', 'reasoning', 'core-rules.n3');
+
+  async function getGraphQuads(): Promise<{ quads: Quad[]; inferredKeys: Set<string> | undefined }> {
+    if (!showInferred) return { quads: mergedQuads, inferredKeys: undefined };
+    if (!inferredCache) {
+      const closure = await computeInferredClosure(mergedQuads, rulesPath);
+      const assertedKeys = new Set(mergedQuads.map(quadKey));
+      // Excludes reasoningRunner.ts's own internal contradiction-bookkeeping triples (the OQR
+      // namespace) -- real for the checks engine's own purposes, but not genuine domain-level
+      // ontology vocabulary, so showing them here would look like a confusing false inference
+      // rather than what actually happened (e.g. "rex is inferred to be a Dog").
+      const isBookkeeping = (q: Quad) => q.subject.value.startsWith(OQR) || q.predicate.value.startsWith(OQR) || q.object.value.startsWith(OQR);
+      const inferredOnly = closure.filter((q) => !assertedKeys.has(quadKey(q)) && !isBookkeeping(q));
+      const inferredKeys = new Set(inferredOnly.map(quadKey));
+      // The combined graph (asserted + inferred-only) is what generateDot needs to actually draw
+      // the inferred edges -- inferredKeys alone only says *which* edges to style differently.
+      inferredCache = { combinedQuads: [...mergedQuads, ...inferredOnly], inferredKeys };
+    }
+    return { quads: inferredCache.combinedQuads, inferredKeys: inferredCache.inferredKeys };
+  }
+
   // Tracked so the download handlers always save the SVG actually on screen right now, not
   // whatever was current when the handler was registered.
   let currentSvg = '';
   const baseName = path.basename(fileUri.fsPath, path.extname(fileUri.fsPath));
 
-  const render = () => renderInto(panel, mergedQuads, selected, doc.prefixes, options, localSubjects).then((svg) => (currentSvg = svg));
+  const render = async () => {
+    const { quads, inferredKeys } = await getGraphQuads();
+    currentSvg = await renderInto(panel, quads, selected, doc.prefixes, options, localSubjects, inferredKeys);
+  };
   await render();
 
   panel.webview.onDidReceiveMessage(
@@ -57,6 +88,7 @@ export async function openGraphView(fileUri: vscode.Uri, extensionPath: string):
       hideAnnotations?: boolean;
       hideIsDefinedBy?: boolean;
       hideImportedDownstream?: boolean;
+      showInferred?: boolean;
       rankdir?: GraphRankdir;
       dataUrl?: string;
     }) => {
@@ -66,7 +98,13 @@ export async function openGraphView(fileUri: vscode.Uri, extensionPath: string):
         options.hideIsDefinedBy = msg.hideIsDefinedBy ?? options.hideIsDefinedBy;
         options.hideImportedDownstream = msg.hideImportedDownstream ?? options.hideImportedDownstream;
         options.rankdir = msg.rankdir ?? options.rankdir;
-        await render();
+        const inferredJustEnabled = msg.showInferred === true && !showInferred;
+        showInferred = msg.showInferred ?? showInferred;
+        if (inferredJustEnabled) {
+          await vscode.window.withProgress({ location: vscode.ProgressLocation.Notification, title: 'Ontology Suite: computing reasoner closure…' }, () => render());
+        } else {
+          await render();
+        }
       } else if (msg.type === 'downloadSvg') {
         const saveUri = await vscode.window.showSaveDialog({
           defaultUri: vscode.Uri.joinPath(vscode.workspace.workspaceFolders?.[0]?.uri ?? fileUri, `${baseName}-graph.svg`),
@@ -97,13 +135,14 @@ export async function openGraphView(fileUri: vscode.Uri, extensionPath: string):
 
 async function renderInto(
   panel: vscode.WebviewPanel,
-  quads: import('n3').Quad[],
+  quads: Quad[],
   selected: string[],
   prefixes: Record<string, string>,
   options: GraphOptions,
   localSubjects: ReadonlySet<string>,
+  inferredKeys: ReadonlySet<string> | undefined,
 ): Promise<string> {
-  const dot = generateDot(quads, selected, prefixes, options, localSubjects);
+  const dot = generateDot(quads, selected, prefixes, options, localSubjects, inferredKeys);
   let svg: string;
   let renderFailed = false;
   try {
@@ -122,6 +161,7 @@ async function renderInto(
     <label><input type="checkbox" id="hideAnnotations" ${options.hideAnnotations ? 'checked' : ''}/> Hide annotation edges</label>
     <label><input type="checkbox" id="hideIsDefinedBy" ${options.hideIsDefinedBy ? 'checked' : ''}/> Hide rdfs:isDefinedBy edges</label>
     <label><input type="checkbox" id="hideImportedDownstream" ${options.hideImportedDownstream ? 'checked' : ''}/> Hide imported terms' downstream</label>
+    <label title="Runs the EYE reasoner (core-rules.n3) and overlays anything it can derive that isn't directly asserted, as dashed purple edges"><input type="checkbox" id="showInferred" ${inferredKeys ? 'checked' : ''}/> Show inferred (reasoner closure)</label>
     <label>Direction:
       <select id="rankdir">
         ${rankdirOption('LR', 'Left → Right')}
@@ -140,7 +180,7 @@ async function renderInto(
   <div class="zoom-viewport" id="viewport">
     <div class="zoom-layer" id="layer">${svg}</div>
   </div>
-  <div class="zoom-hint">Scroll/pinch to zoom, drag to pan. "Hide imported terms' downstream" keeps a referenced imported class/property visible as a leaf, but doesn't expand its own further connections.</div>
+  <div class="zoom-hint">Scroll/pinch to zoom, drag to pan. "Hide imported terms' downstream" keeps a referenced imported class/property visible as a leaf, but doesn't expand its own further connections.${inferredKeys ? ' <span style="color: purple">Dashed purple edges</span> are reasoner-inferred, not directly asserted.' : ''}</div>
 </div>`;
 
   const script = `
@@ -149,6 +189,7 @@ document.getElementById('hideTypes').addEventListener('change', postToggle);
 document.getElementById('hideAnnotations').addEventListener('change', postToggle);
 document.getElementById('hideIsDefinedBy').addEventListener('change', postToggle);
 document.getElementById('hideImportedDownstream').addEventListener('change', postToggle);
+document.getElementById('showInferred').addEventListener('change', postToggle);
 document.getElementById('rankdir').addEventListener('change', postToggle);
 document.getElementById('downloadSvg').addEventListener('click', () => vscode.postMessage({ type: 'downloadSvg' }));
 document.getElementById('downloadPng').addEventListener('click', () => vscode.postMessage({ type: 'downloadPng' }));
@@ -159,6 +200,7 @@ function postToggle() {
     hideAnnotations: document.getElementById('hideAnnotations').checked,
     hideIsDefinedBy: document.getElementById('hideIsDefinedBy').checked,
     hideImportedDownstream: document.getElementById('hideImportedDownstream').checked,
+    showInferred: document.getElementById('showInferred').checked,
     rankdir: document.getElementById('rankdir').value,
   });
 }

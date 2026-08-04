@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Parser } from 'n3';
-import { generateDot } from './dotGenerator';
+import { generateDot, quadKey } from './dotGenerator';
 
 const quads = new Parser().parse(`
   @prefix ex: <http://example.org/> .
@@ -94,5 +94,24 @@ describe('generateDot', () => {
     const localSubjects = new Set<string>(); // ex:Dog is NOT local, but it's the selected root
     const dot = generateDot(mixedQuads, ['http://example.org/Dog'], prefixes, { hideImportedDownstream: true }, localSubjects);
     expect(dot).toContain('ex:Animal');
+  });
+
+  it('styles an inferred edge (present in inferredKeys) as dashed purple, leaving asserted edges the default style', () => {
+    const inferredEdgeQuad = quads.find((q) => q.predicate.value === 'http://example.org/hasOwner')!;
+    const inferredKeys = new Set([quadKey(inferredEdgeQuad)]);
+    const dot = generateDot(quads, ['http://example.org/Rex'], prefixes, {}, undefined, inferredKeys);
+    expect(dot).toContain('style=dashed');
+    expect(dot).toContain('color="purple"');
+    // Only the one edge in inferredKeys (hasOwner) should be styled -- the rdf:type edge (not in
+    // inferredKeys) must render as a plain, undecorated edge line.
+    const purpleLines = dot.split('\n').filter((l) => l.includes('purple'));
+    expect(purpleLines).toHaveLength(1);
+    expect(purpleLines[0]).toContain('hasOwner');
+  });
+
+  it('quadKey distinguishes a literal object from a same-string resource object', () => {
+    const literalQuad = new Parser().parse('<http://ex/s> <http://ex/p> "http://ex/o" .')[0];
+    const resourceQuad = new Parser().parse('<http://ex/s> <http://ex/p> <http://ex/o> .')[0];
+    expect(quadKey(literalQuad)).not.toBe(quadKey(resourceQuad));
   });
 });

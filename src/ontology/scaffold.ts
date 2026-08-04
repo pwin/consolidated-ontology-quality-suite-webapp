@@ -1,5 +1,9 @@
 import * as vscode from 'vscode';
 import { GIST } from '../rdf/vocab';
+import { ClassExpr, parseClassExpression } from '../rdf/formats/classExpression';
+import { AddClassOptions, AddPropertyOptions, humanize } from './scaffoldRender';
+
+export * from './scaffoldRender';
 
 /**
  * `prefix`/`namespace` are the binding a pick should get in the generated file -- distinct from
@@ -87,13 +91,6 @@ export async function newOntologyWizard(): Promise<{ uri: vscode.Uri; content: s
   return { uri, content: lines.join('\n') };
 }
 
-export interface AddClassOptions {
-  className: string;
-  label: string;
-  asCategory: boolean;
-  prefix: string;
-}
-
 /** "Add Class or Category" -- see MDL-003: a plain classification/tag should usually be a gist:Category, not a new owl:Class. */
 export async function promptAddClass(prefix: string): Promise<AddClassOptions | undefined> {
   const className = await vscode.window.showInputBox({
@@ -114,29 +111,6 @@ export async function promptAddClass(prefix: string): Promise<AddClassOptions | 
   if (!kind) return undefined;
 
   return { className, label, asCategory: kind.asCategory, prefix };
-}
-
-export function renderAddClassTurtle(opts: AddClassOptions): string {
-  if (opts.asCategory) {
-    return [
-      '',
-      `${opts.prefix}:${opts.className}`,
-      '  a gist:Category ;',
-      `  rdfs:label "${opts.label}"^^xsd:string ;`,
-      '  .',
-      '',
-    ].join('\n');
-  }
-  return ['', `${opts.prefix}:${opts.className}`, '  a owl:Class ;', `  rdfs:label "${opts.label}"^^xsd:string ;`, '  .', ''].join('\n');
-}
-
-export interface AddPropertyOptions {
-  propertyName: string;
-  label: string;
-  kind: 'ObjectProperty' | 'DatatypeProperty' | 'AnnotationProperty';
-  domain?: string;
-  range?: string;
-  prefix: string;
 }
 
 /**
@@ -170,15 +144,67 @@ export async function promptAddProperty(prefix: string): Promise<AddPropertyOpti
   return { propertyName, label, kind: kindPick.label as AddPropertyOptions['kind'], domain: domain || undefined, range: range || undefined, prefix };
 }
 
-export function renderAddPropertyTurtle(opts: AddPropertyOptions): string {
-  const lines = ['', `${opts.prefix}:${opts.propertyName}`, `  a owl:${opts.kind} ;`, `  rdfs:label "${opts.label}"^^xsd:string ;`];
-  if (opts.domain) lines.push(`  rdfs:domain ${opts.domain} ;`);
-  if (opts.range) lines.push(`  rdfs:range ${opts.range} ;`);
-  lines[lines.length - 1] = lines[lines.length - 1].replace(/;\s*$/, '.');
-  lines.push('');
-  return lines.join('\n');
+// ---------------------------------------------------------------------------
+// Ontology Outline context-menu actions: Add Subclass / Add Sibling Class /
+// Add Sub-property -- Protege-style "act on the node you right-clicked"
+// commands, as opposed to promptAddClass/promptAddProperty above which
+// always append a top-level term regardless of tree selection.
+// ---------------------------------------------------------------------------
+
+export async function promptClassNameAndLabel(promptContext: string): Promise<{ className: string; label: string } | undefined> {
+  const className = await vscode.window.showInputBox({
+    prompt: `New class name, ${promptContext} (PascalCase)`,
+    validateInput: (v) => (/^[A-Za-z][A-Za-z0-9]*$/.test(v) ? undefined : 'Use PascalCase'),
+  });
+  if (!className) return undefined;
+  const label = (await vscode.window.showInputBox({ prompt: 'Label', value: humanize(className) })) ?? humanize(className);
+  return { className, label };
 }
 
-function humanize(s: string): string {
-  return s.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, (c) => c.toUpperCase());
+/**
+ * Optional Manchester class-expression restriction, e.g. `hasChild some Person`
+ * or `Person and (hasChild some Person)`. Retries on a parse error rather than
+ * silently dropping what the user typed; Esc/empty at any point skips it
+ * (the class is still created, just without the extra restriction).
+ */
+export async function promptClassRestriction(): Promise<ClassExpr | undefined> {
+  const choice = await vscode.window.showQuickPick(
+    [
+      { label: 'No', description: 'just a plain subclass' },
+      { label: 'Yes', description: 'author a Manchester class-expression restriction (e.g. "hasChild some Person")' },
+    ],
+    { placeHolder: 'Add an additional class-expression restriction?' },
+  );
+  if (choice?.label !== 'Yes') return undefined;
+
+  for (;;) {
+    const text = await vscode.window.showInputBox({
+      prompt: 'Manchester class expression',
+      placeHolder: 'e.g. hasChild some Person, or Person and (hasChild some Person)',
+    });
+    if (!text) return undefined; // cancelled -- create the class without a restriction
+    try {
+      const expr = parseClassExpression(text);
+      if (expr) return expr;
+      const retry = await vscode.window.showErrorMessage(`Could not parse "${text}" as a class expression.`, 'Try again', 'Skip');
+      if (retry !== 'Try again') return undefined;
+    } catch (err) {
+      const retry = await vscode.window.showErrorMessage(
+        `Parse error: ${err instanceof Error ? err.message : String(err)}`,
+        'Try again',
+        'Skip',
+      );
+      if (retry !== 'Try again') return undefined;
+    }
+  }
+}
+
+export async function promptAddSubProperty(promptContext: string): Promise<{ propertyName: string; label: string } | undefined> {
+  const propertyName = await vscode.window.showInputBox({
+    prompt: `New sub-property name, ${promptContext} (camelCase)`,
+    validateInput: (v) => (/^[a-z][A-Za-z0-9]*$/.test(v) ? undefined : 'Use camelCase'),
+  });
+  if (!propertyName) return undefined;
+  const label = (await vscode.window.showInputBox({ prompt: 'Label', value: humanize(propertyName) })) ?? humanize(propertyName);
+  return { propertyName, label };
 }
