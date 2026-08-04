@@ -10,7 +10,7 @@ This walks through every major feature using two real fixture sets:
   relevant engine against these files, not written from what it *should*
   do.
 - **`examples/gist/`** — two real, unmodified releases of Semantic Arts'
-  `gist` upper ontology (v11.0.0 and v14.1.0, vendored from
+  `gist` upper ontology (v11.0.0 and v14.1.0, copied from
   `consolidated_ontology_suite`), used for a genuine "was this written
   against an older upstream ontology?" scenario in [Part 10](#part-10-a-real-upstream-ontology-migration-gist-v11--v141).
 
@@ -66,7 +66,7 @@ registry `consolidated_ontology_suite` ships, just run by Oxigraph and
 `shacl-engine` instead of a Python subprocess.
 
 You'll also see a `PRJ-REQUIRED` finding on `ex:Vaccination`: it's missing
-`rdfs:label`. That's not from the vendored registry — it's from *this
+`rdfs:label`. That's not from the copied-in registry — it's from *this
 project's own* `.ontology-suite/class-rules.json`, which declares "every
 `owl:Class` needs `rdfs:label`" (see [Part 3](#part-3-quick-fix-the-findings)).
 
@@ -222,7 +222,7 @@ a small extension ontology written against each.
 Between these two versions, gist moved its entire namespace from
 `https://ontologies.semanticarts.com/gist/` to
 `https://w3id.org/semanticarts/ns/ontology/gist/` — confirmed directly by
-diffing the two vendored files, not assumed. The class/property *local
+diffing the two copied-in files, not assumed. The class/property *local
 names* (`Organization`, `PhysicalIdentifiableItem`, `owns`, ...) stayed
 identical; only the namespace IRI changed.
 

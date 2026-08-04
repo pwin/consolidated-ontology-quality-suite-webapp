@@ -14,7 +14,7 @@ It grew out of two sibling projects: `consolidated_ontology_suite`
 real `oxi-gen` triplifier) and `turtle-editor-viewer`
 (a browser-based Turtle/SPARQL editor). This extension reuses the check
 registry's *data* (`registry.json` + `sparql/*.rq` + `shapes/*.ttl` —
-vendored under `resources/checks-registry/`) directly, evaluated by
+copied into `resources/checks-registry/`) directly, evaluated by
 in-process engines instead of a Python subprocess, and treats the Python
 CLI as an optional deep-validation fallback rather than a hard dependency.
 
@@ -79,7 +79,7 @@ flowchart LR
 
     Editor --> Local
     Editor --> Views
-    Local -. "registry.json / sparql/*.rq / shapes/*.ttl\n(vendored, engine-agnostic data)" .-> Local
+    Local -. "registry.json / sparql/*.rq / shapes/*.ttl\n(copied-in, engine-agnostic data)" .-> Local
     CMD -. "optional, only if CLI detected" .-> CLI
 ```
 
@@ -279,7 +279,7 @@ other format and opens the result — warns first if the target is lossy.
 |---|---|---|
 | `ontologySuite.modellingGuidance` | `"gist"` | `"gist"` or `"off"` |
 | `ontologySuite.pythonCliPath` | `"ontology-suite"` | CLI executable for the optional fallback |
-| `ontologySuite.checksRegistryPath` | `""` | Override the vendored registry with another checkout |
+| `ontologySuite.checksRegistryPath` | `""` | Override the copied-in registry with another checkout |
 | `ontologySuite.triplifyPreviewSampleSize` | `20` | CSV rows sampled for the live preview |
 | `ontologySuite.projectStandardsPath` | `.ontology-suite/standards.json` | Project values (category class, language tag, versioning, policy) that complete Quick Fix repairs |
 | `ontologySuite.projectRulesPath` | `.ontology-suite/class-rules.json` | Minimum-required-content rules for classes/properties (`PRJ-REQUIRED`) |

@@ -18,7 +18,7 @@ export interface Registry {
 }
 
 /**
- * Loads registry.json + sparql/**\/*.rq + shapes/*.ttl -- vendored from
+ * Loads registry.json + sparql/**\/*.rq + shapes/*.ttl -- copied from
  * consolidated_ontology_suite under resources/checks-registry by default,
  * or a user-configured checkout (ontologySuite.checksRegistryPath) so a
  * newer/local registry can be picked up without repackaging the extension.

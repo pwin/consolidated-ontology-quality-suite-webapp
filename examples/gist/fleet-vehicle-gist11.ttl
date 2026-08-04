@@ -5,7 +5,7 @@
 @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
 
 # A small extension ontology "written for gist11" -- genuinely imports and
-# uses gist11.0.0 (gistCore11.0.0.ttl, vendored alongside this file so the
+# uses gist11.0.0 (gistCore11.0.0.ttl, copied alongside this file so the
 # import resolves locally), using real gist11 classes/properties
 # (gist:Organization, gist:PhysicalIdentifiableItem, gist:owns) under
 # gist11's actual namespace (https://ontologies.semanticarts.com/gist/).
@@ -13,7 +13,7 @@
 # Used to demonstrate what happens when this is later checked against
 # gist14.1.0 instead: gist moved its namespace from
 # ontologies.semanticarts.com to w3id.org/semanticarts/ns/ontology/gist/
-# between v11 and v14.1.0 (confirmed directly in the two vendored files,
+# between v11 and v14.1.0 (confirmed directly in the two copied-in files,
 # not assumed) -- the classes/properties still exist under the same local
 # names in gist14.1.0, but `gist:` bound to the *old* namespace here no
 # longer resolves against it at all. See TUTORIAL.md's "upgrading against

@@ -90,7 +90,7 @@ lightbulb fix, not just a diagnosis.
   instance data, a CSV-to-RDF triplification example with a deliberately
   undeclared property, and two competency questions, one red and one
   green on purpose) and `examples/gist/` (two real, unmodified `gist`
-  releases -- v11.0.0 and v14.1.0, vendored from
+  releases -- v11.0.0 and v14.1.0, copied from
   `consolidated_ontology_suite` -- used for a genuine "ontology written
   against an older upstream version, checked against a newer one"
   scenario: gist moved its entire namespace between these versions while
