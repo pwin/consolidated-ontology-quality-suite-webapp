@@ -1,5 +1,64 @@
 # Changelog
 
+## 0.6.0
+
+### Protégé-style Ontology Outline actions
+
+Right-click (or hover for an inline `+` icon on) any class or property node
+in the Ontology Outline -- not just the file root -- for **Add Subclass**,
+**Add Sibling Class** (inherits the sibling's own parent(s), not just a
+copy of the sibling), or **Add Sub-property** (object/datatype, matching
+the clicked property's own kind). **Add Subclass** optionally accepts a
+real Manchester class-expression restriction (e.g. `hasChild some Person`),
+parsed and rendered by the same `classExpression.ts` engine `.omn` files
+already use, retrying in place on a parse error rather than discarding what
+was typed. The Outline is also now a real drag-and-drop target: dragging a
+class/property onto another of the same kind adds it as an *additional*
+parent, deliberately additive-only -- the dragged term keeps whatever
+parent(s) it already had, and the confirmation message says so explicitly,
+consistent with this project's append-only editing philosophy everywhere
+else (scaffolding, Quick Fix, script output).
+
+### Scripting: build an ontology as TypeScript code
+
+New **"Ontology Suite: Run Ontology Script"** command, and a small DSL
+(`ontology-suite/dsl`: `defclass`/`defobjectproperty`/`defdatatypeproperty`
+with `subClassOf`/`equivalentClass`/`disjointWith`, and restriction-builders
+`some`/`only`/`hasValue`/cardinality/`and`/`or`/`not`) importable from a
+plain `.ts` file -- full VS Code IntelliSense/type-checking, not a custom
+language. Inspired by [Tawny-OWL](https://github.com/phillord/tawny-owl)'s
+approach of using a real language's loops/functions for ontology patterns
+that don't fit a one-term-at-a-time GUI. Scripts run in a forked child
+process (a real process boundary, not the extension host) via an esbuild
+in-memory transpile; output is applied append-only by default, with an
+explicit-confirmation whole-file-replace option, matching every other
+scaffold/repair flow in this project. No new testing story was built --
+**Run Local Checks** and `.cq.rq` competency questions already validate
+any graph, script-generated or hand-authored. See TUTORIAL.md Part 11 for
+a full worked example (a loop-generated breed-class family, `disjointWith`,
+and a `some()` restriction, verified against Local Checks and the
+reasoner).
+
+### Graph View: visualize the reasoner's inferred closure
+
+New **"Show inferred (reasoner closure)"** toolbar checkbox. When enabled,
+runs the same EYE reasoner as *Run Local Checks* against the current
+neighborhood and overlays whatever additional triples it derives (e.g. a
+subclass-chain-entailed `rdf:type`) as dashed purple edges alongside the
+asserted graph's normal solid edges -- the same "asserted vs. inferred"
+distinction `REA-DISJOINT`/`REA-SAMEDIFF` findings already report as text,
+now visible directly on the graph. Computed once per panel and cached, so
+toggling other decluttering controls afterward doesn't re-run the reasoner.
+
+**Bug, found and fixed before it reached users**: the first end-to-end test
+of this feature showed five inferred edges where only one was expected --
+four of them turned out to be the reasoning engine's own internal
+bookkeeping triples (the blank-node scaffolding `runReasoningChecks` uses
+internally to explain a `REA-DISJOINT` finding), not genuine domain-level
+inferences. Fixed by exporting the reasoner's internal namespace constant
+and filtering any quad that touches it out of the "inferred" set before
+diffing against the asserted graph.
+
 ## 0.5.0
 
 ### Graph View: more decluttering controls, PNG export

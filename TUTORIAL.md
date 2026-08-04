@@ -13,6 +13,10 @@ This walks through every major feature using two real fixture sets:
   `gist` upper ontology (v11.0.0 and v14.1.0, copied from
   `consolidated_ontology_suite`), used for a genuine "was this written
   against an older upstream ontology?" scenario in [Part 10](#part-10-a-real-upstream-ontology-migration-gist-v11--v141).
+- **`examples/scripting/`** — two TypeScript scripts (`pets.ontology.ts`,
+  `pets-advanced.ontology.ts`) used in [Part 11](#part-11-scripting-ontologies-with-typescript)
+  to demonstrate authoring an ontology as real, loop-driven code instead of
+  hand-typed Turtle.
 
 Everything here is also exercised by the automated test suite
 (`npm test`) — see the `*.test.ts` file next to the relevant module if you
@@ -251,6 +255,171 @@ target + one `@prefix` binding) — not a rewrite. This exact before/drift/
 after sequence is asserted in `ontology/resolveImports.test.ts` if you want
 to see it run automatically rather than by hand.
 
+## Part 11: Scripting ontologies with TypeScript
+
+Everything so far edits Turtle by hand or through one-shot commands. For
+patterns that repeat across a data table — a family of related classes, the
+same restriction shape applied many times — a real scripting language beats
+both. This is the same idea as [Tawny-OWL](https://github.com/phillord/tawny-owl)
+(a Clojure DSL over the OWL API): author ontology fragments as code, in a
+real language, with real loops and functions. The DSL here
+(`ontology-suite/dsl`) deliberately doesn't reinvent testing or reasoning —
+it reuses the exact same Local Checks, reasoner, and class-expression engine
+already exercised in Parts 2–5, just fed from a script instead of a hand-
+written `.ttl` file.
+
+Open **`examples/scripting/pets.ontology.ts`** — the simple case, a plain
+`.ts` file with real VS Code IntelliSense (hover `defclass` to see its
+signature):
+
+```typescript
+import { ontology, defclass, defobjectproperty } from 'ontology-suite/dsl';
+
+ontology('http://example.org/pets#', 'pets');
+
+const Animal = defclass('Animal', { label: 'Animal', comment: 'A living creature.' });
+defclass('Dog', { label: 'Dog', subClassOf: [Animal] });
+defclass('Cat', { label: 'Cat', subClassOf: [Animal] });
+
+defobjectproperty('hasOwner', { label: 'has owner' });
+```
+
+With it active, run **"Ontology Suite: Run Ontology Script"**. Since no
+`pets.ttl` exists next to it yet, one is created directly:
+
+```turtle
+pets:Animal a owl:Class;
+    rdfs:label "Animal";
+    rdfs:comment "A living creature.".
+pets:Dog a owl:Class;
+    rdfs:label "Dog";
+    rdfs:subClassOf pets:Animal.
+pets:Cat a owl:Class;
+    rdfs:label "Cat";
+    rdfs:subClassOf pets:Animal.
+pets:hasOwner a owl:ObjectProperty;
+    rdfs:label "has owner".
+```
+
+Now open **`examples/scripting/pets-advanced.ontology.ts`** — this is where
+scripting earns its keep over a GUI or hand-typed Turtle. A real
+`for`-loop generates a whole family of breed classes from a data table in
+one step, `disjointWith` declares `Cat` and `Dog` mutually exclusive, and
+`some()` builds a Manchester-style existential restriction — the exact same
+`classExprToRdf` engine used by the Outline's "Add Subclass" restriction
+option and by `.omn` files:
+
+```typescript
+const Animal = defclass('Animal');
+const Dog = defclass('Dog');
+const Cat = defclass('Cat', { disjointWith: [Dog] });
+const Person = defclass('Person', { label: 'Person' });
+const hasOwner = defobjectproperty('hasOwner', { label: 'has owner', domain: Animal, range: Person });
+
+const breeds = [
+  { name: 'Labrador', species: Dog },
+  { name: 'Poodle', species: Dog },
+  { name: 'Siamese', species: Cat },
+];
+for (const breed of breeds) {
+  defclass(breed.name, { subClassOf: [breed.species] }); // deliberately no label
+}
+
+defclass('OwnedAnimal', {
+  label: 'Owned Animal',
+  subClassOf: [Animal, some(hasOwner, Person)],
+});
+```
+
+Run **"Ontology Suite: Run Ontology Script"** again. This time `pets.ttl`
+already exists, so a QuickPick asks **"Append"** or **"Replace whole
+file"** — pick **Append** (the safe default; nothing already in `pets.ttl`
+is touched). The appended Turtle is real, including the anonymous
+restriction blank node:
+
+```turtle
+pets:Animal a owl:Class.
+pets:Dog a owl:Class.
+pets:Cat a owl:Class;
+    owl:disjointWith pets:Dog.
+pets:Person a owl:Class;
+    rdfs:label "Person".
+pets:hasOwner a owl:ObjectProperty;
+    rdfs:label "has owner";
+    rdfs:domain pets:Animal;
+    rdfs:range pets:Person.
+pets:Labrador a owl:Class;
+    rdfs:subClassOf pets:Dog.
+pets:Poodle a owl:Class;
+    rdfs:subClassOf pets:Dog.
+pets:Siamese a owl:Class;
+    rdfs:subClassOf pets:Cat.
+pets:OwnedAnimal a owl:Class;
+    rdfs:label "Owned Animal";
+    rdfs:subClassOf pets:Animal.
+_:n3-0 a owl:Restriction;
+    owl:onProperty pets:hasOwner;
+    owl:someValuesFrom pets:Person.
+pets:OwnedAnimal rdfs:subClassOf _:n3-0.
+```
+
+### Local Checks catch what the loop left out
+
+`Labrador`, `Poodle`, and `Siamese` were deliberately left without a
+`rdfs:label` in the loop above. Run **Run Local Checks** on `pets.ttl` and
+you'll see exactly that:
+
+```
+QUA-001 (missing label): http://example.org/pets#Siamese
+QUA-001 (missing label): http://example.org/pets#Poodle
+QUA-001 (missing label): http://example.org/pets#Labrador
+```
+
+Fix them with the same Quick Fix flow from [Part 3](#part-3-quick-fix-the-findings) —
+no special handling needed just because the triples came from a script
+rather than a hand-typed file; once it's on disk as Turtle, every other
+feature in this suite treats it identically.
+
+### The reasoner and the graph view, together
+
+Add one individual by hand at the bottom of `pets.ttl`:
+
+```turtle
+pets:rex a pets:Labrador .
+```
+
+Run **"Ontology Suite: Visualize Subject Graph"**, pick `pets:rex`, and
+tick **"Show inferred (reasoner closure)"** in the toolbar. Nothing in
+`pets.ttl` says `rex` is a `Dog` or an `Animal` — but the class hierarchy
+built by the loop above (`Labrador ⊑ Dog ⊑` … `⊑ Animal`) lets the reasoner
+derive both, and you'll see them rendered as dashed purple edges
+(`pets:rex → pets:Dog`, `pets:rex → pets:Animal`, and
+`pets:Labrador → pets:Animal`), exactly the same "asserted vs. inferred"
+distinction as the badge introduced for reasoning results, now visualized
+directly on the graph instead of only reported as text.
+
+Now add a second, contradictory type assertion:
+
+```turtle
+pets:rex a pets:Siamese .
+```
+
+Run **Run Local Checks** again. `Labrador ⊑ Dog` and `Siamese ⊑ Cat`, and
+the script above declared `Cat owl:disjointWith Dog` — so the reasoner
+infers `rex a Dog` *and* `rex a Cat` from a chain the ontology never states
+directly, then flags the contradiction:
+
+```
+REA-DISJOINT: Individual is asserted as both http://example.org/pets#Cat
+and http://example.org/pets#Dog, which are declared owl:disjointWith each
+other.
+```
+
+This is the same `REA-DISJOINT` mechanism as [Part 4](#part-4-validate-with-the-reasoner)'s
+`Puppy`/`Cat` demo — the difference here is that every class involved
+(`Labrador`, `Dog`, `Cat`, `disjointWith`) came from the loop-generating
+script, not from typing Turtle by hand.
+
 ## Where to go next
 
 - `README.md` — full command/settings reference, architecture diagram,
@@ -260,4 +429,4 @@ to see it run automatically rather than by hand.
   crashing on some check shapes; `findPair` not searching sibling `csv/`/
   `queries/` directories) and the Quick Fix repair engine added in 0.3.0.
 - `npm test` — the full automated suite these examples are also verified
-  against (121 tests as of this writing).
+  against (151 tests as of this writing).

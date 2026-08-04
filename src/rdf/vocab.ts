@@ -25,6 +25,7 @@ export const OWL_IMPORTS = `${OWL}imports`;
 export const OWL_VERSION_IRI = `${OWL}versionIRI`;
 export const OWL_VERSION_INFO = `${OWL}versionInfo`;
 export const OWL_EQUIVALENT_CLASS = `${OWL}equivalentClass`;
+export const OWL_DISJOINT_WITH = `${OWL}disjointWith`;
 export const OWL_INVERSE_OF = `${OWL}inverseOf`;
 export const OWL_INTERSECTION_OF = `${OWL}intersectionOf`;
 export const OWL_UNION_OF = `${OWL}unionOf`;

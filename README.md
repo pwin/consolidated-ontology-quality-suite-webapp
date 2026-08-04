@@ -93,13 +93,52 @@ Validation" and "Full Triplify" commands, degrading gracefully if absent.
 
 **Ontology authoring**
 - *New Ontology* wizard: base IRI, prefix, `owl:imports` picker (workspace
-  ontologies + a curated list: gist, schema.org, SKOS, Dublin Core, PROV-O).
+  ontologies + a curated list: gist, schema.org, SKOS, Dublin Core, PROV-O)
+  — each pick also gets its own `@prefix` binding inserted, not just the
+  `owl:imports` line, so the file can use the vocabulary as CURIEs right away.
 - *Add Class or Category*: asks whether a new term needs its own
   structure/relationships (→ `owl:Class`) or is just a classification
   (→ `gist:Category`) — see [Gist-informed guidance](#gist-informed-modelling-guidance).
   Does **not** auto-generate a paired inverse property by default.
+- **Protégé-style Ontology Outline actions**: right-click (or use the inline
+  `+` icon on hover) any class or property node — not just the file root —
+  for *Add Subclass*, *Add Sibling Class* (inherits the sibling's own
+  parent(s)), or *Add Sub-property* (object/datatype). *Add Subclass*
+  optionally accepts a real Manchester class-expression restriction (e.g.
+  `hasChild some Person`), parsed by the same engine `.omn` files use and
+  asserted as an additional `rdfs:subClassOf [...]` restriction alongside
+  the named parent. Drag a class/property onto another of the same kind to
+  add it as an *additional* parent — deliberately never a destructive move
+  (the dragged term keeps any parent(s) it already had); a confirmation
+  message says so explicitly.
 - Import resolution is local-first, transitive, and matches both an
   ontology's identity IRI *and* its `owl:versionIRI`.
+
+**Scripting: build an ontology as code**
+- *Run Ontology Script*: author a `.ontology.ts` file — a plain TypeScript
+  file (full IntelliSense/type-checking, not a custom language) using a
+  small DSL (`ontology-suite/dsl`: `defclass` (`subClassOf`,
+  `equivalentClass`, `disjointWith`), `defobjectproperty`,
+  `defdatatypeproperty`, and restriction-builders `some`/`only`/`and`/`or`/
+  `not`/cardinality) — and run it to generate real Turtle. Inspired by
+  [Tawny-OWL](https://github.com/phillord/tawny-owl)'s idea of using a real
+  programming language's abstraction facilities (functions, loops) for
+  ontology patterns instead of clicking through a GUI once per term.
+- Runs in a forked child process, not the extension host — a real process
+  boundary so a script bug can't take down the extension — and reuses the
+  *exact* class-expression engine the Outline's Manchester-restriction
+  option and `.omn` files already use for `some`/`only`/etc., so there's
+  only one implementation of "class expression → RDF" in the whole
+  extension, not a second one for scripts.
+- Output is append-only by default (adds new statements to the target
+  `.ttl`, same as every other scaffold command here) with an
+  explicit-confirmation whole-file-replace option when the script is meant
+  to be the canonical source.
+- No separate testing framework needed: **Run Local Checks** and
+  `.cq.rq` competency questions already validate *any* graph, script-generated
+  or hand-authored — Tawny-OWL's "unit test framework with reasoning" is
+  already covered by infrastructure this extension has for every other
+  workflow.
 
 **TARQL-style triplification**
 - *Infer Ontology + Query from CSV*: profiles a raw CSV (type/cardinality
@@ -153,6 +192,14 @@ Validation" and "Full Triplify" commands, degrading gracefully if absent.
   the document still appears as a leaf (so you can see *that* it's used),
   but none of *its own* further connections from the imported ontology are
   pulled in. Plus a layout-direction dropdown (`LR`/`RL`/`TB`/`BT`).
+- **Show inferred (reasoner closure)** — runs the same EYE reasoner as
+  *Run Local Checks* against the current neighborhood and overlays whatever
+  additional triples it derives (e.g. a subclass-chain-entailed `rdf:type`)
+  as dashed purple edges, alongside the asserted graph's normal solid
+  edges. The reasoner's own internal bookkeeping triples (used to explain
+  `REA-DISJOINT`/`REA-SAMEDIFF` findings) are filtered out first, so only
+  genuine domain-level inferences are shown. Computed once per panel and
+  cached — later toggles/redraws don't re-run the reasoner.
 - **Download SVG** or **Download PNG** — PNG rasterization runs via
   `@resvg/resvg-wasm` in the extension host (Graphviz's own WASM build has
   no PNG output at all — confirmed, only vector/text formats), with a
@@ -296,6 +343,12 @@ other format and opens the result — warns first if the target is lossy.
 | Ontology Suite: Run Deep Validation (Python CLI) | Optional full-OWL2-DL fallback |
 | Ontology Suite: Run Full Triplify (Python CLI / oxi-gen) | Production-scale triplification |
 | Ontology Suite: Convert / Save As Serialization... | Convert the active document to another format |
+| Ontology Suite: Run Ontology Script (.ontology.ts) | Build/extend an ontology from a TypeScript DSL script |
+
+Right-click actions in the Ontology Outline (Add Subclass, Add Sibling
+Class, Add Sub-property) aren't in the Command Palette — they need the
+tree node you clicked as context, so they only appear in the Outline's
+own right-click menu / inline hover icon.
 
 ## Configuration
 
@@ -346,25 +399,30 @@ that doesn't use gist turning `modellingGuidance` to `"off"` in committed
    coherent example ontology plus a real gist v11→v14.1 upstream-migration
    scenario.
 3. Alternatively, install the packaged extension directly:
-   `code --install-extension ontology-dev-suite-0.3.0.vsix` (build it with
+   `code --install-extension ontology-dev-suite-0.6.0.vsix` (build it with
    `npx @vscode/vsce package`).
 
 ## Testing
 
 Two tiers, both real and both passing as of this writing:
 
-- **`npm test`** (Vitest) — 128 tests across 26 files covering every
+- **`npm test`** (Vitest) — 151 tests across 28 files covering every
   pure-logic module: parsing, all six serializations' round-trips
   (including the Manchester class-expression engine against real OWL2
   restrictions), import resolution (including the gist v11→v14.1 drift-
   and-fix scenario below), the checks engine (SPARQL/SHACL/reasoning/
   guidance/project rules), the Quick Fix repair engine (every template,
   both policy branches of `LOG-003`/`MDL-002`, the cross-file safe-no-op
-  case), triplification (sketch/conformance/live-preview/CSV profiling),
-  the completion-position heuristics, and the graph view's DOT generation
-  (every toggle/rankdir option) and PNG rasterization (a real
-  pixel-content check, not just PNG-signature validity — the check that
-  would have caught the blank-text font bug before it shipped). Fast
+  case), the Ontology Outline's Protégé-style subclass/sibling/sub-property
+  rendering (including the Manchester-restriction round-trip), the
+  scripting DSL (defclass/defobjectproperty/restriction-builders,
+  `disjointWith`/`equivalentClass`, a real loop-generated class family),
+  triplification (sketch/conformance/live-preview/CSV profiling), the
+  completion-position heuristics, and the graph view's DOT generation
+  (every toggle/rankdir option, plus the inferred-edge dashed-purple
+  styling and its literal-aware `quadKey()` diffing) and PNG rasterization
+  (a real pixel-content check, not just PNG-signature validity — the check
+  that would have caught the blank-text font bug before it shipped). Fast
   (~10-15s), no VS Code required.
 - **`npm run test:integration`** (`@vscode/test-cli` + `@vscode/test-electron`)
   — launches a real, headless VS Code Extension Development Host and
