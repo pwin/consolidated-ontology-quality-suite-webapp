@@ -1,5 +1,103 @@
 # Changelog
 
+## 0.4.0
+
+### New checks: `CNF-003`/`CNF-004`, real implementations for the first time
+
+The registry has always listed `CNF-003` ("rdfs:domain violation") and
+`CNF-004` ("rdfs:range violation"), but neither had a local implementation
+before now -- like `CNF-001`/`CNF-002`, they were Python-CLI-only. Both are
+now real SPARQL CONSTRUCT checks (`resources/checks-registry/sparql/
+conformance/`), and both recognize gist's `domainIncludes`/`rangeIncludes`
+annotation properties as equally valid declared domain/range, matched by
+local name (the same technique `STR-003.rq` already established), not just
+`rdfs:domain`/`rdfs:range` -- otherwise neither check would ever fire on
+gist-based data at all, since gist deliberately favors the soft annotation
+properties for most shared properties.
+
+- Domain/range matching walks `rdfs:subClassOf*` so a subject/value typed
+  as a *subclass* of the declared domain/range correctly doesn't count as
+  a violation, not just an exact type match.
+- A subject/resource-object with no asserted type at all is never flagged
+  here -- that's `STR-009`/`STR-006`'s job ("untyped subject/object of a
+  triple"), so the two check families don't double-report the same gap.
+- `CNF-004` covers both range shapes a declared range can take: literal
+  values by exact datatype IRI, resource values by asserted type (or
+  ancestor).
+- Found and routed around a real Oxigraph quirk while building this: a
+  `UNION` branch that is *only* a `FILTER` (no triple pattern of its own)
+  produces silently wrong (empty) results when combined with
+  `FILTER NOT EXISTS`, or even at the top level of a `WHERE` clause paired
+  with a sibling branch that has no matching data -- confirmed via an
+  isolated repro, not assumed. `CNF-004.rq` is written to avoid the shape
+  entirely (one `FILTER` combining cases with `&&`/`||`/`EXISTS` instead of
+  a `UNION` of two filter-only groups), and the query's own comments
+  document why.
+
+### Autocomplete/scaffolding: always the current (w3id.org) gist namespace
+
+- `rdf/vocab.ts`'s `WELL_KNOWN_PREFIXES` now includes `gist` (bound to the
+  w3id.org 14.1.0 namespace), so `gist:` term completion, project-rules
+  CURIE resolution, and prefix-name completion all work even before a
+  document declares `@prefix gist:` itself -- previously gist was only
+  ever offered if the current file had already declared *some* namespace
+  for it, correct or not.
+- The New Ontology wizard's `owl:imports` picker (gist, schema.org, SKOS,
+  Dublin Core Terms, PROV-O) now also inserts the matching `@prefix`
+  binding for each pick, deduplicated against the base prefixes already in
+  every new file (SKOS is both) -- previously picking any of the five only
+  added `owl:imports`, leaving the file unable to actually use `gist:`/
+  `schema:`/etc. as a CURIE without the user adding the declaration by
+  hand first.
+- The gist namespace constant is now defined once (`rdf/vocab.ts`'s
+  `GIST`) and referenced everywhere it was previously a separate hardcoded
+  string literal (`projectStandardsCore.ts`'s default standards,
+  `extension.ts`'s "add gist: prefix" quick-fix), so it can't drift out of
+  sync with itself again.
+- Default example base IRIs (New Ontology wizard, Infer-from-CSV draft,
+  default project standards) changed from `http://example.org/x#` to
+  `https://example.org/x/` -- `https://` and slash-terminated, matching
+  `QUA-008`'s own check ("Ontology or version IRI does not use the
+  https:// scheme") instead of failing it by default out of the box.
+
+### Graph View: pan/zoom, download, and turtle-editor-viewer-matched styling
+
+- Scroll/pinch to zoom, drag to pan -- a small hand-rolled CSS-transform
+  viewport, not a bundled pan/zoom library (the webview's CSP only allows
+  this page's own nonce'd inline script, no CDN/bundled dependency to
+  load).
+- **Download SVG** button, round-tripped through the extension host
+  (`vscode.window.showSaveDialog` + `vscode.workspace.fs.writeFile`) since
+  a webview can't write arbitrary files to disk directly.
+- Node shapes/colors now match `turtle-editor-viewer`'s own
+  `graph-generator.ts` (which `graph/dotGenerator.ts` was originally
+  ported from): rounded boxes throughout, literal nodes in blue, blank
+  nodes in orange -- previously literals used a distinct filled "note"
+  shape and blank nodes had no color treatment at all, a visual style that
+  had drifted from the source project during the original port.
+
+### Settings: toggle SPARQL/SHACL checks independently
+
+`ontologySuite.enableSparqlChecks` / `ontologySuite.enableShaclChecks`
+(both default `true`). Measured directly against this project's own test
+fixtures: the SPARQL CONSTRUCT check suite runs in ~0.2s via Oxigraph, the
+SHACL-SPARQL shapes suite takes ~10s via `shacl-engine`'s Comunica-based
+SPARQL layer -- roughly 50x slower for a same-sized check suite, because
+Comunica is a much heavier, general-purpose federated query engine
+compared to Oxigraph's purpose-built native/WASM store, and `shacl-engine`
+instantiates it fresh per shapes file. Turning off SHACL checks gives a
+noticeably tighter edit/check loop on a large ontology, at the cost of
+missing SHACL-only findings.
+
+### Documentation
+
+README's Settings section rewritten as **Configuration**, distinguishing
+VS Code settings (behavioral toggles, User vs Workspace scope) from the
+`.ontology-suite/*.json` project config files (committed alongside the
+ontology, not a VS Code setting at all) -- with explicit guidance on which
+belongs where when personalizing the extension to yourself vs. to your
+project/team.
+
 ## 0.3.0
 
 ### Quick Fix: SPARQL-based repair, in the same spirit as Schematron Quick Fix

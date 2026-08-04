@@ -273,16 +273,44 @@ other format and opens the result — warns first if the target is lossy.
 | Ontology Suite: Run Full Triplify (Python CLI / oxi-gen) | Production-scale triplification |
 | Ontology Suite: Convert / Save As Serialization... | Convert the active document to another format |
 
-## Settings
+## Configuration
+
+Two different mechanisms, for two different kinds of customization:
+
+- **VS Code settings** (`ontologySuite.*`, table below) — behavioral toggles: what runs, how
+  fast, which fallback CLI to use. Set these per-person (**File → Preferences → Settings**,
+  or `Ctrl+,`/`Cmd+,`, searching `ontologySuite`) if they're about *your own* editing
+  preferences, or per-project (the Workspace tab in that same Settings UI, which writes to
+  `.vscode/settings.json`) if the whole team should share them — commit
+  `.vscode/settings.json` to get everyone on the same checks/CLI configuration automatically.
+- **Project config files** (`.ontology-suite/*.json`, workspace-relative, paths themselves
+  configurable via the two `*Path` settings below) — not VS Code settings at all, just plain
+  JSON files meant to be committed alongside the ontology they apply to, so the whole team
+  (and CI, if it also runs this suite) sees the same project standards/rules. See
+  [Quick Fix](#quick-fix-schematron-quick-fix-style-repair) and
+  [Project rules](#project-rules-minimum-required-content) above for what goes in each.
 
 | Setting | Default | Purpose |
 |---|---|---|
-| `ontologySuite.modellingGuidance` | `"gist"` | `"gist"` or `"off"` |
-| `ontologySuite.pythonCliPath` | `"ontology-suite"` | CLI executable for the optional fallback |
-| `ontologySuite.checksRegistryPath` | `""` | Override the copied-in registry with another checkout |
-| `ontologySuite.triplifyPreviewSampleSize` | `20` | CSV rows sampled for the live preview |
+| `ontologySuite.modellingGuidance` | `"gist"` | `"gist"` or `"off"` — advisory MDL-001/002/003 hints |
+| `ontologySuite.pythonCliPath` | `"ontology-suite"` | CLI executable for the optional deep-validation/docgen/version-diff fallback |
+| `ontologySuite.checksRegistryPath` | `""` | Point at your own registry.json/sparql/shapes checkout instead of the bundled copy — e.g. to add project-specific SPARQL/SHACL checks beyond what `class-rules.json` can express |
+| `ontologySuite.enableSparqlChecks` | `true` | Run the registry's SPARQL CONSTRUCT checks. Fast (~0.2s on this project's own fixtures) |
+| `ontologySuite.enableShaclChecks` | `true` | Run the registry's SHACL-SPARQL shapes. ~50x slower than the SPARQL checks (~10s vs ~0.2s) — turn off for a tighter edit/check loop on a large ontology, at the cost of missing SHACL-only findings |
+| `ontologySuite.triplifyPreviewSampleSize` | `20` | CSV rows sampled for the live triplify preview |
 | `ontologySuite.projectStandardsPath` | `.ontology-suite/standards.json` | Project values (category class, language tag, versioning, policy) that complete Quick Fix repairs |
 | `ontologySuite.projectRulesPath` | `.ontology-suite/class-rules.json` | Minimum-required-content rules for classes/properties (`PRJ-REQUIRED`) |
+
+**Personalizing to yourself**: things like `pythonCliPath` (if your CLI lives somewhere
+non-standard) or turning off `enableShaclChecks` while iterating quickly on a large ontology
+belong in your User settings — they're about your machine/workflow, not the project's rules.
+
+**Personalizing to your project**: `.ontology-suite/standards.json` and
+`.ontology-suite/class-rules.json` are the two files actually meant to travel with the
+ontology in version control — `modellingGuidance`/`checksRegistryPath` are also natural
+Workspace-settings candidates if the whole team should see the same behavior (e.g. a team
+that doesn't use gist turning `modellingGuidance` to `"off"` in committed
+`.vscode/settings.json`, so nobody has to remember to do it locally).
 
 ## Try it
 

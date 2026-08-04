@@ -4,6 +4,8 @@ export const OWL = 'http://www.w3.org/2002/07/owl#';
 export const SKOS = 'http://www.w3.org/2004/02/skos/core#';
 export const XSD = 'http://www.w3.org/2001/XMLSchema#';
 export const SH = 'http://www.w3.org/ns/shacl#';
+/** gist 14.1.0's namespace -- gist moved here from ontologies.semanticarts.com/gist/ between v11 and v14; always offer the current one. */
+export const GIST = 'https://w3id.org/semanticarts/ns/ontology/gist/';
 
 export const RDF_TYPE = `${RDF}type`;
 export const RDFS_LABEL = `${RDFS}label`;
@@ -40,6 +42,7 @@ export const WELL_KNOWN_PREFIXES: Record<string, string> = {
   skos: SKOS,
   xsd: XSD,
   sh: SH,
+  gist: GIST,
 };
 
 export function shrink(iri: string, prefixes: Record<string, string>): string {

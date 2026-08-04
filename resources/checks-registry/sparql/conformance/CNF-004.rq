@@ -1,0 +1,62 @@
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX owl: <http://www.w3.org/2002/07/owl#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+PREFIX sh: <http://www.w3.org/ns/shacl#>
+PREFIX dcterms: <http://purl.org/dc/terms/>
+PREFIX oq: <https://semantechs.co.uk/ontology-quality/>
+
+# CNF-004: rdfs:range violation
+#
+# Also recognizes gist-style rangeIncludes annotations, matched by local
+# name -- same reasoning as CNF-003.rq/STR-003.rq for domainIncludes.
+#
+# Covers both range shapes a declared range can take: a literal value is
+# checked by exact datatype IRI match (no XSD subtype hierarchy, e.g.
+# xsd:integer as a kind of xsd:decimal, is modelled -- direct equality
+# only, to keep this check simple and avoid false confidence); a resource
+# value is checked the same way CNF-003 checks domain, by asserted type
+# (or ancestor via rdfs:subClassOf*) against the declared range classes.
+#
+# A resource-valued object is only flagged if it has SOME asserted type
+# that fails to match every declared range class -- an entirely untyped
+# resource object is STR-006's concern ("Untyped object of a triple"), not
+# this check's.
+#
+# Deliberately written as one FILTER combining the literal/resource cases
+# with && / || / EXISTS / NOT EXISTS, not a top-level UNION of two groups:
+# a UNION branch that is only a FILTER (no triple pattern of its own) was
+# found to produce incorrect (silently empty) results in Oxigraph when
+# paired with FILTER NOT EXISTS or with a sibling branch that has no
+# matching data -- confirmed via an isolated repro, not assumed. Every
+# UNION below keeps a real triple pattern on both branches, matching the
+# pattern CNF-003.rq already uses safely.
+CONSTRUCT {
+  _:r a sh:ValidationResult ;
+    sh:resultSeverity sh:Violation ;
+    sh:focusNode ?s ;
+    sh:resultPath ?p ;
+    sh:value ?o ;
+    sh:sourceConstraintComponent oq:CNF-004 ;
+    sh:resultMessage ?msg .
+}
+WHERE {
+  ?s ?p ?o .
+  FILTER EXISTS { { ?p rdfs:range ?anyRange } UNION { ?p ?rip ?anyRange . FILTER(STRENDS(STR(?rip), "rangeIncludes")) } }
+  FILTER(
+    ( isLiteral(?o) && NOT EXISTS {
+        { ?p rdfs:range ?rc } UNION { ?p ?rip2 ?rc . FILTER(STRENDS(STR(?rip2), "rangeIncludes")) }
+        FILTER(datatype(?o) = ?rc)
+      }
+    )
+    ||
+    ( isIRI(?o) && EXISTS { ?o a ?anyOType } && NOT EXISTS {
+        ?o a ?matchType .
+        { ?p rdfs:range ?rc } UNION { ?p ?rip2 ?rc . FILTER(STRENDS(STR(?rip2), "rangeIncludes")) }
+        ?matchType rdfs:subClassOf* ?rc .
+      }
+    )
+  )
+  BIND(CONCAT("Property ", STR(?p), " has value ", STR(?o), " on subject ", STR(?s),
+              ", which doesn't match (or descend from) any of the property's declared range classes/datatypes (rdfs:range or gist-style rangeIncludes).") AS ?msg)
+}

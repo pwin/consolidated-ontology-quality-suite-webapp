@@ -1,0 +1,42 @@
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX owl: <http://www.w3.org/2002/07/owl#>
+PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
+PREFIX sh: <http://www.w3.org/ns/shacl#>
+PREFIX dcterms: <http://purl.org/dc/terms/>
+PREFIX oq: <https://semantechs.co.uk/ontology-quality/>
+
+# CNF-003: rdfs:domain violation
+#
+# Also recognizes gist-style domainIncludes annotations, matched by local
+# name (not a hardcoded gist namespace IRI, since gist has published under
+# more than one over the years) -- see STR-003.rq for why: gist
+# deliberately favors these soft annotation properties over rdfs:domain for
+# most shared properties, so a domain check that only understood
+# rdfs:domain would never fire on gist-based data at all.
+#
+# A subject is only flagged if it has SOME asserted type that fails to
+# match (or descend from, via rdfs:subClassOf*) every declared domain
+# class -- an entirely untyped subject is STR-009's concern ("Untyped
+# subject of a triple"), not this check's, and a multi-typed subject where
+# at least one type satisfies the domain is not a violation.
+CONSTRUCT {
+  _:r a sh:ValidationResult ;
+    sh:resultSeverity sh:Violation ;
+    sh:focusNode ?s ;
+    sh:resultPath ?p ;
+    sh:sourceConstraintComponent oq:CNF-003 ;
+    sh:resultMessage ?msg .
+}
+WHERE {
+  ?s ?p ?o .
+  FILTER EXISTS { { ?p rdfs:domain ?anyDomain } UNION { ?p ?dip ?anyDomain . FILTER(STRENDS(STR(?dip), "domainIncludes")) } }
+  FILTER EXISTS { ?s a ?anyType }
+  FILTER NOT EXISTS {
+    ?s a ?matchType .
+    { ?p rdfs:domain ?dc } UNION { ?p ?dip2 ?dc . FILTER(STRENDS(STR(?dip2), "domainIncludes")) }
+    ?matchType rdfs:subClassOf* ?dc .
+  }
+  BIND(CONCAT("Property ", STR(?p), " is used with subject ", STR(?s),
+              ", whose asserted type(s) don't match (or descend from) any of the property's declared domain classes (rdfs:domain or gist-style domainIncludes).") AS ?msg)
+}

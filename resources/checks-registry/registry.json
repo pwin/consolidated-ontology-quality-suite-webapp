@@ -524,8 +524,8 @@
       "metric": "ontology conformance",
       "default_severity": "Violation",
       "title": "rdfs:domain violation",
-      "description": "A subject uses a property whose type (nor any ancestor) matches any of the property's declared rdfs:domain classes, in a real data graph or a CONSTRUCT-query sketch.",
-      "remediation": "Fix the subject's asserted type in the data/query, or add/relax the property's rdfs:domain in the ontology.",
+      "description": "A subject uses a property whose type (nor any ancestor) matches any of the property's declared domain classes -- rdfs:domain, or gist-style domainIncludes annotations, whichever the property uses -- in a real data graph or a CONSTRUCT-query sketch.",
+      "remediation": "Fix the subject's asserted type in the data/query, or add/relax the property's declared domain (rdfs:domain or domainIncludes) in the ontology.",
       "cucumber_feature": "Conformance",
       "cucumber_scenario": "Every property use satisfies the property's declared rdfs:domain"
     },
@@ -535,8 +535,8 @@
       "metric": "ontology conformance",
       "default_severity": "Violation",
       "title": "rdfs:range violation",
-      "description": "A property's value (literal datatype, or resource type) doesn't match any of the property's declared rdfs:range classes/datatypes, in a real data graph or a CONSTRUCT-query sketch.",
-      "remediation": "Fix the value's type/datatype in the data/query, or add/relax the property's rdfs:range in the ontology.",
+      "description": "A property's value (literal datatype, or resource type) doesn't match any of the property's declared range classes/datatypes -- rdfs:range, or gist-style rangeIncludes annotations, whichever the property uses -- in a real data graph or a CONSTRUCT-query sketch.",
+      "remediation": "Fix the value's type/datatype in the data/query, or add/relax the property's declared range (rdfs:range or rangeIncludes) in the ontology.",
       "cucumber_feature": "Conformance",
       "cucumber_scenario": "Every property value satisfies the property's declared rdfs:range"
     },

@@ -2,7 +2,7 @@
   "name": "ontology-dev-suite",
   "displayName": "Ontology Development Suite",
   "description": "Create ontologies (with imports) in Turtle, TriG, N-Triples, N-Quads, RDF/XML, or OWL Manchester Syntax, author TARQL-style CSV-to-RDF CONSTRUCT queries with live preview, and validate against a local SPARQL/SHACL/OWL2-RL checks engine.",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "publisher": "pwin",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -277,6 +277,16 @@
           "type": "string",
           "default": "",
           "description": "Path to a consolidated_ontology_suite checkout providing registry.json/sparql/shapes for the local checks engine. Leave empty to use the bundled copy."
+        },
+        "ontologySuite.enableSparqlChecks": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run the registry's SPARQL CONSTRUCT checks (via Oxigraph) as part of Run Local Checks. Fast (~0.2s for this project's own test fixtures)."
+        },
+        "ontologySuite.enableShaclChecks": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run the registry's SHACL-SPARQL shapes (via shacl-engine) as part of Run Local Checks. Roughly two orders of magnitude slower than the SPARQL checks (~10s vs ~0.2s for this project's own test fixtures) -- turn off for a tighter edit/check loop on a large ontology, at the cost of missing SHACL-only findings."
         },
         "ontologySuite.triplifyPreviewSampleSize": {
           "type": "number",

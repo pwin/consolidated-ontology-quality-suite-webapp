@@ -1,4 +1,4 @@
-import { expand } from '../rdf/vocab';
+import { expand, GIST } from '../rdf/vocab';
 
 /**
  * Project-local configuration a workspace can supply to complete
@@ -34,10 +34,10 @@ export interface ProjectStandards {
 export const DEFAULT_PROJECT_STANDARDS: ProjectStandards = {
   defaultLanguageTag: 'en',
   categoryClass: 'gist:Category',
-  prefixes: { gist: 'https://w3id.org/semanticarts/ns/ontology/gist/' },
+  prefixes: { gist: GIST },
   equivalentClassPolicy: 'subClassOf',
   redundantEquivalencePolicy: 'keepEquivalentClass',
-  defaultOntologyBaseIri: 'http://example.org/ontology#',
+  defaultOntologyBaseIri: 'https://example.org/ontology/',
   defaultVersionInfo: '0.1.0',
   versionIriTemplate: '{ontologyIri}/{version}',
 };

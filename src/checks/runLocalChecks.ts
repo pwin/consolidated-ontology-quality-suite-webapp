@@ -58,16 +58,24 @@ export class LocalChecksEngine {
         const registry = this.getRegistry();
         const config = vscode.workspace.getConfiguration('ontologySuite');
         const guidanceMode = config.get<string>('modellingGuidance', 'gist');
+        const sparqlEnabled = config.get<boolean>('enableSparqlChecks', true);
+        const shaclEnabled = config.get<boolean>('enableShaclChecks', true);
 
+        // SHACL-SPARQL validation (shacl-engine, via its Comunica-lite dependency) runs
+        // roughly two orders of magnitude slower than the same-sized SPARQL CONSTRUCT check
+        // suite via Oxigraph (~10s vs ~0.2s against this project's own test fixtures) -- both
+        // toggles default to on, but SHACL is the one worth turning off for a tight edit/check
+        // loop on a large ontology.
         progress.report({ message: 'sparql checks', increment: 20 });
-        const sparqlRows = runSparqlChecks(mergedQuads, registry);
+        const sparqlRows = sparqlEnabled ? runSparqlChecks(mergedQuads, registry) : [];
 
         progress.report({ message: 'shacl checks', increment: 20 });
-        const shaclRows = await runShaclChecks(mergedQuads, registry).catch((err) => {
-           
-          console.error('[ontologySuite] SHACL check run failed:', err);
-          return [];
-        });
+        const shaclRows = shaclEnabled
+          ? await runShaclChecks(mergedQuads, registry).catch((err) => {
+              console.error('[ontologySuite] SHACL check run failed:', err);
+              return [];
+            })
+          : [];
 
         progress.report({ message: 'reasoning', increment: 20 });
         const rulesPath = path.join(this.extensionPath, 'resources', 'reasoning', 'core-rules.n3');
