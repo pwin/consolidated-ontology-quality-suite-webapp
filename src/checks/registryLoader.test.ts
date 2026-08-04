@@ -2,7 +2,7 @@ import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { loadRegistry, localName } from './registryLoader';
 
-describe('loadRegistry against the vendored resources/checks-registry', () => {
+describe('loadRegistry against the copied-in resources/checks-registry', () => {
   const registry = loadRegistry(path.resolve(__dirname, '../../resources/checks-registry'));
 
   it('loads all 50 registry.json checks', () => {
