@@ -40,4 +40,59 @@ describe('generateDot', () => {
     expect(dot).toContain('digraph G');
     expect(dot).not.toContain('ex:Rex');
   });
+
+  it('defaults to rankdir=LR and honors an explicit rankdir option', () => {
+    const withDefault = generateDot(quads, ['http://example.org/Rex'], prefixes, {});
+    expect(withDefault).toContain('rankdir=LR;');
+    const withBT = generateDot(quads, ['http://example.org/Rex'], prefixes, { rankdir: 'BT' });
+    expect(withBT).toContain('rankdir=BT;');
+    expect(withBT).not.toContain('rankdir=LR;');
+  });
+
+  it('hideIsDefinedBy omits rdfs:isDefinedBy edges without affecting other annotation edges', () => {
+    const withIsDefinedBy = new Parser().parse(`
+      @prefix ex: <http://example.org/> .
+      @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+      ex:Rex a ex:Dog ;
+        rdfs:label "Rex" ;
+        rdfs:isDefinedBy ex:SomeOntology .
+    `);
+    const shown = generateDot(withIsDefinedBy, ['http://example.org/Rex'], prefixes, { hideIsDefinedBy: false });
+    const hidden = generateDot(withIsDefinedBy, ['http://example.org/Rex'], prefixes, { hideIsDefinedBy: true });
+    expect(shown).toContain('ex:SomeOntology');
+    expect(hidden).not.toContain('ex:SomeOntology');
+    expect(hidden).toContain('label="Rex"'); // rdfs:label is unaffected -- a separate toggle
+  });
+
+  it('hideImportedDownstream keeps an imported term as a leaf but does not expand its own quads', () => {
+    // ex:Rex is local; ex:Dog and its own further structure come from an "imported" file.
+    const mixedQuads = new Parser().parse(`
+      @prefix ex: <http://example.org/> .
+      @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+      ex:Rex a ex:Dog .
+      ex:Dog rdfs:label "Dog" ;
+        rdfs:subClassOf ex:Animal .
+    `);
+    const localSubjects = new Set(['http://example.org/Rex']);
+
+    const expanded = generateDot(mixedQuads, ['http://example.org/Rex'], prefixes, { hideImportedDownstream: false }, localSubjects);
+    expect(expanded).toContain('ex:Dog'); // reached via rdf:type
+    expect(expanded).toContain('ex:Animal'); // expanded from ex:Dog's own rdfs:subClassOf
+
+    const restricted = generateDot(mixedQuads, ['http://example.org/Rex'], prefixes, { hideImportedDownstream: true }, localSubjects);
+    expect(restricted).toContain('ex:Dog'); // still shown as a leaf -- Rex still asserts "a ex:Dog"
+    expect(restricted).not.toContain('ex:Animal'); // but ex:Dog's own downstream is not pulled in
+    expect(restricted).not.toContain('label="Dog"'); // ex:Dog's own rdfs:label is also not pulled in
+  });
+
+  it('hideImportedDownstream still expands a selected root subject even if it is not local', () => {
+    const mixedQuads = new Parser().parse(`
+      @prefix ex: <http://example.org/> .
+      @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+      ex:Dog rdfs:subClassOf ex:Animal .
+    `);
+    const localSubjects = new Set<string>(); // ex:Dog is NOT local, but it's the selected root
+    const dot = generateDot(mixedQuads, ['http://example.org/Dog'], prefixes, { hideImportedDownstream: true }, localSubjects);
+    expect(dot).toContain('ex:Animal');
+  });
 });

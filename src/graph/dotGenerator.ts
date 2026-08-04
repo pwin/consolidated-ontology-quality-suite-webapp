@@ -1,12 +1,28 @@
 import type { Quad } from 'n3';
-import { RDF, RDFS_COMMENT, RDFS_LABEL } from '../rdf/vocab';
+import { RDF, RDFS_COMMENT, RDFS_LABEL, RDFS_ISDEFINEDBY } from '../rdf/vocab';
 import { shrink } from '../rdf/vocab';
+
+export type GraphRankdir = 'LR' | 'RL' | 'TB' | 'BT';
 
 export interface GraphOptions {
   hideTypes: boolean;
   hideAnnotations: boolean;
+  /** Hides rdfs:isDefinedBy edges specifically -- separate from hideAnnotations since it's
+   *  usually about "which ontology defines this term" bookkeeping, not descriptive content,
+   *  and tends to point at a handful of hub nodes (the ontologies themselves) that clutter the
+   *  layout more than label/comment/definition edges do. */
+  hideIsDefinedBy: boolean;
+  /** Stops traversal at the boundary of the main document's own subjects: an imported term
+   *  reached via an edge still appears as a leaf node (so you can see *that* something is
+   *  categorized/typed/related to it), but none of *its own* outgoing quads are pulled in --
+   *  decluttering a large imported upper/foundational ontology's own internal structure out of
+   *  the picture without losing the fact that the main document references it. Only applies
+   *  beyond depth 0: an imported term picked as one of the selected root subjects is still
+   *  expanded normally. */
+  hideImportedDownstream: boolean;
   showPrefixes: boolean;
   maxDepth: number;
+  rankdir: GraphRankdir;
 }
 
 const RDF_TYPE = `${RDF}type`;
@@ -14,7 +30,15 @@ const RDF_FIRST = `${RDF}first`;
 const RDF_REST = `${RDF}rest`;
 const ANNOTATION_PREDICATES = new Set([RDFS_LABEL, RDFS_COMMENT, 'http://www.w3.org/2004/02/skos/core#definition', 'http://www.w3.org/2004/02/skos/core#example']);
 
-const DEFAULT_OPTIONS: GraphOptions = { hideTypes: false, hideAnnotations: false, showPrefixes: true, maxDepth: 3 };
+const DEFAULT_OPTIONS: GraphOptions = {
+  hideTypes: false,
+  hideAnnotations: false,
+  hideIsDefinedBy: false,
+  hideImportedDownstream: false,
+  showPrefixes: true,
+  maxDepth: 3,
+  rankdir: 'LR',
+};
 
 /**
  * Ports turtle-editor-viewer's graph-generator.ts (RDF quads -> Graphviz
@@ -28,6 +52,9 @@ export function generateDot(
   selectedSubjects: string[],
   prefixes: Record<string, string>,
   options: Partial<GraphOptions> = {},
+  /** Subjects declared in the main document itself (pre-import-merge) -- required only when
+   *  `hideImportedDownstream` is set; a term not in this set is treated as "imported". */
+  localSubjects?: ReadonlySet<string>,
 ): string {
   const opts = { ...DEFAULT_OPTIONS, ...options };
   const bySubject = new Map<string, Quad[]>();
@@ -45,10 +72,14 @@ export function generateDot(
     const { iri, depth } = queue.shift()!;
     if (visited.has(iri) || depth > opts.maxDepth) continue;
     visited.add(iri);
+    // The node itself still renders (via the edge that reached it); its own outgoing quads are
+    // just never collected, so nothing further is pulled in from an imported ontology's internals.
+    if (opts.hideImportedDownstream && depth > 0 && !localSubjects?.has(iri)) continue;
     const subjectQuads = bySubject.get(iri) ?? [];
     for (const q of subjectQuads) {
       if (opts.hideTypes && q.predicate.value === RDF_TYPE) continue;
       if (opts.hideAnnotations && ANNOTATION_PREDICATES.has(q.predicate.value)) continue;
+      if (opts.hideIsDefinedBy && q.predicate.value === RDFS_ISDEFINEDBY) continue;
       relevantQuads.push(q);
       if ((q.object.termType === 'NamedNode' || q.object.termType === 'BlankNode') && !visited.has(q.object.value)) {
         queue.push({ iri: q.object.value, depth: depth + 1 });
@@ -60,7 +91,7 @@ export function generateDot(
   // throughout, literals in blue, blank nodes in orange -- named resources get no extra color.
   const lines: string[] = [
     'digraph G {',
-    '  rankdir=LR;',
+    `  rankdir=${opts.rankdir};`,
     '  node [shape=box, style=rounded, fontname="sans-serif", fontsize=10];',
     '  edge [fontname="sans-serif", fontsize=9];',
   ];
