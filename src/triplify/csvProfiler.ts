@@ -77,7 +77,7 @@ export interface DraftResult {
  * first-mile problem of both ontology authoring and TARQL-style query
  * authoring, which today both start from a blank file.
  */
-export function draftFromProfile(csvFilePath: string, profile: CsvProfile, baseIri = 'http://example.org/demo#'): DraftResult {
+export function draftFromProfile(csvFilePath: string, profile: CsvProfile, baseIri = 'https://example.org/demo/'): DraftResult {
   const className = toPascalCase(path.basename(csvFilePath, path.extname(csvFilePath)));
   const nonKeyColumns = profile.columns.filter((c) => c !== profile.keyColumn);
 

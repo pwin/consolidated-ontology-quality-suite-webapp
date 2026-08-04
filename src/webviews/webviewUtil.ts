@@ -34,6 +34,14 @@ export function htmlShell(webview: vscode.Webview, title: string, bodyHtml: stri
   .panel { display: flex; flex-direction: column; gap: 8px; }
   .svg-container { border: 1px solid var(--vscode-panel-border); overflow: auto; max-height: 70vh; }
   .svg-container svg { max-width: none; }
+  .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  /* Pan/zoom viewport: fixed-size window with overflow hidden, a transformed inner layer holds
+     the actual content so panning/zooming never affects layout/scroll of the page around it. */
+  .zoom-viewport { border: 1px solid var(--vscode-panel-border); overflow: hidden; height: 70vh; position: relative; cursor: grab; touch-action: none; }
+  .zoom-viewport.grabbing { cursor: grabbing; }
+  .zoom-layer { transform-origin: 0 0; width: fit-content; height: fit-content; }
+  .zoom-layer svg { display: block; }
+  .zoom-hint { font-size: 0.8em; color: var(--vscode-descriptionForeground); }
 </style>
 </head>
 <body>

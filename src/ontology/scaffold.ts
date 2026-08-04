@@ -1,11 +1,19 @@
 import * as vscode from 'vscode';
+import { GIST } from '../rdf/vocab';
 
-const WELL_KNOWN_IMPORTS: { label: string; iri: string; description: string }[] = [
-  { label: 'gist (Semantic Arts)', iri: 'https://w3id.org/semanticarts/ontology/gistCore14.1.0', description: 'minimalist upper ontology' },
-  { label: 'schema.org', iri: 'https://schema.org/', description: 'general-purpose schema vocabulary' },
-  { label: 'SKOS', iri: 'http://www.w3.org/2004/02/skos/core#', description: 'taxonomies / controlled vocabularies' },
-  { label: 'Dublin Core Terms', iri: 'http://purl.org/dc/terms/', description: 'metadata terms' },
-  { label: 'PROV-O', iri: 'http://www.w3.org/ns/prov#', description: 'provenance' },
+/**
+ * `prefix`/`namespace` are the binding a pick should get in the generated file -- distinct from
+ * `iri`, the owl:imports target (an ontology document IRI, not always the same as its namespace,
+ * e.g. gist's import target is the versioned gistCore14.1.0 document while its namespace is the
+ * unversioned w3id.org/.../gist/ used on every term). Always the current (w3id.org) gist
+ * namespace, not the pre-14.0 ontologies.semanticarts.com one.
+ */
+const WELL_KNOWN_IMPORTS: { label: string; iri: string; description: string; prefix: string; namespace: string }[] = [
+  { label: 'gist (Semantic Arts)', iri: 'https://w3id.org/semanticarts/ontology/gistCore14.1.0', description: 'minimalist upper ontology', prefix: 'gist', namespace: GIST },
+  { label: 'schema.org', iri: 'https://schema.org/', description: 'general-purpose schema vocabulary', prefix: 'schema', namespace: 'https://schema.org/' },
+  { label: 'SKOS', iri: 'http://www.w3.org/2004/02/skos/core#', description: 'taxonomies / controlled vocabularies', prefix: 'skos', namespace: 'http://www.w3.org/2004/02/skos/core#' },
+  { label: 'Dublin Core Terms', iri: 'http://purl.org/dc/terms/', description: 'metadata terms', prefix: 'dcterms', namespace: 'http://purl.org/dc/terms/' },
+  { label: 'PROV-O', iri: 'http://www.w3.org/ns/prov#', description: 'provenance', prefix: 'prov', namespace: 'http://www.w3.org/ns/prov#' },
 ];
 
 export async function newOntologyWizard(): Promise<{ uri: vscode.Uri; content: string } | undefined> {
@@ -24,7 +32,7 @@ export async function newOntologyWizard(): Promise<{ uri: vscode.Uri; content: s
 
   const baseIri = await vscode.window.showInputBox({
     prompt: 'Base namespace IRI',
-    value: `http://example.org/${name.toLowerCase()}#`,
+    value: `https://example.org/${name.toLowerCase()}/`,
   });
   if (!baseIri) return undefined;
 
@@ -36,17 +44,31 @@ export async function newOntologyWizard(): Promise<{ uri: vscode.Uri; content: s
   if (!prefix) return undefined;
 
   const importPicks = await vscode.window.showQuickPick(
-    WELL_KNOWN_IMPORTS.map((i) => ({ label: i.label, description: i.description, detail: i.iri, iri: i.iri })),
+    WELL_KNOWN_IMPORTS.map((i) => ({ label: i.label, description: i.description, detail: i.iri, iri: i.iri, prefix: i.prefix, namespace: i.namespace })),
     { canPickMany: true, placeHolder: 'Select any ontologies to owl:import (optional)' },
   );
 
   const today = new Date().toISOString().slice(0, 10);
-  const lines: string[] = [
+  const declaredPrefixes = new Set([prefix, 'owl', 'rdfs', 'skos', 'xsd']);
+  const prefixLines: string[] = [
     `@prefix ${prefix}: <${baseIri}> .`,
     '@prefix owl: <http://www.w3.org/2002/07/owl#> .',
     '@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .',
     '@prefix skos: <http://www.w3.org/2004/02/skos/core#> .',
     '@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .',
+  ];
+  // Each picked import also gets its own @prefix binding (e.g. gist: bound to the current
+  // w3id.org namespace) so the file can actually use its terms as CURIEs right away -- skipping
+  // any prefix already declared above (SKOS is both a base prefix and a well-known import).
+  for (const pick of importPicks ?? []) {
+    const p = pick as { prefix: string; namespace: string };
+    if (declaredPrefixes.has(p.prefix)) continue;
+    declaredPrefixes.add(p.prefix);
+    prefixLines.push(`@prefix ${p.prefix}: <${p.namespace}> .`);
+  }
+
+  const lines: string[] = [
+    ...prefixLines,
     '',
     `<${baseIri.replace(/[#/]$/, '')}>`,
     '  a owl:Ontology ;',

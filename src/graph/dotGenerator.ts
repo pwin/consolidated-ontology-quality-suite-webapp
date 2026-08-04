@@ -56,7 +56,14 @@ export function generateDot(
     }
   }
 
-  const lines: string[] = ['digraph G {', '  rankdir=LR;', '  node [shape=box, fontname="sans-serif", fontsize=10];', '  edge [fontname="sans-serif", fontsize=9];'];
+  // Shape/color scheme matches turtle-editor-viewer's graph-generator.ts: rounded boxes
+  // throughout, literals in blue, blank nodes in orange -- named resources get no extra color.
+  const lines: string[] = [
+    'digraph G {',
+    '  rankdir=LR;',
+    '  node [shape=box, style=rounded, fontname="sans-serif", fontsize=10];',
+    '  edge [fontname="sans-serif", fontsize=9];',
+  ];
   const nodeIds = new Map<string, string>();
   let nodeCounter = 0;
   const idFor = (iri: string): string => {
@@ -71,6 +78,9 @@ export function generateDot(
     if (termType === 'BlankNode') return `_:${iri.slice(0, 6)}`;
     return opts.showPrefixes ? shrink(iri, prefixes) : iri;
   };
+  // Blank nodes get an orange border, matching turtle-editor-viewer; named resources get no
+  // extra color (the default node style already applies to them).
+  const attrsFor = (termType: string): string => (termType === 'BlankNode' ? ', color="orange"' : '');
 
   const rendered = new Set<string>();
   for (const q of relevantQuads) {
@@ -78,7 +88,7 @@ export function generateDot(
       const sid = idFor(q.subject.value);
       if (!rendered.has(sid)) {
         rendered.add(sid);
-        lines.push(`  ${sid} [label=${dotQuote(labelFor(q.subject.value, q.subject.termType))}];`);
+        lines.push(`  ${sid} [label=${dotQuote(labelFor(q.subject.value, q.subject.termType))}${attrsFor(q.subject.termType)}];`);
       }
     }
 
@@ -88,15 +98,16 @@ export function generateDot(
       const oid = idFor(q.object.value);
       if (!rendered.has(oid)) {
         rendered.add(oid);
-        lines.push(`  ${oid} [label=${dotQuote(labelFor(q.object.value, q.object.termType))}];`);
+        lines.push(`  ${oid} [label=${dotQuote(labelFor(q.object.value, q.object.termType))}${attrsFor(q.object.termType)}];`);
       }
       const sid = idFor(q.subject.value);
       lines.push(`  ${sid} -> ${oid} [label=${dotQuote(predLabel)}];`);
     } else {
-      // Literal object: rendered as its own small node so long values don't clutter the edge label.
+      // Literal object: rendered as its own small node (so long values don't clutter the edge
+      // label), in blue -- matching turtle-editor-viewer's literal color convention.
       const lid = `lit${nodeCounter++}`;
       const literalText = q.object.value.length > 40 ? `${q.object.value.slice(0, 37)}...` : q.object.value;
-      lines.push(`  ${lid} [label=${dotQuote(literalText)}, shape=note, style=filled, fillcolor="#f5f5f5"];`);
+      lines.push(`  ${lid} [label=${dotQuote(literalText)}, color="blue", fontcolor="blue"];`);
       const sid = idFor(q.subject.value);
       lines.push(`  ${sid} -> ${lid} [label=${dotQuote(predLabel)}];`);
     }

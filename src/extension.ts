@@ -5,7 +5,7 @@ import { resolveImports } from './ontology/resolveImports';
 import { analyzeExpressivity } from './rdf/expressivity';
 import { renderMetricsMarkdown } from './ontology/metricsReport';
 import { FORMATS, RdfFormat, detectFormat, serializeRdf } from './rdf/serialization';
-import { shrink } from './rdf/vocab';
+import { shrink, GIST } from './rdf/vocab';
 import { newOntologyWizard, promptAddClass, promptAddProperty, renderAddClassTurtle, renderAddPropertyTurtle } from './ontology/scaffold';
 import { OntologyOutlineProvider } from './ontology/outline';
 import { LocalChecksEngine } from './checks/runLocalChecks';
@@ -137,7 +137,7 @@ export function activate(context: vscode.ExtensionContext): void {
           'Use gist: anyway',
         );
         if (choice === 'Add prefix') {
-          edit.insert(uri, new vscode.Position(0, 0), '@prefix gist: <https://w3id.org/semanticarts/ns/ontology/gist/> .\n');
+          edit.insert(uri, new vscode.Position(0, 0), `@prefix gist: <${GIST}> .\n`);
         }
       }
       const endPos = new vscode.Position(editor.document.lineCount, 0);
