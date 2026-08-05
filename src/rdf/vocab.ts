@@ -30,11 +30,19 @@ export const OWL_INVERSE_OF = `${OWL}inverseOf`;
 export const OWL_INTERSECTION_OF = `${OWL}intersectionOf`;
 export const OWL_UNION_OF = `${OWL}unionOf`;
 export const OWL_RESTRICTION = `${OWL}Restriction`;
+export const OWL_ON_PROPERTY = `${OWL}onProperty`;
+export const OWL_ON_CLASS = `${OWL}onClass`;
+export const OWL_SOME_VALUES_FROM = `${OWL}someValuesFrom`;
+export const OWL_ALL_VALUES_FROM = `${OWL}allValuesFrom`;
 
 export const SKOS_DEFINITION = `${SKOS}definition`;
 export const SKOS_PREF_LABEL = `${SKOS}prefLabel`;
 export const SKOS_SCOPE_NOTE = `${SKOS}scopeNote`;
 export const SKOS_EXAMPLE = `${SKOS}example`;
+
+export const SH_TARGET_CLASS = `${SH}targetClass`;
+export const SH_CLASS = `${SH}class`;
+export const SH_PATH = `${SH}path`;
 
 export const WELL_KNOWN_PREFIXES: Record<string, string> = {
   rdf: RDF,

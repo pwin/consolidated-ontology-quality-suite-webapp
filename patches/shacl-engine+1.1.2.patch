@@ -1,0 +1,25 @@
+diff --git a/node_modules/shacl-engine/lib/sparql.js b/node_modules/shacl-engine/lib/sparql.js
+index f8fff9b..6496b5c 100644
+--- a/node_modules/shacl-engine/lib/sparql.js
++++ b/node_modules/shacl-engine/lib/sparql.js
+@@ -12,9 +12,19 @@ function bindingsToObject (row) {
+   return args
+ }
+ 
++let sharedEngine
++
++function getEngine () {
++  if (!sharedEngine) {
++    sharedEngine = new QueryEngine()
++  }
++
++  return sharedEngine
++}
++
+ async function select ({ bindings, dataset, factory, query }) {
+   const store = new DatasetSource(dataset)
+-  const engine = new QueryEngine()
++  const engine = getEngine()
+ 
+   const bindingsFactory = new BindingsFactory(factory)
+   const initialBindings = bindingsFactory.bindings(bindings)

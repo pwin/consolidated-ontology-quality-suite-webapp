@@ -154,9 +154,26 @@ Validation" and "Full Triplify" commands, degrading gracefully if absent.
 
 **Validation**
 - *Run Local Checks*: the registry's 39 SPARQL + 6 SHACL-SPARQL checks,
-  OWL2-RL-ish inference/consistency, gist-informed modelling guidance, and
-  this project's own [minimum-required-content rules](#project-rules-minimum-required-content) —
+  OWL2-RL-ish inference/consistency, gist-informed modelling guidance, a
+  closed-world vocabulary check (`VOC-001`, see below), and this project's
+  own [minimum-required-content rules](#project-rules-minimum-required-content) —
   merged into one Problems-panel view, entirely in-process.
+- **`VOC-001` (closed-world vocabulary check)**: SHACL's open-world
+  semantics never flag "used `ex:Dgo`, meant `ex:Dog`" — nothing
+  *contradicts* an undeclared class/property existing, it's just never
+  asserted to. `VOC-001` walks every triple's predicate (always a property
+  reference) and, for a fixed set of term-referencing predicates
+  (`rdf:type`, `rdfs:subClassOf`/`subPropertyOf`/`domain`/`range`,
+  `owl:equivalentClass`/`disjointWith`/`inverseOf`/restriction predicates,
+  `sh:targetClass`/`class`/`path`), its object too, flagging any IRI that
+  isn't declared anywhere in the document or its resolved imports.
+  Scoped to namespaces the graph has *some* closed-world knowledge of —
+  at least one declared term already exists there — so an external
+  vocabulary that was never actually imported (`dcterms:`, `foaf:`, or
+  `gist:` when it isn't imported here) is left alone rather than flooded
+  with false positives; `rdf:`/`rdfs:`/`owl:`/`sh:`/`skos:`/`xsd:` are
+  excluded the same way, automatically. Toggle via
+  `ontologySuite.enableVocabularyChecks` (default on).
 - *Run Deep Validation*: optional Python CLI fallback for full OWL2 DL
   reasoning (owlready2/HermiT).
 - Competency questions as VS Code tests: `.cq.rq` files (SPARQL ASK/SELECT
@@ -235,6 +252,19 @@ Validation" and "Full Triplify" commands, degrading gracefully if absent.
 - Find-References and workspace-wide Rename for ontology terms, across
   `.ttl` and `.rq` files, backed by the same index used for completion and
   go-to-definition.
+- *Sort Document* (Alphabetically / By Type) and *Clean Document* (removes
+  unused `@prefix` declarations, then sorts by type: ontology header,
+  classes, object properties, datatype properties, individuals — each
+  group alphabetical within itself). Splits the document into per-statement
+  text blocks and only ever reorders them — never reparses/reformats a
+  statement's own text — so comments and hand formatting survive; a
+  comment directly above a term (no blank line between) moves with it,
+  while a blank-line-separated comment (e.g. a file header) floats as a
+  pinned preamble instead of migrating with whichever block sorts first.
+  Confirmed lossless at the RDF level and idempotent by its own test suite
+  against a real fixture. Turtle only (`.ttl`) — TriG's `GRAPH { ... }`
+  blocks aren't `.`-terminated the same way, so this doesn't attempt them.
+  Declines (rather than guessing) on a document with a syntax error.
 
 ### Gist-informed modelling guidance
 
@@ -373,7 +403,8 @@ Two different mechanisms, for two different kinds of customization:
 | `ontologySuite.pythonCliPath` | `"ontology-suite"` | CLI executable for the optional deep-validation/docgen/version-diff fallback |
 | `ontologySuite.checksRegistryPath` | `""` | Point at your own registry.json/sparql/shapes checkout instead of the bundled copy — e.g. to add project-specific SPARQL/SHACL checks beyond what `class-rules.json` can express |
 | `ontologySuite.enableSparqlChecks` | `true` | Run the registry's SPARQL CONSTRUCT checks. Fast (~0.2s on this project's own fixtures) |
-| `ontologySuite.enableShaclChecks` | `true` | Run the registry's SHACL-SPARQL shapes. ~50x slower than the SPARQL checks (~10s vs ~0.2s) — turn off for a tighter edit/check loop on a large ontology, at the cost of missing SHACL-only findings |
+| `ontologySuite.enableShaclChecks` | `true` | Run the registry's SHACL-SPARQL shapes. ~10x slower than the SPARQL checks (~1.1s vs ~0.1s, after the `shacl-engine` QueryEngine-reuse patch — see `patches/`) — turn off for a tighter edit/check loop on a large ontology, at the cost of missing SHACL-only findings |
+| `ontologySuite.enableVocabularyChecks` | `true` | Run the closed-world vocabulary check (`VOC-001`) — flags used-but-undeclared class/property IRIs (typos, hallucinated terms) within namespaces the graph has closed-world knowledge of |
 | `ontologySuite.triplifyPreviewSampleSize` | `20` | CSV rows sampled for the live triplify preview |
 | `ontologySuite.projectStandardsPath` | `.ontology-suite/standards.json` | Project values (category class, language tag, versioning, policy) that complete Quick Fix repairs |
 | `ontologySuite.projectRulesPath` | `.ontology-suite/class-rules.json` | Minimum-required-content rules for classes/properties (`PRJ-REQUIRED`) |
@@ -399,14 +430,14 @@ that doesn't use gist turning `modellingGuidance` to `"off"` in committed
    coherent example ontology plus a real gist v11→v14.1 upstream-migration
    scenario.
 3. Alternatively, install the packaged extension directly:
-   `code --install-extension ontology-dev-suite-0.6.0.vsix` (build it with
+   `code --install-extension ontology-dev-suite-0.8.0.vsix` (build it with
    `npx @vscode/vsce package`).
 
 ## Testing
 
 Two tiers, both real and both passing as of this writing:
 
-- **`npm test`** (Vitest) — 151 tests across 28 files covering every
+- **`npm test`** (Vitest) — 177 tests across 31 files covering every
   pure-logic module: parsing, all six serializations' round-trips
   (including the Manchester class-expression engine against real OWL2
   restrictions), import resolution (including the gist v11→v14.1 drift-

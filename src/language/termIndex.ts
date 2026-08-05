@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { parseTurtle, parseSparqlPrefixes } from '../rdf/parseDocument';
 import { buildOntologyModel, TermInfo } from '../rdf/ontologyModel';
 import { expand } from '../rdf/vocab';
+import { findStatementLineRange } from './statementRange';
 import type { Quad } from 'n3';
 
 export interface TermOccurrence {
@@ -80,6 +81,15 @@ export class TermIndex {
   lookupTerm(iri: string): TermInfo | undefined {
     return this.mergedModel.terms.get(iri);
   }
+}
+
+/**
+ * vscode.Range-returning wrapper around language/statementRange.ts's pure line-range finder --
+ * see that module for the algorithm and its documented limitations.
+ */
+export function findStatementRange(text: string, startLine: number): vscode.Range {
+  const r = findStatementLineRange(text, startLine);
+  return new vscode.Range(r.startLine, 0, r.endLine, r.endCol);
 }
 
 async function readText(uri: vscode.Uri): Promise<string | undefined> {
