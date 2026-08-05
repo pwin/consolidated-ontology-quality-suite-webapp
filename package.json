@@ -2,7 +2,7 @@
   "name": "ontology-dev-suite",
   "displayName": "Ontology Development Suite",
   "description": "Create ontologies (with imports) in Turtle, TriG, N-Triples, N-Quads, RDF/XML, or OWL Manchester Syntax, author TARQL-style CSV-to-RDF CONSTRUCT queries with live preview, and validate against a local SPARQL/SHACL/OWL2-RL checks engine.",
-  "version": "0.6.0",
+  "version": "0.8.0",
   "publisher": "pwin",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -205,6 +205,18 @@
       {
         "command": "ontologySuite.runOntologyScript",
         "title": "Ontology Suite: Run Ontology Script (.ontology.ts)"
+      },
+      {
+        "command": "ontologySuite.sortDocumentAlphabetically",
+        "title": "Ontology Suite: Sort Document (Alphabetically)"
+      },
+      {
+        "command": "ontologySuite.sortDocumentByType",
+        "title": "Ontology Suite: Sort Document (By Type)"
+      },
+      {
+        "command": "ontologySuite.cleanDocument",
+        "title": "Ontology Suite: Clean Document (Remove Unused Prefixes + Sort)"
       }
     ],
     "menus": {
@@ -244,6 +256,15 @@
         },
         {
           "command": "ontologySuite.runOntologyScript"
+        },
+        {
+          "command": "ontologySuite.sortDocumentAlphabetically"
+        },
+        {
+          "command": "ontologySuite.sortDocumentByType"
+        },
+        {
+          "command": "ontologySuite.cleanDocument"
         },
         {
           "command": "ontologySuite.addSubclass",
@@ -344,7 +365,12 @@
         "ontologySuite.enableShaclChecks": {
           "type": "boolean",
           "default": true,
-          "description": "Run the registry's SHACL-SPARQL shapes (via shacl-engine) as part of Run Local Checks. Roughly two orders of magnitude slower than the SPARQL checks (~10s vs ~0.2s for this project's own test fixtures) -- turn off for a tighter edit/check loop on a large ontology, at the cost of missing SHACL-only findings."
+          "description": "Run the registry's SHACL-SPARQL shapes (via shacl-engine) as part of Run Local Checks. An order of magnitude slower than the SPARQL checks (~1.1s vs ~0.1s for this project's own test fixtures, after the shacl-engine QueryEngine-reuse patch in patches/) -- turn off for a tighter edit/check loop on a large ontology, at the cost of missing SHACL-only findings."
+        },
+        "ontologySuite.enableVocabularyChecks": {
+          "type": "boolean",
+          "default": true,
+          "description": "Run the closed-world vocabulary check (VOC-001) as part of Run Local Checks: flags any class/property IRI used (as a predicate, rdf:type, rdfs:subClassOf/domain/range, owl:equivalentClass/disjointWith/..., sh:targetClass/class/path) that isn't declared anywhere in this document or its resolved imports -- catching typos/hallucinated terms that SHACL's open-world semantics never flag. Scoped to namespaces this graph has at least one declared term in already, so unimported external vocabularies aren't flagged."
         },
         "ontologySuite.triplifyPreviewSampleSize": {
           "type": "number",
@@ -371,6 +397,7 @@
     ]
   },
   "scripts": {
+    "postinstall": "patch-package",
     "compile": "node esbuild.js",
     "watch": "node esbuild.js --watch",
     "package": "node esbuild.js --production",
@@ -395,6 +422,7 @@
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
     "eslint": "^10.8.0",
+    "patch-package": "^8.0.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10"
   },

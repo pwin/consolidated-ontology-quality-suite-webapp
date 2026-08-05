@@ -1,5 +1,120 @@
 # Changelog
 
+## 0.8.0
+
+### Sort Document / Clean Document
+
+New commands: **Sort Document (Alphabetically)**, **Sort Document (By
+Type)**, and **Clean Document** (removes unused `@prefix` declarations,
+then sorts by type). Motivated by a competitor-research pass (Mentor for
+VS Code, github.com/faubulous/mentor-vscode) which offers comparable
+commands built on its own published Chevrotain-based CST parser/serializer
+packages (`@faubulous/mentor-rdf-parsers`/`-serializers`). Those packages
+were evaluated directly (not just read about) and rejected for this
+project: real testing found `chevrotain@>=12` (used by every still-relevant
+release of `mentor-rdf-parsers`, back through 1.7.2) throws
+`TypeError: Object.groupBy is not a function` on import -- an ES2024 API
+Node only shipped starting in v21, incompatible with this project's
+current v20 toolchain. Pinning back further to the `chevrotain@11`-based
+1.0.0-1.7.1 line would mean depending on an old, independently-unverified
+release just to dodge a runtime wall.
+
+Built instead as a dependency-free, text-block-based heuristic consistent
+with this project's existing style (`language/termIndex.ts`'s statement-
+span scan, `language/completionContext.ts`'s position heuristic):
+`ontology/documentSort.ts` splits a document into `@prefix`/`@base`
+declarations, a floating preamble (any comment separated from the next
+statement by a blank line -- e.g. a file header), and one block per
+top-level statement (each keeping its own directly-attached leading
+comment). Reordering only ever moves whole blocks; no block's own text is
+ever reparsed or reformatted, so nothing is reformatted and no comment is
+lost. Confirmed lossless at the RDF level and idempotent by a real-fixture
+test against `examples/tutorial/clinic.ttl` (parses to the identical quad
+set before/after, and organizing an already-organized document produces
+byte-identical output).
+
+**Real bug found and fixed while building this** (not hypothetical): the
+statement-span scanner this reuses (`language/termIndex.ts`'s
+`findStatementRange`, added for the Outline click-to-reveal feature)
+didn't account for a literal `.` appearing *inside* an IRIREF -- e.g.
+`<http://example.org/clinic>` contains a `.` in "example.org" that was
+being mistaken for the statement's terminator, silently truncating the
+ontology header mid-declaration. It had gone unnoticed because a
+slightly-short text *selection* still looks mostly right; splitting a
+document into blocks made the resulting duplicate/orphaned block
+impossible to miss. Fixed by extracting the statement-range logic into a
+new pure module (`language/statementRange.ts`, no `vscode` import, so it's
+directly unit-testable and reusable by `documentSort.ts`) and having it
+strip IRIREF contents the same way it already stripped quoted-string
+contents before scanning for the terminator. `termIndex.ts` now wraps this
+shared logic rather than duplicating it.
+
+## 0.7.0
+
+### New check: closed-world vocabulary check (`VOC-001`)
+
+SHACL's open-world semantics never flag "used `ex:Dgo`, meant `ex:Dog`" --
+nothing *contradicts* an undeclared class/property existing, it's simply
+never asserted to. `VOC-001` (`src/checks/vocabularyChecks.ts`) closes that
+gap: it walks every triple's predicate (always a property reference) and,
+for a fixed set of term-referencing predicates (`rdf:type`,
+`rdfs:subClassOf`/`subPropertyOf`/`domain`/`range`,
+`owl:equivalentClass`/`disjointWith`/`inverseOf`/`onProperty`/`onClass`/
+`someValuesFrom`/`allValuesFrom`, `sh:targetClass`/`class`/`path`), its
+object too, flagging any IRI that isn't declared as a class/property/
+individual/annotation-property anywhere in the document or its resolved
+imports.
+
+Deliberately scoped to namespaces the graph has *some* closed-world
+knowledge of -- at least one declared term already exists there --
+otherwise every ordinary reference to an unimported external vocabulary
+(`dcterms:`, `foaf:`) would misfire as a false positive. `rdf:`/`rdfs:`/
+`owl:`/`sh:`/`skos:`/`xsd:` are excluded the same way, automatically: no
+ontology declares e.g. `owl:Class a owl:Class` itself, so those namespaces
+never accumulate any declared terms to become "known" in the first place --
+no hardcoded exemption list needed. Verified against every real fixture in
+`examples/` (clinic+core, the gist v11/v14 migration set, the Manchester
+restrictions demo) with zero false positives before wiring it into `Run
+Local Checks`; a deliberately-injected typo in each of predicate and object
+position was confirmed caught. New `ontologySuite.enableVocabularyChecks`
+setting (default on), following the same on/off pattern as the SPARQL/SHACL
+toggles.
+
+### Ontology Outline: click a term to see it, everywhere
+
+Left-clicking any class/property/individual in the Ontology Outline now
+does two things at once, instead of just placing the cursor:
+
+- **Jumps to its full definition**, not just the CURIE token -- the whole
+  Turtle statement (every triple about that subject, found via a bracket/
+  string-literal-aware statement-span scan since N3 doesn't report source
+  positions) is selected and centered in the editor.
+- **Refocuses the graph view** on that term's neighborhood. A single
+  extension-managed panel is reused across clicks (opened automatically on
+  the first one) rather than piling up a new webview tab per term, and it
+  never steals focus back from the editor -- browsing the Outline reads
+  like Protégé's synchronized class/annotation panes, not like triggering
+  a separate command per click. The manual "Visualize Subject Graph"
+  command now targets this same shared panel.
+
+### Real fix: SHACL validation was re-bootstrapping a Comunica query engine per constraint
+
+`ontologySuite.enableShaclChecks`'s Validator-caching (added earlier)
+claimed to make repeated SHACL runs in one session cheap, but timing real
+runs against `examples/tutorial/clinic.ttl` showed three consecutive "warm"
+runs all costing ~6.7s each -- the cache wasn't buying anything close to
+what its own comment claimed. Root cause, found by reading `shacl-engine`'s
+own source: its SPARQL plugin (`lib/sparql.js`) constructs a **brand new**
+Comunica `QueryEngine` on every single `sh:sparql` constraint/target
+evaluation -- once per focus node, not once per `validate()` call -- even
+though Comunica's own docs recommend building one `QueryEngine` and reusing
+it across queries. Fixed via `patches/shacl-engine+1.1.2.patch`
+(`patch-package`, reapplied automatically on `npm install` via
+`postinstall`): a module-scope singleton `QueryEngine` in `sparql.js`, no
+change to which sources/bindings each query runs against. Same 18 findings
+against the same fixture before and after -- confirmed correctness held,
+not just speed: warm runs dropped from ~6.7s to ~1.1s (roughly 6x).
+
 ## 0.6.0
 
 ### Protégé-style Ontology Outline actions

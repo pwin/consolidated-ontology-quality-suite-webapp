@@ -8,6 +8,7 @@ import { runSparqlChecks } from './sparqlRunner';
 import { runShaclChecks } from './shaclRunner';
 import { runReasoningChecks } from './reasoningRunner';
 import { runModellingGuidance } from './modellingGuidance';
+import { runVocabularyChecks } from './vocabularyChecks';
 import { evaluateClassRules } from './classRules';
 import { loadClassRulesConfig } from './classRulesLoader';
 import { mergeResultRows } from './merge';
@@ -60,12 +61,14 @@ export class LocalChecksEngine {
         const guidanceMode = config.get<string>('modellingGuidance', 'gist');
         const sparqlEnabled = config.get<boolean>('enableSparqlChecks', true);
         const shaclEnabled = config.get<boolean>('enableShaclChecks', true);
+        const vocabularyEnabled = config.get<boolean>('enableVocabularyChecks', true);
 
-        // SHACL-SPARQL validation (shacl-engine, via its Comunica-lite dependency) runs
-        // roughly two orders of magnitude slower than the same-sized SPARQL CONSTRUCT check
-        // suite via Oxigraph (~10s vs ~0.2s against this project's own test fixtures) -- both
-        // toggles default to on, but SHACL is the one worth turning off for a tight edit/check
-        // loop on a large ontology.
+        // SHACL-SPARQL validation (shacl-engine, via its Comunica-lite dependency, patched --
+        // see patches/shacl-engine+1.1.2.patch and shaclRunner.ts's own doc comment) still runs
+        // roughly an order of magnitude slower than the same-sized SPARQL CONSTRUCT check suite
+        // via Oxigraph (~1.1s vs ~0.1s against this project's own test fixtures) -- both toggles
+        // default to on, but SHACL is the one worth turning off for a tight edit/check loop on a
+        // large ontology.
         progress.report({ message: 'sparql checks', increment: 20 });
         const sparqlRows = sparqlEnabled ? runSparqlChecks(mergedQuads, registry) : [];
 
@@ -88,10 +91,12 @@ export class LocalChecksEngine {
         progress.report({ message: 'modelling guidance', increment: 20 });
         const guidanceRows = guidanceMode === 'off' ? [] : runModellingGuidance(mergedQuads);
 
+        const vocabularyRows = vocabularyEnabled ? runVocabularyChecks(mergedQuads as Quad[]) : [];
+
         const classRulesConfig = await loadClassRulesConfig();
         const projectRuleRows = evaluateClassRules(mergedQuads, classRulesConfig, doc.prefixes);
 
-        const merged = mergeResultRows(sparqlRows, shaclRows, reasoningRows, guidanceRows, projectRuleRows);
+        const merged = mergeResultRows(sparqlRows, shaclRows, reasoningRows, guidanceRows, vocabularyRows, projectRuleRows);
         const fileDiagnostics = resultRowsToDiagnostics(merged, doc, this.rowsByDiagnostic);
         this.diagnostics.set(fileUri, fileDiagnostics);
 

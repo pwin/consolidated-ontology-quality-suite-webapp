@@ -30,8 +30,8 @@ import type { ResultRow } from './types';
 import { profileCsv, draftFromProfile } from './triplify/csvProfiler';
 import { parseCsv } from './triplify/csv';
 import { QueryWorkbench } from './webviews/queryWorkbench';
-import { openGraphView } from './webviews/graphView';
-import { TermIndex } from './language/termIndex';
+import { openGraphView, focusGraphOnTerm } from './webviews/graphView';
+import { TermIndex, findStatementRange } from './language/termIndex';
 import { registerHoverProvider } from './language/hover';
 import { registerCompletionProvider } from './language/completion';
 import { registerManchesterCompletionProvider } from './language/manchesterCompletion';
@@ -40,6 +40,7 @@ import { registerDocumentSymbolProvider } from './language/documentSymbols';
 import { LiveDiagnosticsProvider } from './language/liveDiagnostics';
 import { CompetencyQuestionProvider } from './tests/competencyQuestionProvider';
 import { runOntologyScript } from './scripting/runScript';
+import { organizeDocument } from './ontology/documentSort';
 
 export function activate(context: vscode.ExtensionContext): void {
   const termIndex = new TermIndex();
@@ -277,14 +278,23 @@ export function activate(context: vscode.ExtensionContext): void {
 
     vscode.commands.registerCommand('ontologySuite.refreshOutline', () => outlineProvider.refresh()),
 
+    // Outline left-click: go to the term's definition (its whole statement highlighted, not just
+    // the CURIE token) *and* refocus the graph view (if open, or opened for the first time) on it
+    // -- one click, two views of the same term.
     vscode.commands.registerCommand('ontologySuite.revealTerm', async (iri: string) => {
       await termIndex.ensureBuilt();
       const decl = termIndex.getOccurrences(iri).find((o) => o.isDeclaration) ?? termIndex.getOccurrences(iri)[0];
-      if (!decl) return;
-      const doc = await vscode.workspace.openTextDocument(decl.uri);
-      const editor = await vscode.window.showTextDocument(doc);
-      editor.selection = new vscode.Selection(decl.range.start, decl.range.end);
-      editor.revealRange(decl.range, vscode.TextEditorRevealType.InCenter);
+      if (decl) {
+        const doc = await vscode.workspace.openTextDocument(decl.uri);
+        const editor = await vscode.window.showTextDocument(doc);
+        const blockRange = findStatementRange(doc.getText(), decl.range.start.line);
+        editor.selection = new vscode.Selection(blockRange.start, blockRange.end);
+        editor.revealRange(blockRange, vscode.TextEditorRevealType.InCenter);
+      }
+      const graphUri = outlineProvider.getActiveUri();
+      if (graphUri) {
+        await focusGraphOnTerm(graphUri, iri, context.extensionPath);
+      }
     }),
 
     vscode.commands.registerCommand('ontologySuite.openQueryWorkbench', async () => {
@@ -449,7 +459,43 @@ export function activate(context: vscode.ExtensionContext): void {
       await vscode.window.showTextDocument(doc, { viewColumn: vscode.ViewColumn.Beside });
       void vscode.window.showInformationMessage(`Converted to ${FORMATS[targetFormat].label}: ${targetUri.fsPath}`);
     }),
+
+    vscode.commands.registerCommand('ontologySuite.sortDocumentAlphabetically', () => runOrganizeCommand('alphabetical', false, 'Sort Document (alphabetically)')),
+    vscode.commands.registerCommand('ontologySuite.sortDocumentByType', () => runOrganizeCommand('byType', false, 'Sort Document (by type)')),
+    vscode.commands.registerCommand('ontologySuite.cleanDocument', () => runOrganizeCommand('byType', true, 'Clean Document')),
   );
+
+  /**
+   * Shared handler for Sort Document (alphabetical/by type) and Clean Document (remove unused
+   * prefixes, then sort by type) -- unlike every other editing command here, this is a genuine
+   * whole-document rewrite, not an append. Safe to do without the append-only pattern's usual
+   * append/replace confirmation flow because organizeDocument() never touches statement text
+   * itself, only reorders already-verbatim blocks (see ontology/documentSort.ts), and the result
+   * is confirmed lossless at the RDF level and comment-preserving by its own test suite -- plus
+   * VS Code's own undo stack makes the whole thing a single Ctrl+Z away from reverting regardless.
+   */
+  function runOrganizeCommand(strategy: 'alphabetical' | 'byType', removeUnusedPrefixes: boolean, label: string): void {
+    const uri = activeTurtleUri();
+    if (!uri) return;
+    const editor = vscode.window.activeTextEditor!;
+    const text = editor.document.getText();
+    const parsed = parseTurtle(uri.toString(), text);
+    if (parsed.errors.length > 0) {
+      void vscode.window.showErrorMessage(`${label}: this document has a syntax error and cannot be safely reorganized (${parsed.errors[0].message}).`);
+      return;
+    }
+
+    const organized = organizeDocument(text, parsed.prefixes, parsed.quads, { removeUnusedPrefixes, sortStrategy: strategy });
+    if (organized === text) {
+      void vscode.window.showInformationMessage(`${label}: already organized, nothing to change.`);
+      return;
+    }
+
+    const fullRange = new vscode.Range(0, 0, editor.document.lineCount, 0);
+    const edit = new vscode.WorkspaceEdit();
+    edit.replace(uri, fullRange, organized);
+    void vscode.workspace.applyEdit(edit);
+  }
 }
 
 function replaceExtension(filePath: string, newExt: string): string {

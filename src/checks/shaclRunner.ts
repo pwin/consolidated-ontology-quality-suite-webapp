@@ -33,10 +33,25 @@ const cachedValidators = new Map<string, import('shacl-engine').Validator>();
  * means a crash in one only costs that file's checks.
  *
  * `shacl-engine`'s SPARQL plugin pulls in a Comunica-lite query engine,
- * whose *module graph* costs several seconds to load on first import --
- * each file's `Validator` instance is cached at module scope so that cost
- * (and the shape-parsing cost) is paid once per file per session, not
- * once per check run.
+ * whose *module graph* costs real time to load on first import -- each
+ * file's `Validator` instance is cached at module scope so that cost (and
+ * the shape-parsing cost) is paid once per file per session, not once per
+ * check run.
+ *
+ * **Patched dependency, see `patches/shacl-engine+1.1.2.patch`**: caching
+ * the `Validator` alone didn't actually buy the above -- confirmed by
+ * timing real runs against `examples/tutorial/clinic.ttl` before and after
+ * (three consecutive warm runs: ~6.7s each, unpatched; ~1.1s each,
+ * patched). `shacl-engine`'s own `lib/sparql.js` constructs a brand new
+ * Comunica `QueryEngine` on *every* `sh:sparql` constraint/target
+ * evaluation (once per focus node, not once per validate() call) --
+ * Comunica's own docs recommend constructing one `QueryEngine` and reusing
+ * it across queries, which is exactly what the patch does (a module-scope
+ * singleton in `sparql.js`, no behavior change to which sources/bindings
+ * each query runs against). `npm install` reapplies this automatically via
+ * `postinstall: patch-package` -- if `shacl-engine` is ever upgraded past
+ * 1.1.2, re-verify this still applies (`npx patch-package shacl-engine`)
+ * or drop it if upstream fixes this directly.
  */
 export async function runShaclChecks(quads: Quad[], registry: Registry): Promise<ResultRow[]> {
   const dataFactory = (await import('@rdfjs/data-model')).default;
