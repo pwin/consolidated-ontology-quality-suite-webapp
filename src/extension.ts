@@ -1,3 +1,4 @@
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { parseTurtle, readOntologyDocument } from './rdf/parseDocument';
@@ -404,6 +405,36 @@ export function activate(context: vscode.ExtensionContext): void {
       try {
         await cliClient.runFullTriplify(csvDirPick[0].fsPath, queriesDirPick[0].fsPath, outDirPick[0].fsPath);
         void vscode.window.showInformationMessage(`Triplify complete: output written to ${outDirPick[0].fsPath}`);
+      } catch {
+        /* errors already surfaced via the CLI client's own error message / output channel */
+      }
+    }),
+
+    vscode.commands.registerCommand('ontologySuite.generateDocumentation', async () => {
+      const uri = activeRdfUri();
+      if (!uri) return;
+      const text = new TextDecoder('utf-8').decode(await vscode.workspace.fs.readFile(uri));
+      const parsed = await readOntologyDocument(uri.fsPath, text);
+      const dir = path.dirname(uri.fsPath);
+
+      // Auto-populated, no prompts for the common case: --ref reuses the same local-first
+      // import resolution every other command here already relies on (resolveImports.ts), so
+      // imported ontologies' terms get real labels/comments in the generated page instead of
+      // showing as bare IRIs; --instances is picked up if a conventionally-named file sits
+      // alongside the ontology (matching this project's other same-directory conventions, e.g.
+      // webviews/queryWorkbench.ts's ontology lookup).
+      const { resolvedFilePaths } = await resolveImports(uri.fsPath, parsed.quads, dir);
+      const instancesPath = path.join(dir, 'instances.ttl');
+      const hasInstances = uri.fsPath !== instancesPath && fs.existsSync(instancesPath);
+      const outDir = path.join(dir, 'out', 'docgen');
+
+      try {
+        const htmlPath = await vscode.window.withProgress(
+          { location: vscode.ProgressLocation.Notification, title: 'Ontology Suite: generating documentation…' },
+          () => cliClient.runDocgen(uri.fsPath, outDir, { instancesPath: hasInstances ? instancesPath : undefined, refPaths: resolvedFilePaths }),
+        );
+        const choice = await vscode.window.showInformationMessage(`Documentation generated: ${htmlPath}`, 'Open in Browser');
+        if (choice === 'Open in Browser') await vscode.env.openExternal(vscode.Uri.file(htmlPath));
       } catch {
         /* errors already surfaced via the CLI client's own error message / output channel */
       }

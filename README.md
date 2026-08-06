@@ -372,8 +372,11 @@ other format and opens the result — warns first if the target is lossy.
 | Ontology Suite: Infer Ontology + Query from CSV... | Draft an ontology + query from a raw CSV |
 | Ontology Suite: Run Deep Validation (Python CLI) | Optional full-OWL2-DL fallback |
 | Ontology Suite: Run Full Triplify (Python CLI / oxi-gen) | Production-scale triplification |
+| Ontology Suite: Generate Documentation (Python CLI) | HTML reference docs (classes/properties/diagrams) via `ontology-suite docgen` |
 | Ontology Suite: Convert / Save As Serialization... | Convert the active document to another format |
 | Ontology Suite: Run Ontology Script (.ontology.ts) | Build/extend an ontology from a TypeScript DSL script |
+| Ontology Suite: Sort Document (Alphabetically / By Type) | Reorder statements, comment-preserving |
+| Ontology Suite: Clean Document | Remove unused prefixes, then sort by type |
 
 Right-click actions in the Ontology Outline (Add Subclass, Add Sibling
 Class, Add Sub-property) aren't in the Command Palette — they need the
@@ -400,7 +403,7 @@ Two different mechanisms, for two different kinds of customization:
 | Setting | Default | Purpose |
 |---|---|---|
 | `ontologySuite.modellingGuidance` | `"gist"` | `"gist"` or `"off"` — advisory MDL-001/002/003 hints |
-| `ontologySuite.pythonCliPath` | `"ontology-suite"` | CLI executable for the optional deep-validation/docgen/version-diff fallback |
+| `ontologySuite.pythonCliPath` | `"ontology-suite"` | CLI executable for the optional deep-validation/docgen/version-diff fallback — see the [Appendix](#appendix-configuring-ontologysuite-settings) for how to set it and how to get a working CLI in the first place |
 | `ontologySuite.checksRegistryPath` | `""` | Point at your own registry.json/sparql/shapes checkout instead of the bundled copy — e.g. to add project-specific SPARQL/SHACL checks beyond what `class-rules.json` can express |
 | `ontologySuite.enableSparqlChecks` | `true` | Run the registry's SPARQL CONSTRUCT checks. Fast (~0.2s on this project's own fixtures) |
 | `ontologySuite.enableShaclChecks` | `true` | Run the registry's SHACL-SPARQL shapes. ~10x slower than the SPARQL checks (~1.1s vs ~0.1s, after the `shacl-engine` QueryEngine-reuse patch — see `patches/`) — turn off for a tighter edit/check loop on a large ontology, at the cost of missing SHACL-only findings |
@@ -420,6 +423,18 @@ Workspace-settings candidates if the whole team should see the same behavior (e.
 that doesn't use gist turning `modellingGuidance` to `"off"` in committed
 `.vscode/settings.json`, so nobody has to remember to do it locally).
 
+**If "Open Query Workbench" says "Open a .rq CONSTRUCT query file first" even though a `.rq`
+file is open**: another installed RDF/SPARQL extension is also claiming the `.rq` extension for
+its own language (confirmed concretely against `faubulous.mentor`, which registers a `sparql`
+language for both `.rq` and `.sparql`) — check the language-mode indicator in the status bar; if
+it doesn't say "SPARQL CONSTRUCT", VS Code resolved the conflict the other way. Every command
+here that touches `.rq` files gates on the exact `sparql-construct` languageId, so this isn't
+fixable from this extension's manifest alone — the fix is a `files.associations` entry, which
+this repo's own `.vscode/settings.json` already sets:
+```json
+"files.associations": { "*.rq": "sparql-construct", "*.sparql": "sparql-construct" }
+```
+
 ## Try it
 
 1. Open this folder in VS Code and press `F5` (runs `npm run compile` first,
@@ -430,7 +445,7 @@ that doesn't use gist turning `modellingGuidance` to `"off"` in committed
    coherent example ontology plus a real gist v11→v14.1 upstream-migration
    scenario.
 3. Alternatively, install the packaged extension directly:
-   `code --install-extension ontology-dev-suite-0.8.0.vsix` (build it with
+   `code --install-extension ontology-dev-suite-0.9.0.vsix` (build it with
    `npx @vscode/vsce package`).
 
 ## Testing
@@ -489,9 +504,128 @@ for validation that a WASM/JS engine can do locally.
 
 ## Roadmap
 
-Not yet built, tracked as deliberate follow-ups: docgen/version-diff
-command wiring, web extension host (vscode.dev) support, upstreaming a
-`--format json` report mode to `consolidated_ontology_suite`, a feasibility
-check on compiling `oxi-gen` itself to WASM, and the further-out
-differentiators (LLM-assisted authoring, synthesize-query-by-example, a
-live semantic-version status-bar badge, a reactive `.ontonb` notebook).
+Not yet built, tracked as deliberate follow-ups: version-diff command
+wiring (docgen itself is now wired, see Commands above), web extension
+host (vscode.dev) support, upstreaming a `--format json` report mode to
+`consolidated_ontology_suite`, a feasibility check on compiling `oxi-gen`
+itself to WASM, and the further-out differentiators (LLM-assisted
+authoring, synthesize-query-by-example, a live semantic-version
+status-bar badge, a reactive `.ontonb` notebook).
+
+## Appendix: Configuring `ontologySuite.*` settings
+
+The [Configuration](#configuration) section above covers *what* each setting is
+for and the User-vs-Workspace scoping decision; this covers the mechanics of
+actually setting one, and the practical detail behind each.
+
+### How to set any of them
+
+- **Settings UI** — `Ctrl+,`/`Cmd+,` (or Command Palette → "Preferences: Open
+  Settings (UI)"), search `ontologySuite`, and use the field directly (a
+  dropdown for `modellingGuidance`'s two-value enum, checkboxes for the
+  `enable*Checks` booleans, text fields for paths). The UI has a **User** /
+  **Workspace** tab at the top — which one you're editing determines where
+  the value is written.
+- **`settings.json` directly** — Command Palette → "Preferences: Open User
+  Settings (JSON)" (your machine, every workspace) or "Preferences: Open
+  Workspace Settings (JSON)" (this project only, writes to
+  `.vscode/settings.json`, which travels with the repo in version control if
+  committed — this project's own `.vscode/settings.json` already sets
+  `files.associations` for `.rq`/`.sparql`, see the Query Workbench
+  troubleshooting note above). Every entry is `"ontologySuite.<name>": <value>`,
+  e.g.:
+  ```json
+  {
+    "ontologySuite.modellingGuidance": "off",
+    "ontologySuite.enableShaclChecks": false,
+    "ontologySuite.pythonCliPath": "C:\\repos\\consolidated_ontology_suite\\.venv\\Scripts\\ontology-suite.exe"
+  }
+  ```
+- **Precedence**: Workspace overrides User for anyone opening that workspace, same as every other VS Code setting.
+
+### Setting-by-setting notes
+
+- **`pythonCliPath`** (default `"ontology-suite"`, a bare command name) —
+  used only by the three commands that shell out to the Python CLI (*Run
+  Deep Validation*, *Run Full Triplify*, *Generate Documentation*); every
+  other command here is in-process JS/WASM and ignores this entirely. It's
+  passed straight to Node's `child_process.spawn()` (`src/cli/ontologySuiteClient.ts`,
+  through a shell on Windows so `.exe`/`.cmd` PATH shims resolve normally), so:
+  - Leave it as the default if `ontology-suite` is already on your `PATH`
+    (typical right after `pip install -e .` from `consolidated_ontology_suite`
+    into whichever Python environment is currently active).
+  - Set it to a **full path** if the CLI lives in a specific virtualenv not
+    on your global `PATH`, e.g.
+    `"C:\\repos\\consolidated_ontology_suite\\.venv\\Scripts\\ontology-suite.exe"`
+    (Windows) or `"/path/to/venv/bin/ontology-suite"` (macOS/Linux).
+  - This setting alone doesn't get you a working CLI — a real Python
+    interpreter has to exist and `consolidated_ontology_suite` has to
+    actually be installed into it first. Worth checking directly: the
+    Windows Store's `python`/`python3` app-execution-alias stubs (which
+    exist by default on a fresh Windows install and only print an
+    "install from the Store" prompt) are easy to mistake for a real
+    interpreter being present when it isn't.
+- **`checksRegistryPath`** (default `""`, meaning "use the bundled copy") —
+  point at another `consolidated_ontology_suite` checkout's root (the
+  directory containing `registry.json`/`sparql/`/`shapes/`) to add
+  project-specific checks beyond what `class-rules.json` can express. A
+  relative path is resolved against the workspace root.
+- **`projectStandardsPath`** / **`projectRulesPath`** (defaults
+  `.ontology-suite/standards.json` / `.ontology-suite/class-rules.json`) —
+  workspace-relative paths; these two are the ones actually meant to be
+  committed to version control alongside the ontology, not set as personal
+  User settings (see [Project rules](#project-rules-minimum-required-content)).
+- **`modellingGuidance`** (`"gist"` | `"off"`) and the three
+  **`enable*Checks`** booleans are plain toggles, no path resolution
+  involved — see the [Configuration](#configuration) table above for what
+  each actually runs and its cost.
+- **`triplifyPreviewSampleSize`** (default `20`) — a plain number of CSV
+  rows; larger values make the Query Workbench's live preview slower to
+  recompute on every debounced edit, with diminishing returns past what's
+  needed to sanity-check the query's shape.
+
+### Setting up the Python CLI itself (`consolidated_ontology_suite`)
+
+`pythonCliPath` only does anything once a real Python environment with
+`consolidated_ontology_suite` actually installed exists. The project ships
+its own `pyproject.toml` (`[project.scripts] ontology-suite = "ontology_suite.cli:main"`)
+and a `uv.lock`, so [uv](https://docs.astral.sh/uv/) is the path of least
+resistance — it manages its own Python (no system interpreter required at
+all) and installs from the lock in one step:
+
+```sh
+cd consolidated_ontology_suite
+uv sync
+```
+
+This creates `.venv/` in that directory and installs the exact locked
+versions (30 packages, incl. `rdflib`/`pyshacl`/`owlready2`/`owlrl`/`pandas`/
+`matplotlib`). Verified directly while writing this doc — `uv sync` +
+`ontology-suite docgen --ontology .../clinic.ttl --instances .../instances.ttl
+--ref .../core.ttl --out-dir ...` produced a real 1,388-line
+`ontology-documentation.html` with 9 class diagrams, not a dry read of the
+source. Point `pythonCliPath` at the venv it creates:
+
+```json
+{ "ontologySuite.pythonCliPath": "C:\\repos\\consolidated_ontology_suite\\.venv\\Scripts\\ontology-suite.exe" }
+```
+(macOS/Linux: `.../consolidated_ontology_suite/.venv/bin/ontology-suite`.)
+
+**Without `uv`** — a plain `venv` + `pip` works the same way; a
+`requirements.txt` (`uv export --format requirements-txt --no-hashes`, kept
+alongside `pyproject.toml` in `consolidated_ontology_suite` for exactly this
+case) is the pinned-version equivalent of `pyproject.toml`'s dependency list,
+for anyone whose workflow expects one instead of `pip install -e .`:
+
+```sh
+cd consolidated_ontology_suite
+python -m venv .venv
+.venv\Scripts\activate          # macOS/Linux: source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+One gotcha this surfaced directly: a fresh Windows machine's `python`/`python3`
+on `PATH` may resolve to the Windows Store's app-execution-alias stub, which
+only prints an "install from the Store" prompt rather than running anything —
+easy to mistake for a real interpreter being present when it isn't. `uv sync`
+sidesteps this entirely since `uv` fetches and manages its own Python.

@@ -46,6 +46,26 @@ export class OntologySuiteClient {
     await this.exec(['triplify', '--csv-dir', csvDir, '--queries', queriesDir, '--out-dir', outDir]);
   }
 
+  /**
+   * Shells out to `ontology-suite docgen`: a human-readable HTML reference page (classes,
+   * properties, per-class diagrams) for one ontology. `refPaths` resolves external-term
+   * definitions -- callers pass resolveImports.ts's own `resolvedFilePaths` for this, so imported
+   * ontologies' terms get real labels/comments in the output instead of showing as bare IRIs.
+   */
+  async runDocgen(ontologyPath: string, outDir: string, options: { instancesPath?: string; refPaths?: string[] } = {}): Promise<string> {
+    const args = ['docgen', '--ontology', ontologyPath, '--out-dir', outDir];
+    if (options.instancesPath) args.push('--instances', options.instancesPath);
+    for (const ref of options.refPaths ?? []) args.push('--ref', ref);
+
+    await this.exec(args);
+
+    const htmlPath = path.join(outDir, 'ontology-documentation.html');
+    if (!fs.existsSync(htmlPath)) {
+      throw new Error('docgen ran but produced no ontology-documentation.html -- check the output channel.');
+    }
+    return htmlPath;
+  }
+
   private exec(args: string[]): Promise<void> {
     const cli = this.cliPath();
     this.output.show(true);
