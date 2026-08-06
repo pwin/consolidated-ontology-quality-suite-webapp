@@ -28,10 +28,11 @@ export async function resolveImports(
   entryFilePath: string,
   entryQuads: Quad[],
   searchDir: string,
-): Promise<{ mergedQuads: Quad[]; report: ImportResolution }> {
+): Promise<{ mergedQuads: Quad[]; report: ImportResolution; resolvedFilePaths: string[] }> {
   const candidates = await scanCandidates(searchDir);
   const merged: Quad[] = [...entryQuads];
   const resolved: string[] = [];
+  const resolvedFilePaths: string[] = [];
   const excluded: string[] = [];
   const seenFiles = new Set<string>([path.resolve(entryFilePath)]);
 
@@ -51,6 +52,7 @@ export async function resolveImports(
     }
     seenFiles.add(match.filePath);
     resolved.push(iri);
+    resolvedFilePaths.push(match.filePath);
     merged.push(...match.quads);
     for (const nested of declaredImportIris(match.quads)) {
       if (!visited.has(nested)) pending.add(nested);
@@ -60,6 +62,7 @@ export async function resolveImports(
   return {
     mergedQuads: merged,
     report: { resolved, unresolved: excluded, excluded: [], networkAllowed: false },
+    resolvedFilePaths,
   };
 }
 

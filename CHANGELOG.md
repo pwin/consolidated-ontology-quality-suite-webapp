@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.9.0
+
+### Generate Documentation, wired to the Python CLI's `docgen`
+
+New command, **Ontology Suite: Generate Documentation (Python CLI)** --
+closes out the "docgen/version-diff command wiring" item that had sat on
+the Roadmap since the original plan (version-diff is still unwired).
+Shells out to `ontology-suite docgen --ontology ... --out-dir ...`
+(confirmed against the actual CLI source in `consolidated_ontology_suite`,
+not assumed: exact flag names `--instances`/`--ref`/`--prefix`/`--template`,
+and the hard-coded output filename `ontology-documentation.html` traced
+through `pipeline.py::run_docgen_stage`), producing a real HTML reference
+page (classes, properties, per-class diagrams).
+
+No prompts for the common case -- `--ref` (which resolves external terms'
+labels/comments in the output, e.g. for an imported gist class) is
+auto-populated from `resolveImports.ts`'s own local-first import
+resolution, the exact same mechanism every other command here already
+uses; `--instances` is picked up automatically if a conventionally-named
+`instances.ttl` sits alongside the ontology (matching the same
+same-directory convention `webviews/queryWorkbench.ts`'s ontology lookup
+already uses). Output goes to `<ontology-dir>/out/docgen/`, with an "Open
+in Browser" action once it's done.
+
+`ontology/resolveImports.ts` now also returns `resolvedFilePaths` (the
+on-disk paths of every import it actually resolved) alongside its existing
+`mergedQuads`/`report` -- purely additive, no existing caller's destructured
+shape changes -- specifically so this command (and any future one) can
+reuse real import resolution instead of re-deriving file paths from
+scratch.
+
 ## 0.8.0
 
 ### Sort Document / Clean Document

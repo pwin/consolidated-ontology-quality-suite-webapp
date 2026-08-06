@@ -15,12 +15,13 @@ describe('resolveImports against examples/tutorial (clinic.ttl imports core.ttl)
   it('resolves the import and merges core.ttl\'s classes in', async () => {
     const clinicPath = path.join(dir, 'clinic.ttl');
     const clinicDoc = parseTurtle(clinicPath, fs.readFileSync(clinicPath, 'utf8'));
-    const { mergedQuads, report } = await resolveImports(clinicPath, clinicDoc.quads, dir);
+    const { mergedQuads, report, resolvedFilePaths } = await resolveImports(clinicPath, clinicDoc.quads, dir);
 
     expect(report.resolved).toEqual(['http://example.org/clinic/core']);
     expect(report.unresolved).toEqual([]);
     expect(mergedQuads.length).toBeGreaterThan(clinicDoc.quads.length);
     expect(mergedQuads.some((q) => q.subject.value === 'http://example.org/clinic#Animal' && q.predicate.value === RDF_TYPE && q.object.value === OWL_CLASS)).toBe(true);
+    expect(resolvedFilePaths).toEqual([path.join(dir, 'core.ttl')]);
   });
 });
 

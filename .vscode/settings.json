@@ -1,0 +1,12 @@
+{
+  // Some other RDF/SPARQL extensions (e.g. faubulous.mentor) also register a language for
+  // .rq/.sparql files. When more than one extension claims the same file extension, VS Code
+  // resolves the conflict non-deterministically -- this pins .rq files in this workspace to this
+  // extension's "sparql-construct" language (needed for the Query Workbench, sketch/preview, and
+  // conformance-check commands, which all gate on that exact languageId), regardless of which
+  // other RDF tooling is also installed.
+  "files.associations": {
+    "*.rq": "sparql-construct",
+    "*.sparql": "sparql-construct"
+  }
+}
