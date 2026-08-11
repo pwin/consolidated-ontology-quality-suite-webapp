@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import { Parser, Quad } from 'n3';
 import { localName, Registry } from './registryLoader';
+import { SH } from '../rdf/vocab';
 import type { ResultRow, Severity } from '../types';
 
 const SEVERITY_LABEL: Record<string, Severity> = {
@@ -9,7 +10,16 @@ const SEVERITY_LABEL: Record<string, Severity> = {
   'http://www.w3.org/ns/shacl#Info': 'Info',
 };
 
-const cachedValidators = new Map<string, import('shacl-engine').Validator>();
+const SH_SEVERITY = `${SH}severity`;
+const SH_SPARQL = `${SH}sparql`;
+
+interface CachedShapes {
+  validator: import('shacl-engine').Validator;
+  /** Shape IRI -> the severity that shape actually declares; see extractDeclaredSeverities. */
+  declaredSeverities: Map<string, Severity>;
+}
+
+const cachedValidators = new Map<string, CachedShapes>();
 
 /**
  * Runs the registry's shapes/*.ttl (advanced SHACL-SPARQL shapes named
@@ -60,20 +70,74 @@ export async function runShaclChecks(quads: Quad[], registry: Registry): Promise
 
   const rows: ResultRow[] = [];
   for (const file of registry.shaclFiles) {
-    const validator = await getOrBuildValidator(file, dataFactory, rdf);
-    if (!validator) continue;
+    const shapes = await getOrBuildValidator(file, dataFactory, rdf);
+    if (!shapes) continue;
     try {
-      const report = await validator.validate({ dataset: dataDataset });
-      rows.push(...toResultRows(report, registry));
+      const report = await shapes.validator.validate({ dataset: dataDataset });
+      rows.push(...toResultRows(report, registry, shapes.declaredSeverities));
     } catch (err) {
-       
+
       console.error(`[ontologySuite] shacl-engine failed validating against ${file} (see shaclRunner.ts's per-file-isolation comment):`, err);
     }
   }
   return rows;
 }
 
-function toResultRows(report: Awaited<ReturnType<import('shacl-engine').Validator['validate']>>, registry: Registry): ResultRow[] {
+/**
+ * Shape IRI -> the severity that shape actually declares.
+ *
+ * `shacl-engine` silently drops `sh:severity` declared *inside* a shape's
+ * `sh:sparql [ a sh:SPARQLConstraint ; ... ]` block, reporting every
+ * SPARQL-constraint result as `sh:Violation` regardless of what the shape says.
+ * Confirmed empirically against `resources/checks-registry/shapes` rather than
+ * assumed: `STR-003` declares `sh:Warning` and `STY-003` declares `sh:Info`, yet
+ * all 11 findings against `examples/ontology/domain.ttl` came back `Violation`,
+ * while the *same* checks' SPARQL-CONSTRUCT counterparts (sparqlRunner.ts, same
+ * registry) correctly reported 9 Info / 3 Warning / 2 Violation -- so the two
+ * engines contradicted each other on identical findings, and 8 rows reached the
+ * Problems panel as red errors that the registry says are Info/Warning. The
+ * identical limitation is documented upstream in
+ * `consolidated_ontology_suite_python` for pyshacl (its 0.3.3 review, finding 1),
+ * which resolved it by switching to a native engine -- not an option here, since
+ * `shacl-engine` is the only pure-JS engine implementing SHACL-SPARQL at all.
+ *
+ * Applied as an override in `toResultRows` rather than by rewriting the shapes,
+ * so `resources/checks-registry/` stays byte-identical to the copied-in upstream
+ * registry (verified: all 6 shapes files and all 39 shared SPARQL checks match
+ * upstream exactly). A severity declared directly on the shape -- the
+ * spec-proper location, which the engine already honors -- wins over one found
+ * inside its `sh:sparql` block, so this can only ever correct a dropped value,
+ * never contradict one the engine got right.
+ */
+function extractDeclaredSeverities(shapeQuads: Quad[]): Map<string, Severity> {
+  const severityBySubject = new Map<string, Severity>();
+  const sparqlNodeToShape = new Map<string, string>();
+  for (const q of shapeQuads) {
+    if (q.predicate.value === SH_SEVERITY && q.object.termType === 'NamedNode') {
+      const severity = SEVERITY_LABEL[q.object.value];
+      if (severity) severityBySubject.set(q.subject.value, severity);
+    } else if (q.predicate.value === SH_SPARQL) {
+      sparqlNodeToShape.set(q.object.value, q.subject.value);
+    }
+  }
+
+  const declared = new Map<string, Severity>();
+  for (const [sparqlNode, shapeIri] of sparqlNodeToShape) {
+    const severity = severityBySubject.get(sparqlNode);
+    if (severity) declared.set(shapeIri, severity);
+  }
+  // Spec-proper placement wins -- see the note above.
+  for (const [subject, severity] of severityBySubject) {
+    if (!sparqlNodeToShape.has(subject)) declared.set(subject, severity);
+  }
+  return declared;
+}
+
+function toResultRows(
+  report: Awaited<ReturnType<import('shacl-engine').Validator['validate']>>,
+  registry: Registry,
+  declaredSeverities: Map<string, Severity>,
+): ResultRow[] {
   const rows: ResultRow[] = [];
   for (const result of report.results) {
     const sourceShapeIri = result.shape?.ptr?.value;
@@ -81,12 +145,13 @@ function toResultRows(report: Awaited<ReturnType<import('shacl-engine').Validato
     const check = checkId ? registry.checksById.get(checkId) : undefined;
     const focus = result.focusNode?.value ?? '';
     const messageTerms = Array.isArray(result.message) ? result.message : result.message ? [result.message] : [];
+    const engineSeverity: Severity = result.severity?.value ? (SEVERITY_LABEL[result.severity.value] ?? 'Info') : 'Info';
 
     rows.push({
       checkId,
       category: check?.category ?? null,
       title: check?.title ?? null,
-      severity: result.severity?.value ? (SEVERITY_LABEL[result.severity.value] ?? 'Info') : 'Info',
+      severity: (sourceShapeIri ? declaredSeverities.get(sourceShapeIri) : undefined) ?? engineSeverity,
       focusNode: focus,
       path: result.path?.value ?? null,
       value: result.value?.value ?? focus,
@@ -102,7 +167,7 @@ async function getOrBuildValidator(
   file: string,
   dataFactory: typeof import('@rdfjs/data-model').default,
   rdf: typeof import('@zazuko/env-node').default,
-): Promise<import('shacl-engine').Validator | undefined> {
+): Promise<CachedShapes | undefined> {
   const cached = cachedValidators.get(file);
   if (cached) return cached;
 
@@ -110,7 +175,7 @@ async function getOrBuildValidator(
   try {
     shapeQuads = new Parser().parse(fs.readFileSync(file, 'utf8'));
   } catch (err) {
-     
+
     console.error(`[ontologySuite] failed to parse shapes file ${file}:`, err);
     return undefined;
   }
@@ -120,6 +185,7 @@ async function getOrBuildValidator(
   const { targetResolvers, validations } = await import('shacl-engine/sparql.js');
   const shapesDataset = rdf.dataset(shapeQuads as never);
   const validator = new Validator(shapesDataset, { factory: dataFactory, targetResolvers, validations });
-  cachedValidators.set(file, validator);
-  return validator;
+  const entry: CachedShapes = { validator, declaredSeverities: extractDeclaredSeverities(shapeQuads) };
+  cachedValidators.set(file, entry);
+  return entry;
 }

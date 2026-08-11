@@ -1,5 +1,56 @@
 # Changelog
 
+## 0.9.2
+
+### Fixed: SHACL findings all reported as `Violation`, ignoring the severity the shape declares
+
+Found by diffing this project against `consolidated_ontology_suite_python`
+(the further-developed successor of the `consolidated_ontology_suite` this
+extension's checks registry was copied from), whose own 0.3.3 external
+review flagged the identical problem in pyshacl. **The same bug was present
+here**, independently confirmed against real fixtures rather than assumed
+from the upstream report:
+
+`shacl-engine` silently drops `sh:severity` when it's declared *inside* a
+shape's `sh:sparql [ a sh:SPARQLConstraint ; ... ]` block -- which is where
+17 of the 19 severity declarations in `resources/checks-registry/shapes/`
+sit. Against `examples/ontology/domain.ttl`, all 11 SHACL findings came back
+`Violation`, even though `STR-003` declares `sh:Warning` and `STY-003`
+declares `sh:Info`. The *same* checks' SPARQL-CONSTRUCT counterparts
+(`sparqlRunner.ts`, same registry) correctly reported 9 Info / 3 Warning /
+2 Violation -- so the two engines contradicted each other on identical
+findings, and **8 rows survived the merge into the Problems panel as red
+errors that the registry says are Info/Warning**.
+
+Fixed in `checks/shaclRunner.ts` by reading each shape's declared
+`sh:severity` out of the shapes graph (`extractDeclaredSeverities`) and
+applying it to that shape's results. A severity declared directly on the
+shape -- the spec-proper location, which the engine already honors -- still
+wins, so this can only correct a dropped value, never override one the
+engine got right. Deliberately *not* fixed by rewriting the shapes, so
+`resources/checks-registry/` stays byte-identical to the copied-in upstream
+registry (verified during the same comparison: all 6 shapes files, all 39
+shared SPARQL checks, and every repair template match upstream exactly).
+
+Upstream resolved this by switching to a native SHACL engine; that isn't an
+option here, since `shacl-engine` remains the only pure-JS engine
+implementing SHACL-SPARQL at all. Pinned with a regression test asserting
+the actual per-check severities rather than just "some severity".
+
+### Fixed: raw NUL bytes in `checks/merge.ts` made it invisible to `grep`/ripgrep
+
+Incidental find while running the comparison above (not an upstream issue --
+`merge.py` uses a native tuple key and needs no separator). `mergeResultRows`
+correctly uses `U+0000` to join its dedup key's fields, since a JS `Map`
+needs a string key and NUL is the one separator that can't occur inside an
+IRI or literal value. But it was written as *raw NUL bytes* in the source,
+which made the whole file register as binary (silently skipped by ripgrep,
+so it never appeared in content searches) and render as plain spaces in most
+editors -- one "tidy up those odd spaces" edit away from silently
+reintroducing key collisions. Now written as `\u0000` escapes: byte-identical
+at runtime, file is text again, with a comment explaining why the separator
+is what it is.
+
 ## 0.9.0
 
 ### Generate Documentation, wired to the Python CLI's `docgen`
