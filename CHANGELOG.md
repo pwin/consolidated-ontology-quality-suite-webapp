@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.9.3
+
+### Fixed: three check queries -- two never fired at all, one raised false positives
+
+Ported from `consolidated_ontology_suite_python`, which fixed all three
+against rdflib/pyshacl. **Each was independently confirmed to reproduce
+under this project's own engine (Oxigraph) before porting** -- different
+engine, so the upstream report alone wasn't evidence -- and each is pinned
+with a regression test verified to fail against the old query and pass
+against the new one.
+
+- **`DAT-001`** (literal lexical form contradicts its declared datatype)
+  **never fired at all.** Against a fixture with `"not-a-date"^^xsd:date`,
+  `"twelve"^^xsd:integer` and `"maybe"^^xsd:boolean`, it returned zero
+  findings. Cause: a `UNION` whose branches contain only `FILTER`s and no
+  triple pattern of their own silently matches nothing. This is the *same*
+  failure mode this project already hit and documented while writing
+  `CNF-003`/`CNF-004` -- it was latent in `DAT-001` the whole time. Fixed by
+  collapsing the three branches into one `FILTER` with explicit `&&`/`||`.
+- **`EFF-002`** (excessive blank-node ratio) **never fired at all**, for the
+  same reason -- its `{ BIND(?s AS ?node) } UNION { BIND(?o AS ?node) ... }`
+  has no triple pattern in either branch. Confirmed against a graph that is
+  50% blank nodes (threshold is 20%): zero findings before, correct finding
+  after. Fixed by giving each branch a real triple pattern.
+- **`STY-004`** (`skos:prefLabel` disagrees with the URI local name) raised
+  **false positives on any hyphenated URI**. It stripped only underscores
+  from the URI side (`REPLACE(..., "_", "")`) while stripping *all*
+  non-alphanumerics from the label side, so `ex:has-name` +
+  `skos:prefLabel "has name"` compared `"has-name"` against `"hasname"` and
+  reported a mismatch that isn't one. Both sides now strip
+  `[^A-Za-z0-9]`.
+
+The two SHACL shapes carrying the same `DAT-001`/`EFF-002` logic
+(`shapes/data.ttl`, `shapes/efficiency.ttl`) were ported in step, keeping
+`resources/checks-registry/` byte-identical to upstream. Note this does not
+make those two checks reachable via the SHACL path here: both files still
+crash `shacl-engine`'s SPARQL plugin with `Tried to bind variable ?this in a
+GROUP BY operator`, a pre-existing limitation already documented in
+`shaclRunner.ts` and unchanged by this port (verified explicitly: 2 crashing
+shapes files before, 2 after). The SPARQL path now covers both checks
+correctly, which is what actually reaches the Problems panel.
+
+Upstream also documents a blank-node focus-node cross-join bug in its *own*
+native Rust SHACL engine (N focus nodes yielding N² findings). That engine
+isn't used here and the bug does not apply to `shacl-engine`.
+
 ## 0.9.2
 
 ### Fixed: SHACL findings all reported as `Violation`, ignoring the severity the shape declares

@@ -445,14 +445,14 @@ this repo's own `.vscode/settings.json` already sets:
    coherent example ontology plus a real gist v11→v14.1 upstream-migration
    scenario.
 3. Alternatively, install the packaged extension directly:
-   `code --install-extension ontology-dev-suite-0.9.2.vsix` (build it with
+   `code --install-extension ontology-dev-suite-0.9.3.vsix` (build it with
    `npx @vscode/vsce package`).
 
 ## Testing
 
 Two tiers, both real and both passing as of this writing:
 
-- **`npm test`** (Vitest) — 178 tests across 31 files covering every
+- **`npm test`** (Vitest) — 181 tests across 31 files covering every
   pure-logic module: parsing, all six serializations' round-trips
   (including the Manchester class-expression engine against real OWL2
   restrictions), import resolution (including the gist v11→v14.1 drift-

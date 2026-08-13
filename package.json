@@ -2,7 +2,7 @@
   "name": "ontology-dev-suite",
   "displayName": "Ontology Development Suite",
   "description": "Create ontologies (with imports) in Turtle, TriG, N-Triples, N-Quads, RDF/XML, or OWL Manchester Syntax, author TARQL-style CSV-to-RDF CONSTRUCT queries with live preview, and validate against a local SPARQL/SHACL/OWL2-RL checks engine.",
-  "version": "0.9.2",
+  "version": "0.9.3",
   "publisher": "pwin",
   "license": "MIT",
   "icon": "resources/icon.png",
