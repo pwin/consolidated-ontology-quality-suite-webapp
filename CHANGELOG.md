@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.10.1
+
+Packaging release. No functional change from 0.10.0 — this is the build
+actually published, and it carries everything since the last published
+release (0.9.2): the three check-query fixes in 0.9.3 and the SHACL engine
+replacement in 0.10.0, both of which were committed but never packaged as
+a GitHub release.
+
 ## 0.10.0
 
 ### SHACL validation moves to a Rust→WASM engine: ~220x faster, and two defects gone

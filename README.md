@@ -445,7 +445,7 @@ this repo's own `.vscode/settings.json` already sets:
    coherent example ontology plus a real gist v11→v14.1 upstream-migration
    scenario.
 3. Alternatively, install the packaged extension directly:
-   `code --install-extension ontology-dev-suite-0.10.0.vsix` (build it with
+   `code --install-extension ontology-dev-suite-0.10.1.vsix` (build it with
    `npx @vscode/vsce package`).
 
 ## Testing
