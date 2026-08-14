@@ -20,6 +20,15 @@ interface WasmResult {
   message: string;
 }
 
+/**
+ * `inference` selects what the engine materialises before validating:
+ * `"none"` (what this runner asks for), `"rdfs"`, or -- since engine 0.1.9 --
+ * `"rules"`/`"rules-iterated"` for SHACL-AF `sh:rule`. None of the registry's
+ * shapes declare rules, and inference is the reasoner tier's job here
+ * (checks/reasoningRunner.ts), so this deliberately stays at `"none"`: a
+ * SHACL finding should be about what the document says, not about what a
+ * second inference pass added underneath it.
+ */
 interface WasmValidator {
   validateTurtle(text: string, base?: string | null, inference?: string | null): { results: WasmResult[] };
 }

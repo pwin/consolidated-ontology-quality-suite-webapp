@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.10.3
+
+Updates the SHACL engine to `shacl-wasm-node` **0.1.9** (from 0.1.7), which
+adds SHACL-AF rules (`sh:rule`, `sh:condition`, `sh:order`,
+`sh:deactivated`) and fixes `$this` substitution in CONSTRUCT-based rules —
+it previously fell through, so a SPARQL rule ran for every node in the graph
+rather than for its focus node.
+
+Neither affects this extension today: the change to the WASM API is purely
+additive (`inference` gains `"rules"`/`"rules-iterated"` alongside `"none"`
+and `"rdfs"`), the rules fix is in the rule path rather than the `sh:select`
+constraint path the registry's shapes use, and this runner asks for
+`"none"` deliberately — inference is the reasoner tier's job here, and a
+SHACL finding should be about what the document says rather than about what
+a second pass added underneath it.
+
+Verified rather than assumed: findings were captured from both
+`examples/ontology/domain.ttl` (11) and `examples/tutorial/clinic.ttl` (25)
+under 0.1.7, then re-captured under 0.1.9 and compared per-finding on
+shape/focus node/path/severity. Byte-identical, no crashes either way.
+
 ## 0.10.2
 
 **The SHACL engine is now the `shacl-wasm-node` npm package (0.1.7)** rather
