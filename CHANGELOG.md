@@ -1,10 +1,6 @@
 # Changelog
 
-## 0.10.1
-
-The build actually published. It carries everything since the last published
-release (0.9.2): the three check-query fixes in 0.9.3 and the SHACL engine
-replacement in 0.10.0, neither of which was ever packaged as a release.
+## 0.10.2
 
 **The SHACL engine is now the `shacl-wasm-node` npm package (0.1.7)** rather
 than a copy vendored into `resources/shacl-wasm/`, since it has been
@@ -26,6 +22,17 @@ notice to travel with a redistribution, and a vsix redistributes them. The
 
 Net effect on the package: 36.2 MB / 10,646 files at 0.9.3 → **18.8 MB / 567
 files**.
+
+## 0.10.1
+
+The first packaged release since 0.9.2, carrying the three check-query fixes
+from 0.9.3 and the SHACL engine replacement from 0.10.0 — both committed but
+never released at the time. No changes of its own.
+
+Superseded by 0.10.2 for publishing purposes: 0.10.1 shipped before the
+Marketplace readiness work, so its `.vsix` still carries `private: true` and
+the oversized icon. It installs fine from a file; it cannot be published to
+the Marketplace.
 
 ## 0.10.0
 

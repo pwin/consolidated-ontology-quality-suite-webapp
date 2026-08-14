@@ -446,7 +446,7 @@ this repo's own `.vscode/settings.json` already sets:
 3. Alternatively, install a packaged build directly — grab the `.vsix` from
    the [latest release](https://github.com/pwin/consolidated-ontology-quality-suite-webapp/releases/latest),
    or build one yourself with `npx @vscode/vsce package`:
-   `code --install-extension ontology-dev-suite-0.10.1.vsix`
+   `code --install-extension ontology-dev-suite-0.10.2.vsix`
 
 ## Publishing to the Marketplace
 
@@ -465,7 +465,7 @@ live in the repo:
    rebuilding:
    ```sh
    npx @vscode/vsce login pwin
-   npx @vscode/vsce publish --packagePath ontology-dev-suite-0.10.1.vsix
+   npx @vscode/vsce publish --packagePath ontology-dev-suite-0.10.2.vsix
    ```
 
 `engines.vscode` is currently `^1.125.0`, so the Marketplace will only offer
