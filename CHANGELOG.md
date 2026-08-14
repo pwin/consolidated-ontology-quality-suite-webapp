@@ -1,5 +1,165 @@
 # Changelog
 
+## 0.10.3
+
+Updates the SHACL engine to `shacl-wasm-node` **0.1.9** (from 0.1.7), which
+adds SHACL-AF rules (`sh:rule`, `sh:condition`, `sh:order`,
+`sh:deactivated`) and fixes `$this` substitution in CONSTRUCT-based rules —
+it previously fell through, so a SPARQL rule ran for every node in the graph
+rather than for its focus node.
+
+Neither affects this extension today: the change to the WASM API is purely
+additive (`inference` gains `"rules"`/`"rules-iterated"` alongside `"none"`
+and `"rdfs"`), the rules fix is in the rule path rather than the `sh:select`
+constraint path the registry's shapes use, and this runner asks for
+`"none"` deliberately — inference is the reasoner tier's job here, and a
+SHACL finding should be about what the document says rather than about what
+a second pass added underneath it.
+
+Verified rather than assumed: findings were captured from both
+`examples/ontology/domain.ttl` (11) and `examples/tutorial/clinic.ttl` (25)
+under 0.1.7, then re-captured under 0.1.9 and compared per-finding on
+shape/focus node/path/severity. Byte-identical, no crashes either way.
+
+## 0.10.2
+
+**The SHACL engine is now the `shacl-wasm-node` npm package (0.1.7)** rather
+than a copy vendored into `resources/shacl-wasm/`, since it has been
+published. Same engine, resolved from `node_modules` like every other WASM
+dependency here — so `shaclRunner.ts` no longer threads an extension path
+through to `createRequire` an absolute path, and 3.1 MB of binary leaves the
+repo. `runShaclChecks(quads, registry)` is back to two arguments.
+
+**Marketplace readiness**: removed `private: true` (which `vsce` refuses to
+publish past), resized the icon from 1024×1024/2.5 MB to the 128×128 the
+Marketplace actually displays, and added keywords, `homepage`/`bugs` and a
+gallery banner. See the README's new "Publishing to the Marketplace" section.
+
+**Dependency licences now ship.** `.vscodeignore` had been stripping
+`node_modules/**/LICENSE*` from the vsix. MIT and Apache-2.0 — which is what
+nearly every dependency here is — both require the licence and copyright
+notice to travel with a redistribution, and a vsix redistributes them. The
+245 licence files cost ~1.3 MB against a ~19 MB package.
+
+Net effect on the package: 36.2 MB / 10,646 files at 0.9.3 → **18.8 MB / 567
+files**.
+
+## 0.10.1
+
+The first packaged release since 0.9.2, carrying the three check-query fixes
+from 0.9.3 and the SHACL engine replacement from 0.10.0 — both committed but
+never released at the time. No changes of its own.
+
+Superseded by 0.10.2 for publishing purposes: 0.10.1 shipped before the
+Marketplace readiness work, so its `.vsix` still carries `private: true` and
+the oversized icon. It installs fine from a file; it cannot be published to
+the Marketplace.
+
+## 0.10.0
+
+### SHACL validation moves to a Rust→WASM engine: ~220x faster, and two defects gone
+
+SHACL-SPARQL validation now runs on **`shacl-wasm`**, a WebAssembly build of
+the native Rust engine at https://github.com/pwin/SHACL_Engine (v0.1.6),
+vendored into `resources/shacl-wasm/`. It replaces `shacl-engine`, the
+pure-JS engine used through 0.9.3.
+
+Measured on the extension's own workload — all six registry shapes files
+against `examples/ontology/domain.ttl`:
+
+| | `shacl-engine` | `shacl-wasm` 0.1.6 |
+|---|---|---|
+| time | 71,237 ms | **324 ms** |
+| findings | 11 | 11 (identical) |
+| severities | `{Violation:2, Warning:1, Info:8}` | identical |
+| shapes files that crashed | 2 | **0** |
+
+Two long-standing defects go with it, both previously documented in
+`shaclRunner.ts` as engine limitations rather than things we could fix:
+
+- **`shapes/data.ttl` and `shapes/efficiency.ttl` crashed** with `Tried to
+  bind variable ?this in a GROUP BY operator`, losing every check in both
+  files — so `DAT-001` and `EFF-002` could never fire through the SHACL path
+  at all, however the shapes were written. (0.9.3 fixed the *SPARQL*
+  formulations of those two checks; this fixes the SHACL half.) All six
+  files now compile and run.
+- **`sh:severity` declared inside an `sh:sparql` block was dropped**,
+  collapsing everything to `sh:Violation`. 0.9.2 worked around that by
+  re-reading the declared severity out of the shapes graph in
+  `shaclRunner.ts`; that workaround (`extractDeclaredSeverities`) is
+  **deleted** — the engine reports the declared severity itself. The
+  regression test that pinned the workaround now tests the engine.
+
+`enableShaclChecks` stays, but its rationale is inverted: it existed
+because SHACL was the slow tier worth turning off during a tight edit/check
+loop, and at ~0.3s it no longer is.
+
+### Dependencies removed
+
+`shacl-engine`, `@zazuko/env-node`, `@rdfjs/data-model`, `patch-package`,
+the `patches/shacl-engine+1.1.2.patch` QueryEngine-reuse patch (0.9.x), the
+`postinstall` hook that applied it, and the `@comunica/query-sparql-rdfjs-lite`
+version override are all gone — that whole Comunica-lite dependency tree
+came in solely for SHACL. The three RDF/JS shims in `vendor-shims.d.ts` go
+with them.
+
+### Notes
+
+`runShaclChecks` is now **synchronous** and takes the extension path (to
+locate the vendored module), and hands the data graph to the engine as
+N-Triples so nothing depends on what prefixes a merged graph happens to
+carry. Its `ResultRow` output shape is unchanged, so the merge, diagnostics
+and Quick Fix paths are untouched.
+
+Side effect worth noting: `shaclRunner.test.ts` used to be the suite's
+flaky test, timing out at 30s under parallel load. It now runs in ~2s.
+
+## 0.9.3
+
+### Fixed: three check queries -- two never fired at all, one raised false positives
+
+Ported from `consolidated_ontology_suite_python`, which fixed all three
+against rdflib/pyshacl. **Each was independently confirmed to reproduce
+under this project's own engine (Oxigraph) before porting** -- different
+engine, so the upstream report alone wasn't evidence -- and each is pinned
+with a regression test verified to fail against the old query and pass
+against the new one.
+
+- **`DAT-001`** (literal lexical form contradicts its declared datatype)
+  **never fired at all.** Against a fixture with `"not-a-date"^^xsd:date`,
+  `"twelve"^^xsd:integer` and `"maybe"^^xsd:boolean`, it returned zero
+  findings. Cause: a `UNION` whose branches contain only `FILTER`s and no
+  triple pattern of their own silently matches nothing. This is the *same*
+  failure mode this project already hit and documented while writing
+  `CNF-003`/`CNF-004` -- it was latent in `DAT-001` the whole time. Fixed by
+  collapsing the three branches into one `FILTER` with explicit `&&`/`||`.
+- **`EFF-002`** (excessive blank-node ratio) **never fired at all**, for the
+  same reason -- its `{ BIND(?s AS ?node) } UNION { BIND(?o AS ?node) ... }`
+  has no triple pattern in either branch. Confirmed against a graph that is
+  50% blank nodes (threshold is 20%): zero findings before, correct finding
+  after. Fixed by giving each branch a real triple pattern.
+- **`STY-004`** (`skos:prefLabel` disagrees with the URI local name) raised
+  **false positives on any hyphenated URI**. It stripped only underscores
+  from the URI side (`REPLACE(..., "_", "")`) while stripping *all*
+  non-alphanumerics from the label side, so `ex:has-name` +
+  `skos:prefLabel "has name"` compared `"has-name"` against `"hasname"` and
+  reported a mismatch that isn't one. Both sides now strip
+  `[^A-Za-z0-9]`.
+
+The two SHACL shapes carrying the same `DAT-001`/`EFF-002` logic
+(`shapes/data.ttl`, `shapes/efficiency.ttl`) were ported in step, keeping
+`resources/checks-registry/` byte-identical to upstream. Note this does not
+make those two checks reachable via the SHACL path here: both files still
+crash `shacl-engine`'s SPARQL plugin with `Tried to bind variable ?this in a
+GROUP BY operator`, a pre-existing limitation already documented in
+`shaclRunner.ts` and unchanged by this port (verified explicitly: 2 crashing
+shapes files before, 2 after). The SPARQL path now covers both checks
+correctly, which is what actually reaches the Problems panel.
+
+Upstream also documents a blank-node focus-node cross-join bug in its *own*
+native Rust SHACL engine (N focus nodes yielding N² findings). That engine
+isn't used here and the bug does not apply to `shacl-engine`.
+
 ## 0.9.2
 
 ### Fixed: SHACL findings all reported as `Violation`, ignoring the severity the shape declares

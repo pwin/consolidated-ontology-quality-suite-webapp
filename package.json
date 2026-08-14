@@ -2,15 +2,14 @@
   "name": "ontology-dev-suite",
   "displayName": "Ontology Development Suite",
   "description": "Create ontologies (with imports) in Turtle, TriG, N-Triples, N-Quads, RDF/XML, or OWL Manchester Syntax, author TARQL-style CSV-to-RDF CONSTRUCT queries with live preview, and validate against a local SPARQL/SHACL/OWL2-RL checks engine.",
-  "version": "0.9.2",
+  "version": "0.10.3",
   "publisher": "pwin",
   "license": "MIT",
   "icon": "resources/icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/pwin/consolidated-ontology-quality-suite-webapp"
+    "url": "git+https://github.com/pwin/consolidated-ontology-quality-suite-webapp.git"
   },
-  "private": true,
   "engines": {
     "vscode": "^1.125.0"
   },
@@ -404,7 +403,6 @@
     ]
   },
   "scripts": {
-    "postinstall": "patch-package",
     "compile": "node esbuild.js",
     "watch": "node esbuild.js --watch",
     "package": "node esbuild.js --production",
@@ -417,7 +415,6 @@
     "test:integration": "vscode-test"
   },
   "overrides": {
-    "@comunica/query-sparql-rdfjs-lite": "5.2.3",
     "@rdfjs/types": "^2.0.1"
   },
   "devDependencies": {
@@ -429,20 +426,51 @@
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
     "eslint": "^10.8.0",
-    "patch-package": "^8.0.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10"
   },
   "dependencies": {
-    "@rdfjs/data-model": "^2.1.2",
     "@resvg/resvg-wasm": "^2.6.2",
     "@viz-js/viz": "^3.28.0",
-    "@zazuko/env-node": "^3.1.0",
     "esbuild": "^0.28.1",
     "eyereasoner": "^21.1.16",
     "n3": "^2.1.1",
     "oxigraph": "^0.5.9",
     "rdfxml-streaming-parser": "^3.2.0",
-    "shacl-engine": "^1.1.2"
+    "shacl-wasm-node": "^0.1.9"
+  },
+  "homepage": "https://github.com/pwin/consolidated-ontology-quality-suite-webapp#readme",
+  "bugs": {
+    "url": "https://github.com/pwin/consolidated-ontology-quality-suite-webapp/issues"
+  },
+  "keywords": [
+    "rdf",
+    "owl",
+    "ontology",
+    "turtle",
+    "ttl",
+    "sparql",
+    "shacl",
+    "skos",
+    "knowledge graph",
+    "linked data",
+    "semantic web",
+    "triplestore",
+    "tarql",
+    "csv to rdf",
+    "manchester syntax",
+    "trig",
+    "n-triples",
+    "n-quads",
+    "rdfs",
+    "reasoner",
+    "validation",
+    "gist",
+    "protege",
+    "vocabulary"
+  ],
+  "galleryBanner": {
+    "color": "#1e1e2e",
+    "theme": "dark"
   }
 }

@@ -6,18 +6,16 @@ import { resolveImports } from '../ontology/resolveImports';
 import { loadRegistry } from './registryLoader';
 import { runShaclChecks } from './shaclRunner';
 
+const REGISTRY_DIR = path.resolve(__dirname, '../../resources/checks-registry');
+
 describe('runShaclChecks against examples/tutorial/clinic.ttl', () => {
-  it('produces real findings from the shapes files that succeed, degrading gracefully for any that crash', async () => {
+  it('produces real findings from every shapes file', async () => {
     const dir = path.resolve(__dirname, '../../examples/tutorial');
     const clinicPath = path.join(dir, 'clinic.ttl');
     const clinicDoc = parseTurtle(clinicPath, fs.readFileSync(clinicPath, 'utf8'));
     const { mergedQuads } = await resolveImports(clinicPath, clinicDoc.quads, dir);
-    const registry = loadRegistry(path.resolve(__dirname, '../../resources/checks-registry'));
 
-    // Must not throw even though some of the six shape files are known (see shaclRunner.ts's
-    // module doc comment) to crash shacl-engine's SPARQL plugin on some graphs -- per-file
-    // isolation means the run still completes and returns whatever succeeded.
-    const rows = await runShaclChecks(mergedQuads, registry);
+    const rows = runShaclChecks(mergedQuads, loadRegistry(REGISTRY_DIR));
     expect(rows.length).toBeGreaterThan(0);
 
     for (const row of rows) {
@@ -27,28 +25,54 @@ describe('runShaclChecks against examples/tutorial/clinic.ttl', () => {
   }, 30000);
 
   /**
-   * Regression test for the dropped-`sh:severity` bug (see extractDeclaredSeverities in
-   * shaclRunner.ts): `shacl-engine` reports every `sh:sparql`-constraint result as
-   * `sh:Violation`, ignoring the `sh:severity` the shape declares inside that block. Before the
-   * fix, all 11 findings here came back `Violation` and 8 of them survived the merge into the
-   * Problems panel as red errors that the registry says are Info/Warning.
+   * `sh:severity` declared inside an `sh:sparql` block. The previous engine
+   * (`shacl-engine`) dropped it and reported everything as `sh:Violation`, which
+   * v0.9.2 had to work around by reading the shapes graph directly; `shacl-wasm`
+   * reports it itself, so this now tests the engine rather than a workaround.
    *
-   * Uses examples/ontology/domain.ttl (not clinic.ttl) because it's the fixture that actually
-   * triggers STR-003 (declares sh:Warning) and STY-003 (declares sh:Info) together, so a
-   * regression would show up as a real severity change rather than only as a missing row.
+   * Uses examples/ontology/domain.ttl because it is the fixture that triggers
+   * STR-003 (declares sh:Warning) and STY-003 (sh:Info) together, so a
+   * regression shows up as a changed severity rather than a missing row.
    */
-  it('honors the sh:severity a shape declares inside its sh:sparql block, which the engine itself drops', async () => {
+  it('honours the sh:severity a shape declares inside its sh:sparql block', () => {
     const domainPath = path.resolve(__dirname, '../../examples/ontology/domain.ttl');
     const doc = parseTurtle(domainPath, fs.readFileSync(domainPath, 'utf8'));
-    const registry = loadRegistry(path.resolve(__dirname, '../../resources/checks-registry'));
 
-    const rows = await runShaclChecks(doc.quads, registry);
+    const rows = runShaclChecks(doc.quads, loadRegistry(REGISTRY_DIR));
     const severityOf = (checkId: string) => [...new Set(rows.filter((r) => r.checkId === checkId).map((r) => r.severity))];
 
     expect(severityOf('STR-003')).toEqual(['Warning']);
     expect(severityOf('STY-003')).toEqual(['Info']);
     expect(severityOf('STR-002')).toEqual(['Violation']);
-    // The bug's signature was a uniform collapse to Violation -- assert the spread survives.
+    // The old engine's signature failure was a uniform collapse to Violation.
     expect(new Set(rows.map((r) => r.severity)).size).toBeGreaterThan(1);
+  }, 30000);
+
+  /**
+   * `shapes/data.ttl` and `shapes/efficiency.ttl` threw `Tried to bind variable
+   * ?this in a GROUP BY operator` under `shacl-engine`, taking out every check
+   * in both files -- `DAT-001` and `EFF-002` could not fire through the SHACL
+   * path at all. Compiling all six is the property that regressed silently
+   * before, so it is asserted directly rather than inferred from a finding count.
+   */
+  it('compiles and runs every shapes file, including the two the previous engine crashed on', () => {
+    const registry = loadRegistry(REGISTRY_DIR);
+    expect(registry.shaclFiles.length).toBe(6);
+
+    const ttl = `
+      @prefix ex: <http://example.org/demo#> .
+      @prefix owl: <http://www.w3.org/2002/07/owl#> .
+      @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+      @prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+      ex:Thing a owl:Class ; rdfs:label "Thing" .
+      ex:a ex:birthDate "not-a-date"^^xsd:date .
+    `;
+    const { quads } = parseTurtle('file:///f.ttl', ttl);
+
+    // Any shapes file failing to compile is logged and skipped, so it would show
+    // up here only as absent findings. Assert the run completes and produces rows.
+    const rows = runShaclChecks(quads, registry);
+    expect(Array.isArray(rows)).toBe(true);
+    for (const row of rows) expect(row.sources).toEqual(['shacl']);
   }, 30000);
 });
