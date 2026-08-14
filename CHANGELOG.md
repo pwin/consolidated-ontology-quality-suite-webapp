@@ -2,11 +2,30 @@
 
 ## 0.10.1
 
-Packaging release. No functional change from 0.10.0 — this is the build
-actually published, and it carries everything since the last published
+The build actually published. It carries everything since the last published
 release (0.9.2): the three check-query fixes in 0.9.3 and the SHACL engine
-replacement in 0.10.0, both of which were committed but never packaged as
-a GitHub release.
+replacement in 0.10.0, neither of which was ever packaged as a release.
+
+**The SHACL engine is now the `shacl-wasm-node` npm package (0.1.7)** rather
+than a copy vendored into `resources/shacl-wasm/`, since it has been
+published. Same engine, resolved from `node_modules` like every other WASM
+dependency here — so `shaclRunner.ts` no longer threads an extension path
+through to `createRequire` an absolute path, and 3.1 MB of binary leaves the
+repo. `runShaclChecks(quads, registry)` is back to two arguments.
+
+**Marketplace readiness**: removed `private: true` (which `vsce` refuses to
+publish past), resized the icon from 1024×1024/2.5 MB to the 128×128 the
+Marketplace actually displays, and added keywords, `homepage`/`bugs` and a
+gallery banner. See the README's new "Publishing to the Marketplace" section.
+
+**Dependency licences now ship.** `.vscodeignore` had been stripping
+`node_modules/**/LICENSE*` from the vsix. MIT and Apache-2.0 — which is what
+nearly every dependency here is — both require the licence and copyright
+notice to travel with a redistribution, and a vsix redistributes them. The
+245 licence files cost ~1.3 MB against a ~19 MB package.
+
+Net effect on the package: 36.2 MB / 10,646 files at 0.9.3 → **18.8 MB / 567
+files**.
 
 ## 0.10.0
 

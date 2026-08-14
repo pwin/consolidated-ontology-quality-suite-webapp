@@ -1,6 +1,4 @@
 import * as fs from 'node:fs';
-import * as path from 'node:path';
-import { createRequire } from 'node:module';
 import { Quad, Writer } from 'n3';
 import { localName, Registry } from './registryLoader';
 import type { ResultRow, Severity } from '../types';
@@ -32,7 +30,6 @@ interface WasmModule {
 
 /** Shapes-file path -> its compiled Validator. Compiling is the expensive half; the shapes never change within a session. */
 const cachedValidators = new Map<string, WasmValidator>();
-let cachedModule: WasmModule | undefined;
 
 // The data graph is handed over as N-Triples rather than Turtle: the engine
 // parses either, but N-Triples needs no prefix table, so nothing here depends on
@@ -41,10 +38,10 @@ const DATA_BASE = 'http://ontology-dev-suite.local/data/';
 
 /**
  * Runs the registry's shapes/*.ttl (SHACL-SPARQL shapes named `oq:<CHECK-ID>`,
- * mirroring consolidated_ontology_suite's own runner) via **`shacl-wasm`** -- a
- * WebAssembly build of the native Rust SHACL engine
- * (https://github.com/pwin/SHACL_Engine), vendored into
- * `resources/shacl-wasm/`.
+ * mirroring consolidated_ontology_suite's own runner) via
+ * **`shacl-wasm-node`** -- a WebAssembly build of the native Rust SHACL engine
+ * (https://github.com/pwin/SHACL_Engine). It is the CommonJS build of the pair
+ * that engine publishes; `shacl-wasm` is the ESM one, for bundlers.
  *
  * **Replaces `shacl-engine`** (the pure-JS engine used through v0.9.3), which
  * had two defects this engine does not, both confirmed against these exact
@@ -67,7 +64,7 @@ const DATA_BASE = 'http://ontology-dev-suite.local/data/';
  * Per-file isolation is kept: a shapes file that fails to compile costs only its
  * own checks, not the whole run.
  */
-export function runShaclChecks(quads: Quad[], registry: Registry, extensionPath: string): ResultRow[] {
+export function runShaclChecks(quads: Quad[], registry: Registry): ResultRow[] {
   let dataText: string;
   try {
     dataText = toNTriples(quads);
@@ -78,7 +75,7 @@ export function runShaclChecks(quads: Quad[], registry: Registry, extensionPath:
 
   const rows: ResultRow[] = [];
   for (const file of registry.shaclFiles) {
-    const validator = getOrBuildValidator(file, extensionPath);
+    const validator = getOrBuildValidator(file);
     if (!validator) continue;
     try {
       const report = validator.validateTurtle(dataText, DATA_BASE, 'none');
@@ -116,7 +113,7 @@ function toResultRows(results: WasmResult[], registry: Registry): ResultRow[] {
   return rows;
 }
 
-function getOrBuildValidator(file: string, extensionPath: string): WasmValidator | undefined {
+function getOrBuildValidator(file: string): WasmValidator | undefined {
   const cached = cachedValidators.get(file);
   if (cached) return cached;
 
@@ -130,9 +127,13 @@ function getOrBuildValidator(file: string, extensionPath: string): WasmValidator
 
   let mod: WasmModule;
   try {
-    mod = loadModule(extensionPath);
+    // Imported lazily, and left as a real runtime `require` by esbuild's
+    // `packages: 'external'` -- its wasm-bindgen shim reads the .wasm from its
+    // own package directory, which bundling would break. Same arrangement as
+    // oxigraph and eyereasoner.
+    mod = require('shacl-wasm-node') as WasmModule;
   } catch (err) {
-    console.error('[ontologySuite] could not load the shacl-wasm module; SHACL checks are unavailable:', err);
+    console.error('[ontologySuite] could not load shacl-wasm-node; SHACL checks are unavailable:', err);
     return undefined;
   }
 
@@ -144,19 +145,6 @@ function getOrBuildValidator(file: string, extensionPath: string): WasmValidator
     console.error(`[ontologySuite] failed to compile shapes file ${file}:`, err);
     return undefined;
   }
-}
-
-function loadModule(extensionPath: string): WasmModule {
-  if (cachedModule) return cachedModule;
-  // Loaded by absolute path at runtime, not imported: the module is vendored
-  // under resources/ rather than installed into node_modules, and its
-  // wasm-bindgen shim reads the .wasm from its own directory -- bundling it
-  // into dist/extension.js would break that. `createRequire` rather than a bare
-  // `require` so this resolves the same way whether the bundle is emitted as
-  // CJS or ESM, and without the direct-`eval` esbuild warns about.
-  const entry = path.join(extensionPath, 'resources', 'shacl-wasm', 'shacl_wasm.js');
-  cachedModule = createRequire(__filename)(entry) as WasmModule;
-  return cachedModule;
 }
 
 /**

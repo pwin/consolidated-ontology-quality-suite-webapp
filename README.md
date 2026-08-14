@@ -405,7 +405,7 @@ Two different mechanisms, for two different kinds of customization:
 | `ontologySuite.pythonCliPath` | `"ontology-suite"` | CLI executable for the optional deep-validation/docgen/version-diff fallback — see the [Appendix](#appendix-configuring-ontologysuite-settings) for how to set it and how to get a working CLI in the first place |
 | `ontologySuite.checksRegistryPath` | `""` | Point at your own registry.json/sparql/shapes checkout instead of the bundled copy — e.g. to add project-specific SPARQL/SHACL checks beyond what `class-rules.json` can express |
 | `ontologySuite.enableSparqlChecks` | `true` | Run the registry's SPARQL CONSTRUCT checks. Fast (~0.2s on this project's own fixtures) |
-| `ontologySuite.enableShaclChecks` | `true` | Run the registry's SHACL-SPARQL shapes (via the vendored `shacl-wasm` engine). Fast since 0.10.0 — ~0.3s for all six shapes files where the previous `shacl-engine` took ~71s — so there is rarely a reason to turn it off now |
+| `ontologySuite.enableShaclChecks` | `true` | Run the registry's SHACL-SPARQL shapes (via `shacl-wasm-node`). Fast since 0.10.0 — ~0.3s for all six shapes files where the previous `shacl-engine` took ~71s — so there is rarely a reason to turn it off now |
 | `ontologySuite.enableVocabularyChecks` | `true` | Run the closed-world vocabulary check (`VOC-001`) — flags used-but-undeclared class/property IRIs (typos, hallucinated terms) within namespaces the graph has closed-world knowledge of |
 | `ontologySuite.triplifyPreviewSampleSize` | `20` | CSV rows sampled for the live triplify preview |
 | `ontologySuite.projectStandardsPath` | `.ontology-suite/standards.json` | Project values (category class, language tag, versioning, policy) that complete Quick Fix repairs |
@@ -522,12 +522,10 @@ its paired CSV until this was caught by a test).
 
 `esbuild.js` bundles only this extension's own code; `node_modules` ships
 as real files (`packages: 'external'` in the esbuild config) because
-Oxigraph, `eyereasoner` (EYE/swipl-wasm) and `@viz-js/viz` all load
-WASM/native assets from paths relative to their own package directory,
-which bundling would break. The SHACL engine ships the same way but from
-`resources/shacl-wasm/` rather than `node_modules`, being vendored from a
-sibling repo rather than installed from npm. That
-makes the packaged `.vsix` large (~28 MB compressed) for a VS Code
+Oxigraph, `eyereasoner` (EYE/swipl-wasm), `shacl-wasm-node` and
+`@viz-js/viz` all load WASM/native assets from paths relative to their own
+package directory, which bundling would break. That
+makes the packaged `.vsix` large (~19 MB compressed) for a VS Code
 extension — a deliberate tradeoff for running every engine in-process with
 zero external runtime dependency, rather than shelling out to Python/Java
 for validation that a WASM/JS engine can do locally.

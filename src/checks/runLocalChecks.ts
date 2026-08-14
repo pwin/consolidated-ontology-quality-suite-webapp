@@ -75,7 +75,7 @@ export class LocalChecksEngine {
         let shaclRows: ResultRow[] = [];
         if (shaclEnabled) {
           try {
-            shaclRows = runShaclChecks(mergedQuads as Quad[], registry, this.extensionPath);
+            shaclRows = runShaclChecks(mergedQuads as Quad[], registry);
           } catch (err) {
             console.error('[ontologySuite] SHACL check run failed:', err);
           }

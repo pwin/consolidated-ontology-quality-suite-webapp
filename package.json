@@ -436,7 +436,8 @@
     "eyereasoner": "^21.1.16",
     "n3": "^2.1.1",
     "oxigraph": "^0.5.9",
-    "rdfxml-streaming-parser": "^3.2.0"
+    "rdfxml-streaming-parser": "^3.2.0",
+    "shacl-wasm-node": "^0.1.7"
   },
   "homepage": "https://github.com/pwin/consolidated-ontology-quality-suite-webapp#readme",
   "bugs": {

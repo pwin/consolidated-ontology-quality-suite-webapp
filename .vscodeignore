@@ -12,17 +12,18 @@ vitest.config.mts
 *.tsbuildinfo
 
 # node_modules IS shipped (intentionally -- see esbuild.js's `packages: 'external'`
-# comment): oxigraph, eyereasoner/swipl-wasm and @viz-js/viz all load WASM/native
-# assets from paths relative to their own package directory, which bundling would
-# break. Only trim obvious dev-only bloat within it.
+# comment): oxigraph, eyereasoner/swipl-wasm, shacl-wasm-node and @viz-js/viz all
+# load WASM/native assets from paths relative to their own package directory,
+# which bundling would break. Only trim obvious dev-only bloat within it.
 #
-# resources/shacl-wasm/ is deliberately NOT trimmed: it is the vendored SHACL
-# engine (a .wasm plus its wasm-bindgen shim and both licence texts), loaded by
-# absolute path at runtime from checks/shaclRunner.ts.
+# Dependency LICENSE files are deliberately NOT stripped. The vsix redistributes
+# those packages, and MIT and Apache-2.0 -- which is what nearly all of them are,
+# shacl-wasm-node being dual MIT/Apache-2.0 -- both require the licence and
+# copyright notice to travel with a redistribution. 245 such files cost ~1.3 MB
+# against a ~19 MB package, which is not a trade worth making.
 node_modules/**/*.md
 node_modules/**/*.markdown
 node_modules/**/CHANGELOG*
-node_modules/**/LICENSE*
 node_modules/**/*.map
 node_modules/**/test/**
 node_modules/**/tests/**

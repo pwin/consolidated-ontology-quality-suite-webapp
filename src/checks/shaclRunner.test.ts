@@ -6,8 +6,6 @@ import { resolveImports } from '../ontology/resolveImports';
 import { loadRegistry } from './registryLoader';
 import { runShaclChecks } from './shaclRunner';
 
-/** Stands in for the extension's install directory; the repo root is that directory in-tree. */
-const EXTENSION_PATH = path.resolve(__dirname, '../..');
 const REGISTRY_DIR = path.resolve(__dirname, '../../resources/checks-registry');
 
 describe('runShaclChecks against examples/tutorial/clinic.ttl', () => {
@@ -17,7 +15,7 @@ describe('runShaclChecks against examples/tutorial/clinic.ttl', () => {
     const clinicDoc = parseTurtle(clinicPath, fs.readFileSync(clinicPath, 'utf8'));
     const { mergedQuads } = await resolveImports(clinicPath, clinicDoc.quads, dir);
 
-    const rows = runShaclChecks(mergedQuads, loadRegistry(REGISTRY_DIR), EXTENSION_PATH);
+    const rows = runShaclChecks(mergedQuads, loadRegistry(REGISTRY_DIR));
     expect(rows.length).toBeGreaterThan(0);
 
     for (const row of rows) {
@@ -40,7 +38,7 @@ describe('runShaclChecks against examples/tutorial/clinic.ttl', () => {
     const domainPath = path.resolve(__dirname, '../../examples/ontology/domain.ttl');
     const doc = parseTurtle(domainPath, fs.readFileSync(domainPath, 'utf8'));
 
-    const rows = runShaclChecks(doc.quads, loadRegistry(REGISTRY_DIR), EXTENSION_PATH);
+    const rows = runShaclChecks(doc.quads, loadRegistry(REGISTRY_DIR));
     const severityOf = (checkId: string) => [...new Set(rows.filter((r) => r.checkId === checkId).map((r) => r.severity))];
 
     expect(severityOf('STR-003')).toEqual(['Warning']);
@@ -73,7 +71,7 @@ describe('runShaclChecks against examples/tutorial/clinic.ttl', () => {
 
     // Any shapes file failing to compile is logged and skipped, so it would show
     // up here only as absent findings. Assert the run completes and produces rows.
-    const rows = runShaclChecks(quads, registry, EXTENSION_PATH);
+    const rows = runShaclChecks(quads, registry);
     expect(Array.isArray(rows)).toBe(true);
     for (const row of rows) expect(row.sources).toEqual(['shacl']);
   }, 30000);
