@@ -1,5 +1,64 @@
 # Changelog
 
+## 0.10.0
+
+### SHACL validation moves to a Rust→WASM engine: ~220x faster, and two defects gone
+
+SHACL-SPARQL validation now runs on **`shacl-wasm`**, a WebAssembly build of
+the native Rust engine at https://github.com/pwin/SHACL_Engine (v0.1.6),
+vendored into `resources/shacl-wasm/`. It replaces `shacl-engine`, the
+pure-JS engine used through 0.9.3.
+
+Measured on the extension's own workload — all six registry shapes files
+against `examples/ontology/domain.ttl`:
+
+| | `shacl-engine` | `shacl-wasm` 0.1.6 |
+|---|---|---|
+| time | 71,237 ms | **324 ms** |
+| findings | 11 | 11 (identical) |
+| severities | `{Violation:2, Warning:1, Info:8}` | identical |
+| shapes files that crashed | 2 | **0** |
+
+Two long-standing defects go with it, both previously documented in
+`shaclRunner.ts` as engine limitations rather than things we could fix:
+
+- **`shapes/data.ttl` and `shapes/efficiency.ttl` crashed** with `Tried to
+  bind variable ?this in a GROUP BY operator`, losing every check in both
+  files — so `DAT-001` and `EFF-002` could never fire through the SHACL path
+  at all, however the shapes were written. (0.9.3 fixed the *SPARQL*
+  formulations of those two checks; this fixes the SHACL half.) All six
+  files now compile and run.
+- **`sh:severity` declared inside an `sh:sparql` block was dropped**,
+  collapsing everything to `sh:Violation`. 0.9.2 worked around that by
+  re-reading the declared severity out of the shapes graph in
+  `shaclRunner.ts`; that workaround (`extractDeclaredSeverities`) is
+  **deleted** — the engine reports the declared severity itself. The
+  regression test that pinned the workaround now tests the engine.
+
+`enableShaclChecks` stays, but its rationale is inverted: it existed
+because SHACL was the slow tier worth turning off during a tight edit/check
+loop, and at ~0.3s it no longer is.
+
+### Dependencies removed
+
+`shacl-engine`, `@zazuko/env-node`, `@rdfjs/data-model`, `patch-package`,
+the `patches/shacl-engine+1.1.2.patch` QueryEngine-reuse patch (0.9.x), the
+`postinstall` hook that applied it, and the `@comunica/query-sparql-rdfjs-lite`
+version override are all gone — that whole Comunica-lite dependency tree
+came in solely for SHACL. The three RDF/JS shims in `vendor-shims.d.ts` go
+with them.
+
+### Notes
+
+`runShaclChecks` is now **synchronous** and takes the extension path (to
+locate the vendored module), and hands the data graph to the engine as
+N-Triples so nothing depends on what prefixes a merged graph happens to
+carry. Its `ResultRow` output shape is unchanged, so the merge, diagnostics
+and Quick Fix paths are untouched.
+
+Side effect worth noting: `shaclRunner.test.ts` used to be the suite's
+flaky test, timing out at 30s under parallel load. It now runs in ~2s.
+
 ## 0.9.3
 
 ### Fixed: three check queries -- two never fired at all, one raised false positives

@@ -12,9 +12,13 @@ vitest.config.mts
 *.tsbuildinfo
 
 # node_modules IS shipped (intentionally -- see esbuild.js's `packages: 'external'`
-# comment): oxigraph, eyereasoner/swipl-wasm, shacl-engine's Comunica-lite tree, and
-# @viz-js/viz all load WASM/native assets from paths relative to their own package
-# directory, which bundling would break. Only trim obvious dev-only bloat within it.
+# comment): oxigraph, eyereasoner/swipl-wasm and @viz-js/viz all load WASM/native
+# assets from paths relative to their own package directory, which bundling would
+# break. Only trim obvious dev-only bloat within it.
+#
+# resources/shacl-wasm/ is deliberately NOT trimmed: it is the vendored SHACL
+# engine (a .wasm plus its wasm-bindgen shim and both licence texts), loaded by
+# absolute path at runtime from checks/shaclRunner.ts.
 node_modules/**/*.md
 node_modules/**/*.markdown
 node_modules/**/CHANGELOG*

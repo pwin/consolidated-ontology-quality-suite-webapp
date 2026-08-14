@@ -1,0 +1,20 @@
+{
+  "name": "shacl-wasm",
+  "description": "WebAssembly bindings for the shacl validation engine",
+  "version": "0.1.6",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pwin/SHACL_Engine.git"
+  },
+  "files": [
+    "shacl_wasm_bg.wasm",
+    "shacl_wasm.js",
+    "shacl_wasm.d.ts",
+    "LICENSE-APACHE",
+    "LICENSE-MIT"
+  ],
+  "main": "shacl_wasm.js",
+  "types": "shacl_wasm.d.ts",
+  "homepage": "https://github.com/pwin/SHACL_Engine"
+}

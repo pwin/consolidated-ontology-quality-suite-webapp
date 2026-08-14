@@ -63,22 +63,23 @@ export class LocalChecksEngine {
         const shaclEnabled = config.get<boolean>('enableShaclChecks', true);
         const vocabularyEnabled = config.get<boolean>('enableVocabularyChecks', true);
 
-        // SHACL-SPARQL validation (shacl-engine, via its Comunica-lite dependency, patched --
-        // see patches/shacl-engine+1.1.2.patch and shaclRunner.ts's own doc comment) still runs
-        // roughly an order of magnitude slower than the same-sized SPARQL CONSTRUCT check suite
-        // via Oxigraph (~1.1s vs ~0.1s against this project's own test fixtures) -- both toggles
-        // default to on, but SHACL is the one worth turning off for a tight edit/check loop on a
-        // large ontology.
+        // Both engines are now fast enough that neither toggle is worth reaching for in an
+        // ordinary edit/check loop: SHACL-SPARQL runs via shacl-wasm (see shaclRunner.ts),
+        // which does the six shapes files over examples/ontology/domain.ttl in ~0.3s where
+        // the previous shacl-engine took ~71s for the identical 11 findings. They stay
+        // configurable for the cases where a caller genuinely wants one tier only.
         progress.report({ message: 'sparql checks', increment: 20 });
         const sparqlRows = sparqlEnabled ? runSparqlChecks(mergedQuads, registry) : [];
 
         progress.report({ message: 'shacl checks', increment: 20 });
-        const shaclRows = shaclEnabled
-          ? await runShaclChecks(mergedQuads, registry).catch((err) => {
-              console.error('[ontologySuite] SHACL check run failed:', err);
-              return [];
-            })
-          : [];
+        let shaclRows: ResultRow[] = [];
+        if (shaclEnabled) {
+          try {
+            shaclRows = runShaclChecks(mergedQuads as Quad[], registry, this.extensionPath);
+          } catch (err) {
+            console.error('[ontologySuite] SHACL check run failed:', err);
+          }
+        }
 
         progress.report({ message: 'reasoning', increment: 20 });
         const rulesPath = path.join(this.extensionPath, 'resources', 'reasoning', 'core-rules.n3');

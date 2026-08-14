@@ -62,7 +62,7 @@ flowchart LR
 
     subgraph Local["In-process checks engine (no external runtime)"]
         OXI["Oxigraph (Rust→WASM)\nSPARQL CONSTRUCT checks\n+ live triplify preview"]
-        SHACL["shacl-engine\n(SHACL-SPARQL, incl. sh:target)"]
+        SHACL["shacl-wasm (Rust→WASM)\nSHACL-SPARQL, incl. sh:target"]
         EYE["eyereasoner (EYE, WASM)\nOWL2-RL-ish inference\n+ contradiction detection"]
         GUIDE["Modelling guidance\nMDL-001/002/003\n(gist-informed)"]
         REPAIR["Quick Fix repair engine\nSPARQL Update templates\n+ project standards"]
@@ -84,7 +84,7 @@ flowchart LR
 ```
 
 Everything in **Local** and **Views** runs with zero external runtime
-dependency — Oxigraph, `shacl-engine`, and `eyereasoner` are all
+dependency — Oxigraph, `shacl-wasm`, and `eyereasoner` are all
 WASM/pure-JS. The Python CLI is detected via
 `ontologySuite.pythonCliPath` (or PATH) and only used for the "Deep
 Validation" and "Full Triplify" commands, degrading gracefully if absent.
@@ -406,7 +406,7 @@ Two different mechanisms, for two different kinds of customization:
 | `ontologySuite.pythonCliPath` | `"ontology-suite"` | CLI executable for the optional deep-validation/docgen/version-diff fallback — see the [Appendix](#appendix-configuring-ontologysuite-settings) for how to set it and how to get a working CLI in the first place |
 | `ontologySuite.checksRegistryPath` | `""` | Point at your own registry.json/sparql/shapes checkout instead of the bundled copy — e.g. to add project-specific SPARQL/SHACL checks beyond what `class-rules.json` can express |
 | `ontologySuite.enableSparqlChecks` | `true` | Run the registry's SPARQL CONSTRUCT checks. Fast (~0.2s on this project's own fixtures) |
-| `ontologySuite.enableShaclChecks` | `true` | Run the registry's SHACL-SPARQL shapes. ~10x slower than the SPARQL checks (~1.1s vs ~0.1s, after the `shacl-engine` QueryEngine-reuse patch — see `patches/`) — turn off for a tighter edit/check loop on a large ontology, at the cost of missing SHACL-only findings |
+| `ontologySuite.enableShaclChecks` | `true` | Run the registry's SHACL-SPARQL shapes (via the vendored `shacl-wasm` engine). Fast since 0.10.0 — ~0.3s for all six shapes files where the previous `shacl-engine` took ~71s — so there is rarely a reason to turn it off now |
 | `ontologySuite.enableVocabularyChecks` | `true` | Run the closed-world vocabulary check (`VOC-001`) — flags used-but-undeclared class/property IRIs (typos, hallucinated terms) within namespaces the graph has closed-world knowledge of |
 | `ontologySuite.triplifyPreviewSampleSize` | `20` | CSV rows sampled for the live triplify preview |
 | `ontologySuite.projectStandardsPath` | `.ontology-suite/standards.json` | Project values (category class, language tag, versioning, policy) that complete Quick Fix repairs |
@@ -445,14 +445,14 @@ this repo's own `.vscode/settings.json` already sets:
    coherent example ontology plus a real gist v11→v14.1 upstream-migration
    scenario.
 3. Alternatively, install the packaged extension directly:
-   `code --install-extension ontology-dev-suite-0.9.3.vsix` (build it with
+   `code --install-extension ontology-dev-suite-0.10.0.vsix` (build it with
    `npx @vscode/vsce package`).
 
 ## Testing
 
 Two tiers, both real and both passing as of this writing:
 
-- **`npm test`** (Vitest) — 181 tests across 31 files covering every
+- **`npm test`** (Vitest) — 182 tests across 31 files covering every
   pure-logic module: parsing, all six serializations' round-trips
   (including the Manchester class-expression engine against real OWL2
   restrictions), import resolution (including the gist v11→v14.1 drift-
@@ -483,8 +483,9 @@ Both suites — and the manual walkthrough in `TUTORIAL.md` — use the same
 described as working, a test asserts it.
 
 Building this test suite surfaced two real bugs, both fixed (see
-`CHANGELOG.md`): `shacl-engine` crashing on some check shapes against a
-real ontology (fixed via per-shapes-file isolation), and `findPair` not
+`CHANGELOG.md`): the then-current `shacl-engine` crashing on some check
+shapes against a real ontology (contained via per-shapes-file isolation,
+and gone outright since 0.10.0 replaced that engine), and `findPair` not
 searching sibling `csv/`/`queries/` directories (the exact layout every
 example fixture in this repo uses, including the ones that shipped in
 0.1.0 — meaning the Query Workbench's live preview never actually found
@@ -494,9 +495,11 @@ its paired CSV until this was caught by a test).
 
 `esbuild.js` bundles only this extension's own code; `node_modules` ships
 as real files (`packages: 'external'` in the esbuild config) because
-Oxigraph, `eyereasoner` (EYE/swipl-wasm), `shacl-engine`'s Comunica-lite
-dependency tree, and `@viz-js/viz` all load WASM/native assets from paths
-relative to their own package directory, which bundling would break. That
+Oxigraph, `eyereasoner` (EYE/swipl-wasm) and `@viz-js/viz` all load
+WASM/native assets from paths relative to their own package directory,
+which bundling would break. The SHACL engine ships the same way but from
+`resources/shacl-wasm/` rather than `node_modules`, being vendored from a
+sibling repo rather than installed from npm. That
 makes the packaged `.vsix` large (~28 MB compressed) for a VS Code
 extension — a deliberate tradeoff for running every engine in-process with
 zero external runtime dependency, rather than shelling out to Python/Java
