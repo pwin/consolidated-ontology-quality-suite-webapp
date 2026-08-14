@@ -18,7 +18,6 @@ copied into `resources/checks-registry/`) directly, evaluated by
 in-process engines instead of a Python subprocess, and treats the Python
 CLI as an optional deep-validation fallback rather than a hard dependency.
 
-> This is a from-scratch v1 build, not yet published to the Marketplace.
 > Everything below has been verified against the `examples/` fixtures
 > (see [Verification](#verification)) but has not been driven through a
 > live VS Code GUI session in this environment — see
@@ -444,9 +443,37 @@ this repo's own `.vscode/settings.json` already sets:
    **[TUTORIAL.md](TUTORIAL.md)** — every feature, step by step, against a
    coherent example ontology plus a real gist v11→v14.1 upstream-migration
    scenario.
-3. Alternatively, install the packaged extension directly:
-   `code --install-extension ontology-dev-suite-0.10.1.vsix` (build it with
-   `npx @vscode/vsce package`).
+3. Alternatively, install a packaged build directly — grab the `.vsix` from
+   the [latest release](https://github.com/pwin/consolidated-ontology-quality-suite-webapp/releases/latest),
+   or build one yourself with `npx @vscode/vsce package`:
+   `code --install-extension ontology-dev-suite-0.10.1.vsix`
+
+## Publishing to the Marketplace
+
+The manifest is Marketplace-ready (publisher `pwin`, 128×128 icon, keywords,
+gallery banner, repository/homepage/bugs links, and no `private` flag — which
+`vsce` refuses to publish past). What is left is account setup, which cannot
+live in the repo:
+
+1. Sign in to [dev.azure.com](https://dev.azure.com) with a Microsoft account
+   and create a Personal Access Token scoped to **Marketplace → Manage**, for
+   **all accessible organisations**.
+2. Create the publisher `pwin` at
+   [marketplace.visualstudio.com/manage](https://marketplace.visualstudio.com/manage)
+   — the ID must match `package.json`'s `publisher` exactly.
+3. Publish the artifact that was already built and verified, rather than
+   rebuilding:
+   ```sh
+   npx @vscode/vsce login pwin
+   npx @vscode/vsce publish --packagePath ontology-dev-suite-0.10.1.vsix
+   ```
+
+`engines.vscode` is currently `^1.125.0`, so the Marketplace will only offer
+the extension to that build or newer — worth lowering deliberately if wider
+reach matters more than the newest API surface.
+
+[Open VSX](https://open-vsx.org) (what VSCodium, Gitpod and Cursor use) is a
+separate registry with its own publish step, `npx ovsx publish`.
 
 ## Testing
 

@@ -8,9 +8,8 @@
   "icon": "resources/icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/pwin/consolidated-ontology-quality-suite-webapp"
+    "url": "git+https://github.com/pwin/consolidated-ontology-quality-suite-webapp.git"
   },
-  "private": true,
   "engines": {
     "vscode": "^1.125.0"
   },
@@ -438,5 +437,39 @@
     "n3": "^2.1.1",
     "oxigraph": "^0.5.9",
     "rdfxml-streaming-parser": "^3.2.0"
+  },
+  "homepage": "https://github.com/pwin/consolidated-ontology-quality-suite-webapp#readme",
+  "bugs": {
+    "url": "https://github.com/pwin/consolidated-ontology-quality-suite-webapp/issues"
+  },
+  "keywords": [
+    "rdf",
+    "owl",
+    "ontology",
+    "turtle",
+    "ttl",
+    "sparql",
+    "shacl",
+    "skos",
+    "knowledge graph",
+    "linked data",
+    "semantic web",
+    "triplestore",
+    "tarql",
+    "csv to rdf",
+    "manchester syntax",
+    "trig",
+    "n-triples",
+    "n-quads",
+    "rdfs",
+    "reasoner",
+    "validation",
+    "gist",
+    "protege",
+    "vocabulary"
+  ],
+  "galleryBanner": {
+    "color": "#1e1e2e",
+    "theme": "dark"
   }
 }
