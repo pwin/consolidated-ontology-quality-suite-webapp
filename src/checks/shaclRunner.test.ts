@@ -25,16 +25,22 @@ describe('runShaclChecks against examples/tutorial/clinic.ttl', () => {
   }, 30000);
 
   /**
-   * `sh:severity` declared inside an `sh:sparql` block. The previous engine
-   * (`shacl-engine`) dropped it and reported everything as `sh:Violation`, which
-   * v0.9.2 had to work around by reading the shapes graph directly; `shacl-wasm`
-   * reports it itself, so this now tests the engine rather than a workaround.
+   * Each shape's declared `sh:severity` reaches the finding, rather than every
+   * SHACL result collapsing to `sh:Violation`.
    *
-   * Uses examples/ontology/domain.ttl because it is the fixture that triggers
-   * STR-003 (declares sh:Warning) and STY-003 (sh:Info) together, so a
-   * regression shows up as a changed severity rather than a missing row.
+   * Two separate bugs converged on that symptom. `shacl-engine` (used through
+   * v0.9.3) dropped `sh:severity` outright, which v0.9.2 worked around by
+   * re-reading the shapes graph. And the shapes themselves declared it *inside*
+   * the `sh:sparql [...]` block rather than on the enclosing shape, where SHACL
+   * defines it -- so a strict engine was right to ignore it. Upstream fixed the
+   * shapes in its 0.6.0; this project carries that fix, and the workaround is
+   * long gone, so what is left to test is simply that severities arrive intact.
+   *
+   * Uses examples/ontology/domain.ttl because it triggers STR-003 (declares
+   * sh:Warning) and STY-003 (sh:Info) together, so a regression shows up as a
+   * changed severity rather than a missing row.
    */
-  it('honours the sh:severity a shape declares inside its sh:sparql block', () => {
+  it('reports each shape-declared sh:severity rather than collapsing to Violation', () => {
     const domainPath = path.resolve(__dirname, '../../examples/ontology/domain.ttl');
     const doc = parseTurtle(domainPath, fs.readFileSync(domainPath, 'utf8'));
 
@@ -43,9 +49,25 @@ describe('runShaclChecks against examples/tutorial/clinic.ttl', () => {
 
     expect(severityOf('STR-003')).toEqual(['Warning']);
     expect(severityOf('STY-003')).toEqual(['Info']);
-    expect(severityOf('STR-002')).toEqual(['Violation']);
-    // The old engine's signature failure was a uniform collapse to Violation.
+    // The signature failure was a uniform collapse to one severity.
     expect(new Set(rows.map((r) => r.severity)).size).toBeGreaterThan(1);
+  }, 30000);
+
+  /**
+   * STR-002 exempted `rdf:`/`rdfs:`/`owl:` by their three individual namespace
+   * IRIs while its siblings exempt `http://www.w3.org/` wholesale, so using
+   * `skos:prefLabel` without redeclaring SKOS locally was reported as a
+   * Violation-severity "undefined property" -- on the very predicate
+   * QUA-001/QUA-002/QUA-004 all accept as a valid label. Fixed upstream in
+   * 0.6.0 and carried here; domain.ttl uses `skos:prefLabel`/`skos:definition`
+   * and produced exactly two such findings before.
+   */
+  it('does not flag W3C-namespace predicates as undeclared (STR-002)', () => {
+    const domainPath = path.resolve(__dirname, '../../examples/ontology/domain.ttl');
+    const doc = parseTurtle(domainPath, fs.readFileSync(domainPath, 'utf8'));
+
+    const rows = runShaclChecks(doc.quads, loadRegistry(REGISTRY_DIR));
+    expect(rows.filter((r) => r.checkId === 'STR-002')).toEqual([]);
   }, 30000);
 
   /**

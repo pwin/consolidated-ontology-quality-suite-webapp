@@ -64,6 +64,79 @@ interface OxiQuad {
   object: OxiTerm;
 }
 
+const SH = 'http://www.w3.org/ns/shacl#';
+const RDF_FIRST = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#first';
+const RDF_REST = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#rest';
+const RDF_NIL = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#nil';
+/** `sh:<op>Path <inner>` -> the SPARQL 1.1 path-expression suffix meaning the same thing. */
+const PATH_SUFFIXES: [string, string][] = [
+  [`${SH}zeroOrMorePath`, '*'],
+  [`${SH}oneOrMorePath`, '+'],
+  [`${SH}zeroOrOnePath`, '?'],
+];
+
+/**
+ * Renders one `sh:resultPath` value as a stable SPARQL 1.1 property-path
+ * expression.
+ *
+ * A path is only sometimes a plain IRI. SHACL also allows *path expressions*,
+ * encoded as blank-node structures: `[ sh:oneOrMorePath rdfs:subClassOf ]`,
+ * `[ sh:inversePath ... ]`, an RDF list for a sequence, `sh:alternativePath`
+ * for `|`. Taking such a node's `.value` yields the blank node's *identifier*,
+ * which is minted fresh per parse -- so the same finding gets a different path
+ * on every run, and since `path` is part of the dedup key in merge.ts, the
+ * SPARQL and SHACL formulations of one path-expression finding can never
+ * merge: their blank node ids never match. LOG-001
+ * (`sh:oneOrMorePath rdfs:subClassOf`) is this registry's own instance.
+ *
+ * Falls back to the raw value for anything unrecognised, so an unexpected
+ * shape degrades the output rather than throwing.
+ */
+function pathExpression(node: OxiTerm, bySubject: Map<string, OxiQuad[]>, depth = 0): string {
+  if (node.termType !== 'BlankNode' || depth > 10) return node.value;
+  const quads = bySubject.get(node.value) ?? [];
+  const objectOf = (pred: string): OxiTerm | undefined => quads.find((q) => q.predicate.value === pred)?.object;
+
+  for (const [operator, suffix] of PATH_SUFFIXES) {
+    const inner = objectOf(operator);
+    if (inner) return `(${pathExpression(inner, bySubject, depth + 1)})${suffix}`;
+  }
+  const inverse = objectOf(`${SH}inversePath`);
+  if (inverse) return `^(${pathExpression(inverse, bySubject, depth + 1)})`;
+
+  const alternative = objectOf(`${SH}alternativePath`);
+  if (alternative) return rdfList(alternative, bySubject, depth).map((m) => pathExpression(m, bySubject, depth + 1)).join('|');
+
+  // A sequence path is a bare RDF list.
+  if (objectOf(RDF_FIRST)) return rdfList(node, bySubject, depth).map((m) => pathExpression(m, bySubject, depth + 1)).join('/');
+
+  return node.value;
+}
+
+/** Walks an RDF list into its members, bounded so a malformed/cyclic list can't spin. */
+function rdfList(head: OxiTerm, bySubject: Map<string, OxiQuad[]>, depth: number): OxiTerm[] {
+  const out: OxiTerm[] = [];
+  let cursor: OxiTerm | undefined = head;
+  for (let i = 0; cursor && cursor.value !== RDF_NIL && i < 100 && depth <= 10; i++) {
+    const quads: OxiQuad[] = bySubject.get(cursor.value) ?? [];
+    const first = quads.find((q) => q.predicate.value === RDF_FIRST)?.object;
+    if (!first) break;
+    out.push(first);
+    cursor = quads.find((q) => q.predicate.value === RDF_REST)?.object;
+  }
+  return out;
+}
+
+/**
+ * One display string for a result property that may legitimately carry several
+ * values, ordered so the same finding always renders identically -- see the
+ * note at the call site for which checks bind two on purpose.
+ */
+function joined(values: string[]): string | null {
+  if (values.length === 0) return null;
+  return [...new Set(values)].sort().join(', ');
+}
+
 function loadQuadsIntoStore(store: InstanceType<typeof import('oxigraph').Store>, oxi: typeof import('oxigraph'), quads: Quad[]): void {
   for (const q of quads) {
     store.add(
@@ -104,18 +177,26 @@ function extractRows(quads: OxiQuad[], registry: Registry, source: string): Resu
     if (!isValidationResult) continue;
 
     const get = (pred: string): OxiTerm | undefined => subjectQuads.find((q) => q.predicate.value === pred)?.object;
+    const all = (pred: string): OxiTerm[] => subjectQuads.filter((q) => q.predicate.value === pred).map((q) => q.object);
     const severity = get(SH_RESULT_SEVERITY);
     const focus = get(SH_FOCUS_NODE);
-    const path = get(SH_RESULT_PATH);
-    let value = get(SH_VALUE);
     const message = get(SH_RESULT_MESSAGE);
     const scc = get(SH_SOURCE_CONSTRAINT_COMPONENT);
     if (!focus) continue;
+
+    // sh:resultPath and sh:value are read as *sets*, not as "whichever came
+    // back first". Several of the registry's CONSTRUCTs bind two values for
+    // one finding deliberately -- LOG-004's two inverses, LOG-006/007's domain
+    // and range, REA-001's two disjoint classes, STR-007's subject and object
+    // -- so taking one arbitrarily both halves the finding and makes the dedup
+    // key depend on result order, which is not guaranteed. Sorting and joining
+    // makes the key order-independent and shows the whole finding.
+    const path = joined(all(SH_RESULT_PATH).map((p) => pathExpression(p, bySubject)));
     // A check whose CONSTRUCT never binds sh:value defaults to the focus
     // node, matching pyshacl's own default for sh:select queries without a
     // ?value column -- keeps the SPARQL and SHACL formulations of the same
     // check deduplicating to one finding instead of two.
-    if (!value) value = focus;
+    const value = joined(all(SH_VALUE).map((v) => v.value)) ?? focus.value;
 
     const checkId = scc ? localName(scc.value) : null;
     const check = checkId ? registry.checksById.get(checkId) : undefined;
@@ -126,8 +207,8 @@ function extractRows(quads: OxiQuad[], registry: Registry, source: string): Resu
       title: check?.title ?? null,
       severity: severity ? (SEVERITY_LABEL[severity.value] ?? 'Info') : 'Info',
       focusNode: focus.value,
-      path: path?.value ?? null,
-      value: value?.value ?? null,
+      path: path,
+      value: value,
       message: message?.value ?? subject,
       remediation: check?.remediation ?? null,
       sources: [source],

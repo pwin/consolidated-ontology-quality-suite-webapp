@@ -5,6 +5,7 @@ import { readOntologyDocument } from '../rdf/parseDocument';
 import { resolveImports } from '../ontology/resolveImports';
 import { loadRegistry, Registry } from './registryLoader';
 import { runSparqlChecks } from './sparqlRunner';
+import { runLiteralTypingChecks } from './literalTyping';
 import { runShaclChecks } from './shaclRunner';
 import { runReasoningChecks } from './reasoningRunner';
 import { runModellingGuidance } from './modellingGuidance';
@@ -69,7 +70,13 @@ export class LocalChecksEngine {
         // the previous shacl-engine took ~71s for the identical 11 findings. They stay
         // configurable for the cases where a caller genuinely wants one tier only.
         progress.report({ message: 'sparql checks', increment: 20 });
-        const sparqlRows = sparqlEnabled ? runSparqlChecks(mergedQuads, registry) : [];
+        // Value-space validation supplements the registry's two regex-based DAT-001
+        // formulations, which can only test a lexical form -- see literalTyping.ts.
+        // Gated with the SPARQL tier because it is the same check id, reported from
+        // the same source, and merges under the normal dedup key.
+        const sparqlRows = sparqlEnabled
+          ? [...runSparqlChecks(mergedQuads, registry), ...runLiteralTypingChecks(mergedQuads as Quad[])]
+          : [];
 
         progress.report({ message: 'shacl checks', increment: 20 });
         let shaclRows: ResultRow[] = [];

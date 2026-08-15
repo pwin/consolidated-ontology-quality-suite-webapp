@@ -92,8 +92,23 @@ function sparqlStringLiteral(value: string): string {
   return `"${escaped}"`;
 }
 
+/**
+ * A single absolute IRI as `<...>`, or `UNDEF` for anything else.
+ *
+ * `focusNode`/`path`/`value` are not always IRIs. `path` can be a SHACL
+ * property-path *expression* (`(rdfs:subClassOf)+` for LOG-001), and `value`
+ * can be several values joined for one finding (`LOG-004`'s two inverses,
+ * `REA-001`'s two disjoint classes) -- see sparqlRunner.ts. Wrapping either in
+ * angle brackets produces a malformed IRI, and since buildRepairUpdate binds
+ * every variable in one VALUES row whether the template uses it or not, a
+ * single bad term makes the whole update unparseable -- breaking repairs that
+ * never referenced it. So this validates rather than assuming: scheme-prefixed,
+ * and free of the characters an IRI reference cannot contain.
+ */
 function formatIriOrUndef(iri: string | null | undefined): string {
-  return iri ? `<${iri}>` : 'UNDEF';
+  if (!iri) return 'UNDEF';
+  const isAbsoluteIri = /^[A-Za-z][A-Za-z0-9+.-]*:/.test(iri) && !/[\s<>"{}|^`\\]/.test(iri);
+  return isAbsoluteIri ? `<${iri}>` : 'UNDEF';
 }
 
 export function buildRepairUpdate(

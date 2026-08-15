@@ -446,7 +446,7 @@ this repo's own `.vscode/settings.json` already sets:
 3. Alternatively, install a packaged build directly — grab the `.vsix` from
    the [latest release](https://github.com/pwin/consolidated-ontology-quality-suite-webapp/releases/latest),
    or build one yourself with `npx @vscode/vsce package`:
-   `code --install-extension ontology-dev-suite-0.10.3.vsix`
+   `code --install-extension ontology-dev-suite-0.11.0.vsix`
 
 ## Publishing to the Marketplace
 
@@ -465,7 +465,7 @@ live in the repo:
    rebuilding:
    ```sh
    npx @vscode/vsce login pwin
-   npx @vscode/vsce publish --packagePath ontology-dev-suite-0.10.3.vsix
+   npx @vscode/vsce publish --packagePath ontology-dev-suite-0.11.0.vsix
    ```
 
 `engines.vscode` is currently `^1.125.0`, so the Marketplace will only offer
@@ -479,7 +479,7 @@ separate registry with its own publish step, `npx ovsx publish`.
 
 Two tiers, both real and both passing as of this writing:
 
-- **`npm test`** (Vitest) — 182 tests across 31 files covering every
+- **`npm test`** (Vitest) — 193 tests across 32 files covering every
   pure-logic module: parsing, all six serializations' round-trips
   (including the Manchester class-expression engine against real OWL2
   restrictions), import resolution (including the gist v11→v14.1 drift-

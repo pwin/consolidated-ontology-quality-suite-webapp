@@ -1,7 +1,7 @@
 import * as path from 'node:path';
 import { DataFactory } from 'n3';
 import { describe, expect, it } from 'vitest';
-import { computeRepair, hasRepairTemplate, humanizeLocalName } from './repairEngine';
+import { buildRepairUpdate, computeRepair, hasRepairTemplate, humanizeLocalName } from './repairEngine';
 import { DEFAULT_PROJECT_STANDARDS, ProjectStandards } from './projectStandardsCore';
 
 const { namedNode, quad } = DataFactory;
@@ -137,5 +137,39 @@ describe('computeRepair', () => {
     const outcome = computeRepair(repairsRoot, row, quads, {}, standards);
     expect(outcome?.removedQuads).toHaveLength(0);
     expect(outcome?.addedQuads).toHaveLength(0);
+  });
+});
+
+/**
+ * `focusNode`/`path`/`value` are not always IRIs: `path` can be a SHACL
+ * property-path expression (`(rdfs:subClassOf)+` for LOG-001) and `value` can
+ * be several values joined for one finding (LOG-004's two inverses) -- both
+ * introduced in 0.11.0 by sparqlRunner.ts. buildRepairUpdate binds every
+ * variable in one VALUES row whether the template uses it or not, so a term
+ * wrapped naively in angle brackets makes the whole update unparseable and
+ * breaks repairs that never referenced it.
+ */
+describe('buildRepairUpdate with non-IRI path/value terms', () => {
+  const template = 'PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>\nDELETE { ?focusNode a ?x } WHERE { ?focusNode a ?x }';
+
+  const undefFor = (row: { focusNode: string; path: string | null; value: string | null }) =>
+    buildRepairUpdate(template, row, standards, {});
+
+  it('emits UNDEF rather than a malformed IRI for a property-path expression', () => {
+    const out = undefFor({ focusNode: 'http://example.org/a', path: '(rdfs:subClassOf)+', value: null });
+    expect(out).not.toContain('<(rdfs:subClassOf)+>');
+    expect(out).toContain('UNDEF');
+  });
+
+  it('emits UNDEF rather than a malformed IRI for a joined multi-value', () => {
+    const out = undefFor({ focusNode: 'http://example.org/a', path: null, value: 'http://example.org/p1, http://example.org/p2' });
+    expect(out).not.toContain('<http://example.org/p1, http://example.org/p2>');
+    expect(out).toContain('UNDEF');
+  });
+
+  it('still emits a real single absolute IRI', () => {
+    const out = undefFor({ focusNode: 'http://example.org/a', path: 'http://example.org/p', value: null });
+    expect(out).toContain('<http://example.org/a>');
+    expect(out).toContain('<http://example.org/p>');
   });
 });

@@ -1,5 +1,82 @@
 # Changelog
 
+## 0.11.0
+
+Takes up the check fixes from `consolidated_ontology_suite_python` 0.5.0–0.6.0,
+whose 0.6.0 came out of a sibling fixture repo of 13 deliberately broken OWL2
+ontologies. Each was assessed against *this* stack rather than adopted on
+trust — two of the four turned out not to apply here, and one applied in a
+different form.
+
+### `sh:severity` moved to where SHACL defines it
+
+The registry's shapes declared `sh:severity` *inside* each
+`sh:sparql [...] SPARQLConstraint` block rather than on the enclosing shape.
+A strict engine is right to ignore it there, which is what `shacl-engine`
+did — so 0.9.2's `extractDeclaredSeverities` workaround was treating
+correct engine behaviour as an engine bug. **The shapes were authored
+wrong.** All six now declare it on the shape, so every engine reads it.
+
+### Two identical findings no longer counted twice
+
+`LOG-001`'s and `STY-003`'s SPARQL formulations omitted a `sh:resultPath` /
+`sh:value` that their SHACL twins emit, so the same finding arrived with two
+different dedup keys and both survived. Both now emit them, and the effect is
+visible: on `examples/ontology/domain.ttl`, **9 of 12** merged findings are now
+corroborated by both engines rather than double-counted.
+
+Supporting that required porting two fixes into `sparqlRunner.ts`:
+
+- **`sh:resultPath` and `sh:value` are read as sets, not first-match.** Several
+  CONSTRUCTs bind two values for one finding deliberately (`LOG-004`'s two
+  inverses, `LOG-006`/`007`'s domain and range, `REA-001`'s two disjoint
+  classes, `STR-007`'s subject and object). Taking one arbitrarily both halved
+  the finding and made the dedup key depend on result order. Now sorted and
+  joined. Pinned by a determinism check: three identical runs, one stable result.
+- **SHACL property paths render as path expressions.** `LOG-001` now emits
+  `sh:resultPath [ sh:oneOrMorePath rdfs:subClassOf ]`, a blank node — whose
+  identifier is minted per parse, so it could never match its twin's. Rendered
+  as `(rdfs:subClassOf)+`, including inverse, alternative and sequence paths.
+
+### `STR-002` no longer flags W3C-namespace predicates
+
+It exempted `rdf:`/`rdfs:`/`owl:` by their three individual namespace IRIs
+while its siblings exempt `http://www.w3.org/` wholesale, so using
+`skos:prefLabel` without redeclaring SKOS locally was a Violation-severity
+"undefined property" — on the very predicate `QUA-001`/`002`/`004` accept as a
+valid label. `domain.ttl` produced exactly two such false positives.
+
+### `DAT-001` now checks value space, not just lexical form
+
+Upstream found its `xsd:boolean` branch unreachable because rdflib coerces
+`"yes"^^xsd:boolean` to `'false'` before the regex sees it. **That does not
+apply here** — n3 stores the lexical form verbatim, so the portable
+formulations already catch it (verified, not assumed).
+
+The *other* half does apply: `"2021-02-30"^^xsd:date` is lexically perfect and
+denotes nothing. Upstream leans on rdflib's `Literal.ill_typed`; there is no
+equivalent here, so new `checks/literalTyping.ts` checks the value spaces
+directly for `date`/`dateTime`/`gMonth`/`gDay` — the datatypes with an
+unambiguous, cheaply-decidable value space. Anything else is left to the
+lexical checks rather than guessed at, since a false "invalid" on real data is
+worse than a miss. Reports as `DAT-001` so it merges with the existing
+formulations. The registry description now says what is actually checked.
+
+### Quick Fix no longer breaks on a non-IRI path or value
+
+Upstream's equivalent finding, and one the changes above made *reachable* here
+rather than merely possible. `repairEngine.ts`'s `formatIriOrUndef` wrapped any
+non-empty string in `<...>`, so a property-path expression
+(`<(rdfs:subClassOf)+>`) or a joined multi-value
+(`<http://ex/p1, http://ex/p2>`) produced a malformed IRI — and since
+`buildRepairUpdate` binds every variable in one `VALUES` row whether the
+template uses it or not, one bad term made the whole update unparseable,
+breaking repairs that never referenced it. It now requires a single absolute
+IRI and emits `UNDEF` otherwise.
+
+Upstream's `--engine` selection has no analogue here — this extension runs one
+SHACL engine — so that item is not carried.
+
 ## 0.10.3
 
 Updates the SHACL engine to `shacl-wasm-node` **0.1.9** (from 0.1.7), which
