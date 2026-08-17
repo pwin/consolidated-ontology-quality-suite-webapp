@@ -4,7 +4,7 @@ import { resolveImports } from '../ontology/resolveImports';
 import { sketchQuery, renderSketchTurtle } from '../triplify/sketch';
 import { checkAlignment } from '../triplify/prefixAlignment';
 import { evaluatePreview } from '../triplify/previewEvaluator';
-import { findPair } from '../triplify/discovery';
+import { findOntologies, findPair } from '../triplify/discovery';
 import { parseCsv } from '../triplify/csv';
 import { htmlShell } from './webviewUtil';
 import * as path from 'node:path';
@@ -65,15 +65,27 @@ export class QueryWorkbench implements vscode.Disposable {
     let rowsUsed = 0;
     let skippedColumns: string[] = [];
 
+    // Every resolved ontology contributes: an extension ontology plus the upper
+    // ontology it builds on is the normal case, not an edge case. Each is
+    // import-resolved in its own right, then all merged, so a term declared in any
+    // of them counts as declared for the conformance check.
+    const ontologyPaths = resolveOntologyPaths(this.queryUri);
     let ontologyQuads: import('n3').Quad[] = [];
-    let ontologyPrefixes: Record<string, string> = {};
-    const ontologyUri = await findLikelyOntology(this.queryUri);
-    if (ontologyUri) {
-      const ontologyText = new TextDecoder('utf-8').decode(await vscode.workspace.fs.readFile(ontologyUri));
-      const parsed = await readOntologyDocument(ontologyUri.fsPath, ontologyText);
-      const resolved = await resolveImports(ontologyUri.fsPath, parsed.quads, path.dirname(ontologyUri.fsPath));
-      ontologyQuads = resolved.mergedQuads;
-      ontologyPrefixes = parsed.prefixes;
+    const ontologyPrefixes: Record<string, string> = {};
+    for (const ontologyPath of ontologyPaths) {
+      try {
+        const bytes = await vscode.workspace.fs.readFile(vscode.Uri.file(ontologyPath));
+        const parsed = await readOntologyDocument(ontologyPath, new TextDecoder('utf-8').decode(bytes));
+        const resolved = await resolveImports(ontologyPath, parsed.quads, path.dirname(ontologyPath));
+        ontologyQuads = [...ontologyQuads, ...resolved.mergedQuads];
+        // First binding wins, so an earlier ontology's prefix isn't silently rebound
+        // by a later one that spells the same prefix differently.
+        for (const [prefix, iri] of Object.entries(parsed.prefixes)) {
+          if (!(prefix in ontologyPrefixes)) ontologyPrefixes[prefix] = iri;
+        }
+      } catch (err) {
+        console.error(`[ontologySuite] could not read ontology ${ontologyPath} for conformance checking:`, err);
+      }
     }
 
     if (csvPath) {
@@ -135,10 +147,27 @@ export class QueryWorkbench implements vscode.Disposable {
   }
 }
 
-async function findLikelyOntology(queryUri: vscode.Uri): Promise<vscode.Uri | undefined> {
-  const dir = path.dirname(queryUri.fsPath);
-  const files = await vscode.workspace.findFiles(new vscode.RelativePattern(vscode.Uri.file(dir), '*.ttl'), undefined, 5);
-  return files[0];
+/**
+ * The ontology file(s) this query is checked for conformance against.
+ *
+ * `ontologySuite.queryOntologyPaths` wins when set -- paths are absolute or
+ * resolved against the workspace root -- because no heuristic can be right for
+ * every layout, and being able to say so beats being guessed at. Otherwise
+ * triplify/discovery.ts's `findOntologies` looks where this repo's own layouts
+ * put them (own directory, then parent, then siblings).
+ *
+ * Until 0.11.1 this took the first `*.ttl` in the query's own directory and
+ * nothing else, so `examples/tutorial/queries/appointments.rq` -- whose ontology
+ * is one level up -- silently got no conformance checking at all, and a project
+ * built on several ontologies only ever saw one of them.
+ */
+function resolveOntologyPaths(queryUri: vscode.Uri): string[] {
+  const configured = vscode.workspace.getConfiguration('ontologySuite').get<string[]>('queryOntologyPaths', []);
+  if (configured.length > 0) {
+    const root = vscode.workspace.getWorkspaceFolder(queryUri)?.uri.fsPath ?? path.dirname(queryUri.fsPath);
+    return configured.map((p) => (path.isAbsolute(p) ? p : path.join(root, p)));
+  }
+  return findOntologies(queryUri.fsPath);
 }
 
 function escapeHtml(s: string): string {

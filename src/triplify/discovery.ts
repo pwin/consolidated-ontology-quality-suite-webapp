@@ -8,6 +8,9 @@ export interface TriplifyJob {
 
 const CSV_EXTENSIONS = new Set(['.csv', '.tsv']);
 const QUERY_EXTENSIONS = new Set(['.sparql', '.rq', '.tarql', '.tq']);
+/** Mirrors ontology/resolveImports.ts's DEFAULT_IMPORT_GLOB_EXTENSIONS -- kept as a
+ *  local literal so this module stays dependency-free (node:fs/node:path only). */
+const ONTOLOGY_EXTENSIONS = new Set(['.ttl', '.trig', '.nt', '.nq', '.turtle', '.owl', '.rdf', '.omn']);
 
 /**
  * Ports ontology_suite/triplify/discovery.py::discover_jobs_verbose:
@@ -65,6 +68,36 @@ export function findPair(filePath: string): string | undefined {
     allCandidates.push(...candidates);
   }
   return allCandidates.length === 1 ? allCandidates[0] : undefined;
+}
+
+/**
+ * Every ontology a query should be checked against, in the order they were found.
+ *
+ * The Python suite takes these explicitly -- `--ontology` is `required=True` and
+ * `action="append"`, so it never guesses and it accepts several. This extension has
+ * to infer them, so it looks where the project layouts in this repo actually put
+ * them, and returns *all* of them rather than one: an extension ontology plus the
+ * upper ontology it builds on is the normal case, not an edge case.
+ *
+ * Search order, first non-empty directory wins:
+ *   1. the query's own directory  -- a flat project
+ *   2. its parent                -- `queries/foo.rq` beside `../clinic.ttl`, which is
+ *                                   exactly `examples/tutorial`'s layout and was found
+ *                                   by nothing before this
+ *   3. its sibling directories   -- an `ontology/` beside `queries/`
+ *
+ * Stopping at the first directory that yields anything is deliberate: collecting
+ * across all three would drag unrelated ontologies from elsewhere in the project
+ * into the conformance check, and a spurious "undeclared property" is worse than a
+ * missing one. `queryOntologyPaths` is the escape hatch when the guess is wrong.
+ */
+export function findOntologies(queryPath: string): string[] {
+  const dir = path.dirname(queryPath);
+  for (const searchDir of [dir, path.dirname(dir), ...siblingDirs(dir)]) {
+    const found = listByExtension(searchDir, ONTOLOGY_EXTENSIONS);
+    if (found.length > 0) return found;
+  }
+  return [];
 }
 
 /** Direct sibling directories of `dir`'s parent, excluding `dir` itself. */

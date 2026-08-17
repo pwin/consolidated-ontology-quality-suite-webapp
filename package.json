@@ -2,7 +2,7 @@
   "name": "ontology-dev-suite",
   "displayName": "Ontology Development Suite",
   "description": "Create ontologies (with imports) in Turtle, TriG, N-Triples, N-Quads, RDF/XML, or OWL Manchester Syntax, author TARQL-style CSV-to-RDF CONSTRUCT queries with live preview, and validate against a local SPARQL/SHACL/OWL2-RL checks engine.",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "publisher": "pwin",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -101,7 +101,9 @@
         "extensions": [
           ".rq",
           ".sparql",
-          ".cq.rq"
+          ".cq.rq",
+          ".tarql",
+          ".tq"
         ],
         "configuration": "./language-configuration.sparql.json"
       }
@@ -392,6 +394,14 @@
           "type": "string",
           "default": ".ontology-suite/class-rules.json",
           "description": "Workspace-relative path to project rules for minimum required content on classes/properties (e.g. every owl:Class needs rdfs:label + rdfs:comment). File is optional -- no project rules apply if absent."
+        },
+        "ontologySuite.queryOntologyPaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "Ontology file(s) a TARQL-style query is checked for conformance against, as absolute paths or paths relative to the workspace root. Leave empty to discover them automatically (the query's own directory, then its parent, then sibling directories). Set this when the guess is wrong, or to pin an explicit list -- several ontologies are supported, and all of them are merged."
         }
       }
     },

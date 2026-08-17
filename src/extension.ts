@@ -301,7 +301,7 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('ontologySuite.openQueryWorkbench', async () => {
       const editor = vscode.window.activeTextEditor;
       if (!editor || editor.document.languageId !== 'sparql-construct') {
-        void vscode.window.showErrorMessage('Open a .rq CONSTRUCT query file first.');
+        void vscode.window.showErrorMessage('Open a CONSTRUCT query file first (.rq, .sparql, .tq or .tarql).');
         return;
       }
       await queryWorkbench.open(editor.document.uri);

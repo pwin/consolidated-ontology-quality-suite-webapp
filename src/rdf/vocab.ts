@@ -54,13 +54,38 @@ export const WELL_KNOWN_PREFIXES: Record<string, string> = {
   gist: GIST,
 };
 
+/**
+ * The shortest readable form of `iri` under `prefixes` -- `ex:Dog` rather than
+ * the full IRI -- or the IRI unchanged when no prefix covers it.
+ *
+ * Candidates are ranked rather than taken in declaration order, which is what
+ * this did before and which made the output depend on how the document happened
+ * to be written:
+ *
+ * 1. **Longest namespace wins.** With both `http://ex.org/` and
+ *    `http://ex.org/sub/` bound, `http://ex.org/sub/Thing` is `sub:Thing`, not
+ *    `ex:sub/Thing` -- the latter is a *different* CURIE that only round-trips
+ *    by accident, and is wrong outright if `/` were not legal in a local name.
+ * 2. **A named prefix beats the empty one.** A document that binds both `:` and
+ *    `ex:` to one namespace previously rendered `:Dog` or `ex:Dog` purely on
+ *    which `@prefix` line came first. `ex:Dog` says which vocabulary the term is
+ *    from, so it is preferred; `:Dog` is still used when `:` is the only binding.
+ *
+ * Ties beyond that keep declaration order, so the choice stays stable for a
+ * given document.
+ */
 export function shrink(iri: string, prefixes: Record<string, string>): string {
+  let best: { prefix: string; ns: string } | undefined;
   for (const [prefix, ns] of Object.entries(prefixes)) {
-    if (ns && iri.startsWith(ns) && iri.length > ns.length) {
-      return `${prefix}:${iri.slice(ns.length)}`;
+    if (!ns || !iri.startsWith(ns) || iri.length <= ns.length) continue;
+    if (!best) {
+      best = { prefix, ns };
+      continue;
     }
+    if (ns.length > best.ns.length) best = { prefix, ns };
+    else if (ns.length === best.ns.length && best.prefix === '' && prefix !== '') best = { prefix, ns };
   }
-  return iri;
+  return best ? `${best.prefix}:${iri.slice(best.ns.length)}` : iri;
 }
 
 export function expand(curie: string, prefixes: Record<string, string>): string | null {

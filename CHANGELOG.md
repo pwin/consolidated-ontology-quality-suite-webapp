@@ -1,5 +1,59 @@
 # Changelog
 
+## 0.11.1
+
+Four fixes to the TARQL/query side and to CURIE rendering. All four are
+**webapp-only** — the Python CLI is unaffected, because it is *told* what the
+extension has to infer: `--ontology` is `required=True` and `action="append"`,
+and `.tq`/`.tarql` are already in its query globs.
+
+### `.tq` and `.tarql` are recognised
+
+The two halves of the extension disagreed. `triplify/discovery.ts` accepted
+`.sparql`/`.rq`/`.tarql`/`.tq` for CSV pairing (ported faithfully from the
+Python suite's `DEFAULT_QUERY_GLOBS`), but the manifest registered
+`sparql-construct` for only `.rq`/`.sparql`/`.cq.rq`. So a `.tq` query was
+*paired with its CSV* and then **rejected by Open Query Workbench**, which gates
+on `languageId === 'sparql-construct'` — no syntax highlighting either. Both
+extensions are now registered, added to this repo's `files.associations`, and the
+command's error message names all four instead of just `.rq`.
+
+### Query→ontology discovery finds the ontology, and finds all of them
+
+It took the first `*.ttl` in the query's **own directory** and nothing else, so:
+
+- `examples/tutorial/queries/appointments.rq`, whose ontology is one level up,
+  silently got **no conformance checking at all** — the tutorial's own layout;
+- a project built on several ontologies only ever saw one of them.
+
+`triplify/discovery.ts` gains `findOntologies`, searching the query's own
+directory, then its parent, then its siblings, and returning **every** ontology
+in the first directory that yields any — an extension ontology plus the upper
+ontology it builds on is the normal case. Each is import-resolved in its own
+right and then merged. Stopping at the first productive directory is deliberate:
+collecting across all three would drag unrelated ontologies into the check, and
+a spurious "undeclared property" is worse than a missing one.
+
+New **`ontologySuite.queryOntologyPaths`** pins an explicit list when the guess
+is wrong — absolute, or relative to the workspace root.
+
+### The Ontology Outline shows `ex:Thing`, not `:Thing`
+
+`shrink()` returned the first prefix whose namespace matched, in whatever order
+the parser produced them — so a document binding both `:` and `ex:` to one
+namespace rendered `:Dog` or `ex:Dog` purely on which `@prefix` line came first.
+Candidates are now ranked, which also fixes a latent bug found on the way:
+
+- **Longest namespace wins.** With both `http://ex.org/` and
+  `http://ex.org/sub/` bound, `http://ex.org/sub/Thing` was rendered
+  `ex:sub/Thing` — a *different* CURIE that only round-trips by accident. Now
+  `sub:Thing`.
+- **A named prefix beats the empty one**, so the term says which vocabulary it
+  came from. `:Dog` is still used when `:` is the only binding.
+
+This reaches everything that renders a CURIE: the Outline, the graph view, and
+the scaffolding commands that write Turtle.
+
 ## 0.11.0
 
 Takes up the check fixes from `consolidated_ontology_suite_python` 0.5.0–0.6.0,

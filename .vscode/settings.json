@@ -7,6 +7,8 @@
   // other RDF tooling is also installed.
   "files.associations": {
     "*.rq": "sparql-construct",
-    "*.sparql": "sparql-construct"
+    "*.sparql": "sparql-construct",
+    "*.tq": "sparql-construct",
+    "*.tarql": "sparql-construct"
   }
 }
