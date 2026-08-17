@@ -100,6 +100,105 @@ export function findOntologies(queryPath: string): string[] {
   return [];
 }
 
+/** Characters that make an entry a pattern rather than a literal path. */
+const GLOB_METACHARACTERS = /[*?[]/;
+
+/**
+ * Resolves `queryOntologyPaths` entries -- literal paths, glob patterns, or a mix
+ * -- into concrete file paths, relative entries taken against `baseDir`.
+ *
+ * A literal entry passes straight through **without checking it exists**, which
+ * is deliberate: a mistyped path then surfaces as a read error naming the file,
+ * rather than vanishing silently as "no ontology found". A pattern that matches
+ * nothing, by contrast, contributes nothing -- there is no single path to blame,
+ * and `*_ontology.ttl` matching none is a normal state for a project that has not
+ * written one yet.
+ *
+ * Supports `*` (any run within one path segment), `?` (one character) and `**`
+ * (any depth of directories). Matching is case-insensitive, since the extension
+ * targets Windows and macOS as much as Linux, and results are sorted so a run
+ * over one project is reproducible.
+ */
+export function resolveOntologyPatterns(entries: string[], baseDir: string): string[] {
+  const out: string[] = [];
+  for (const entry of entries) {
+    const resolved = path.isAbsolute(entry) ? entry : path.join(baseDir, entry);
+    if (!GLOB_METACHARACTERS.test(entry)) {
+      out.push(resolved);
+      continue;
+    }
+    out.push(...expandGlob(resolved));
+  }
+  // Distinct, because a literal and a pattern can name the same file, and the
+  // conformance check should not read one ontology twice.
+  return [...new Set(out)];
+}
+
+/** Expands one absolute glob pattern by walking from its deepest fixed ancestor. */
+function expandGlob(pattern: string): string[] {
+  const normalised = pattern.replace(/\\/g, '/');
+  // Walk from the last directory before the first wildcard, so `a/b/**/ *.ttl`
+  // never scans above `a/b`.
+  const firstGlob = normalised.search(GLOB_METACHARACTERS);
+  const rootEnd = normalised.lastIndexOf('/', firstGlob);
+  const root = rootEnd <= 0 ? normalised.slice(0, firstGlob) : normalised.slice(0, rootEnd);
+  const recursive = normalised.includes('**');
+
+  const matcher = globToRegExp(normalised);
+  return walkFiles(root, recursive)
+    .filter((file) => matcher.test(file.replace(/\\/g, '/')))
+    .sort();
+}
+
+/**
+ * A glob as an anchored, case-insensitive regular expression. `**` is handled
+ * before `*` so the two do not collide, and `**` followed by a separator also
+ * matches *zero* directories -- `a/**` + `/x.ttl` should find `a/x.ttl`, which is
+ * what someone writing that pattern means.
+ */
+function globToRegExp(pattern: string): RegExp {
+  let out = '';
+  for (let i = 0; i < pattern.length; i++) {
+    const c = pattern[i];
+    if (c === '*') {
+      if (pattern[i + 1] === '*') {
+        if (pattern[i + 2] === '/') {
+          out += '(?:[^/]*/)*';
+          i += 2;
+        } else {
+          out += '.*';
+          i += 1;
+        }
+      } else {
+        out += '[^/]*';
+      }
+    } else if (c === '?') {
+      out += '[^/]';
+    } else {
+      out += c.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+    }
+  }
+  return new RegExp(`^${out}$`, 'i');
+}
+
+/** Every file under `dir`, one level deep unless `recursive`. Bounded so a symlink loop cannot spin. */
+function walkFiles(dir: string, recursive: boolean, depth = 0): string[] {
+  if (depth > 12) return [];
+  let entries: fs.Dirent[];
+  try {
+    entries = fs.readdirSync(dir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const out: string[] = [];
+  for (const e of entries) {
+    const full = path.join(dir, e.name);
+    if (e.isFile()) out.push(full);
+    else if (recursive && e.isDirectory()) out.push(...walkFiles(full, true, depth + 1));
+  }
+  return out;
+}
+
 /** Direct sibling directories of `dir`'s parent, excluding `dir` itself. */
 function siblingDirs(dir: string): string[] {
   const parent = path.dirname(dir);

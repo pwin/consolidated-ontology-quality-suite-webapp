@@ -1,5 +1,37 @@
 # Changelog
 
+## 0.11.2
+
+### `queryOntologyPaths` accepts glob patterns
+
+Entries may now be **literal paths, glob patterns, or any mix of the two in one
+list** — the mix being the point, since a project typically has a couple of
+ontologies worth naming and a directory of others worth sweeping up:
+
+```json
+"ontologySuite.queryOntologyPaths": [
+  "core.ttl",
+  "vocab/*_ontology.ttl",
+  "imported/**/*.ttl",
+  "C:/shared/gist/gistCore14.1.0.ttl"
+]
+```
+
+`*` matches within one path segment, `?` one character, `**` any depth of
+directories (including none, so `vocab/**/*.ttl` finds `vocab/draft.ttl` as well
+as `vocab/nested/deep.ttl`). Matching is case-insensitive and results are sorted,
+so a run over one project is reproducible. Duplicates are collapsed, since a
+literal and a pattern can name the same file and an ontology should not be read
+twice.
+
+A **literal** entry still passes through without an existence check, so a
+mistyped path surfaces as a read error naming the file rather than vanishing as
+"no ontology found". A **pattern** that matches nothing contributes nothing —
+there is no single path to blame, and `*_ontology.ttl` matching none is a normal
+state for a project that hasn't written one yet.
+
+Purely additive: a list of literal paths behaves exactly as it did in 0.11.1.
+
 ## 0.11.1
 
 Four fixes to the TARQL/query side and to CURIE rendering. All four are

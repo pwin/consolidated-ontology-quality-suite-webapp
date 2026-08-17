@@ -4,7 +4,7 @@ import { resolveImports } from '../ontology/resolveImports';
 import { sketchQuery, renderSketchTurtle } from '../triplify/sketch';
 import { checkAlignment } from '../triplify/prefixAlignment';
 import { evaluatePreview } from '../triplify/previewEvaluator';
-import { findOntologies, findPair } from '../triplify/discovery';
+import { findOntologies, findPair, resolveOntologyPatterns } from '../triplify/discovery';
 import { parseCsv } from '../triplify/csv';
 import { htmlShell } from './webviewUtil';
 import * as path from 'node:path';
@@ -165,7 +165,10 @@ function resolveOntologyPaths(queryUri: vscode.Uri): string[] {
   const configured = vscode.workspace.getConfiguration('ontologySuite').get<string[]>('queryOntologyPaths', []);
   if (configured.length > 0) {
     const root = vscode.workspace.getWorkspaceFolder(queryUri)?.uri.fsPath ?? path.dirname(queryUri.fsPath);
-    return configured.map((p) => (path.isAbsolute(p) ? p : path.join(root, p)));
+    // Entries are independent: each is either a literal path or a glob, and the
+    // two mix freely in one list -- pin the two ontologies you author by name,
+    // then sweep up `vocab/*_ontology.ttl` alongside them.
+    return resolveOntologyPatterns(configured, root);
   }
   return findOntologies(queryUri.fsPath);
 }

@@ -413,7 +413,7 @@ Two different mechanisms, for two different kinds of customization:
 | `ontologySuite.enableSparqlChecks` | `true` | Run the registry's SPARQL CONSTRUCT checks. Fast (~0.2s on this project's own fixtures) |
 | `ontologySuite.enableShaclChecks` | `true` | Run the registry's SHACL-SPARQL shapes (via `shacl-wasm-node`). Fast since 0.10.0 — ~0.3s for all six shapes files where the previous `shacl-engine` took ~71s — so there is rarely a reason to turn it off now |
 | `ontologySuite.enableVocabularyChecks` | `true` | Run the closed-world vocabulary check (`VOC-001`) — flags used-but-undeclared class/property IRIs (typos, hallucinated terms) within namespaces the graph has closed-world knowledge of |
-| `ontologySuite.queryOntologyPaths` | `[]` | Ontology file(s) a query is checked for conformance against, absolute or workspace-relative. Empty = discover automatically (query's own directory, then parent, then siblings). Several are supported and all are merged |
+| `ontologySuite.queryOntologyPaths` | `[]` | Ontology file(s) a query is checked for conformance against. Each entry is a literal path **or** a glob (`*`, `?`, `**`), mixed freely in one list — e.g. `["core.ttl", "vocab/*_ontology.ttl"]`. Absolute or workspace-relative. Empty = discover automatically (query's own directory, then parent, then siblings). All resolved ontologies are merged |
 | `ontologySuite.triplifyPreviewSampleSize` | `20` | CSV rows sampled for the live triplify preview |
 | `ontologySuite.projectStandardsPath` | `.ontology-suite/standards.json` | Project values (category class, language tag, versioning, policy) that complete Quick Fix repairs |
 | `ontologySuite.projectRulesPath` | `.ontology-suite/class-rules.json` | Minimum-required-content rules for classes/properties (`PRJ-REQUIRED`) |
@@ -453,7 +453,7 @@ this repo's own `.vscode/settings.json` already sets:
 3. Alternatively, install a packaged build directly — grab the `.vsix` from
    the [latest release](https://github.com/pwin/consolidated-ontology-quality-suite-webapp/releases/latest),
    or build one yourself with `npx @vscode/vsce package`:
-   `code --install-extension ontology-dev-suite-0.11.1.vsix`
+   `code --install-extension ontology-dev-suite-0.11.2.vsix`
 
 ## Publishing to the Marketplace
 
@@ -472,7 +472,7 @@ live in the repo:
    rebuilding:
    ```sh
    npx @vscode/vsce login pwin
-   npx @vscode/vsce publish --packagePath ontology-dev-suite-0.11.1.vsix
+   npx @vscode/vsce publish --packagePath ontology-dev-suite-0.11.2.vsix
    ```
 
 `engines.vscode` is currently `^1.125.0`, so the Marketplace will only offer
@@ -486,7 +486,7 @@ separate registry with its own publish step, `npx ovsx publish`.
 
 Two tiers, both real and both passing as of this writing:
 
-- **`npm test`** (Vitest) — 204 tests across 33 files covering every
+- **`npm test`** (Vitest) — 215 tests across 33 files covering every
   pure-logic module: parsing, all six serializations' round-trips
   (including the Manchester class-expression engine against real OWL2
   restrictions), import resolution (including the gist v11→v14.1 drift-
