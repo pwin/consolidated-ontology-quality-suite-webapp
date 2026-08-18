@@ -53,7 +53,7 @@ export async function resolveImports(
     seenFiles.add(match.filePath);
     resolved.push(iri);
     resolvedFilePaths.push(match.filePath);
-    merged.push(...match.quads);
+    for (const q of match.quads) merged.push(q);
     for (const nested of declaredImportIris(match.quads)) {
       if (!visited.has(nested)) pending.add(nested);
     }
@@ -85,7 +85,7 @@ async function scanCandidates(dir: string): Promise<CandidateFile[]> {
   for (const entry of entries) {
     if (entry.isDirectory()) {
       if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
-      out.push(...(await scanCandidates(path.join(dir, entry.name))));
+      for (const c of await scanCandidates(path.join(dir, entry.name))) out.push(c);
       continue;
     }
     const ext = path.extname(entry.name).toLowerCase();

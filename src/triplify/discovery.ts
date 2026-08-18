@@ -65,7 +65,7 @@ export function findPair(filePath: string): string | undefined {
     const candidates = listByExtension(searchDir, wantExtensions);
     const stemMatch = candidates.find((c) => stem(c) === base);
     if (stemMatch) return stemMatch;
-    allCandidates.push(...candidates);
+    for (const c of candidates) allCandidates.push(c);
   }
   return allCandidates.length === 1 ? allCandidates[0] : undefined;
 }
@@ -127,7 +127,7 @@ export function resolveOntologyPatterns(entries: string[], baseDir: string): str
       out.push(resolved);
       continue;
     }
-    out.push(...expandGlob(resolved));
+    for (const f of expandGlob(resolved)) out.push(f);
   }
   // Distinct, because a literal and a pattern can name the same file, and the
   // conformance check should not read one ontology twice.
@@ -194,7 +194,7 @@ function walkFiles(dir: string, recursive: boolean, depth = 0): string[] {
   for (const e of entries) {
     const full = path.join(dir, e.name);
     if (e.isFile()) out.push(full);
-    else if (recursive && e.isDirectory()) out.push(...walkFiles(full, true, depth + 1));
+    else if (recursive && e.isDirectory()) for (const f of walkFiles(full, true, depth + 1)) out.push(f);
   }
   return out;
 }

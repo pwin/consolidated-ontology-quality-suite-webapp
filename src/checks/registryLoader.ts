@@ -50,7 +50,7 @@ function walk(dir: string, ext: string): string[] {
   const out: string[] = [];
   for (const entry of entries) {
     const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) out.push(...walk(full, ext));
+    if (entry.isDirectory()) for (const f of walk(full, ext)) out.push(f);
     else if (entry.name.endsWith(ext)) out.push(full);
   }
   return out;

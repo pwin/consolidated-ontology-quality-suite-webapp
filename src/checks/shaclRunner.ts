@@ -88,7 +88,7 @@ export function runShaclChecks(quads: Quad[], registry: Registry): ResultRow[] {
     if (!validator) continue;
     try {
       const report = validator.validateTurtle(dataText, DATA_BASE, 'none');
-      rows.push(...toResultRows(report.results, registry));
+      for (const r of toResultRows(report.results, registry)) rows.push(r);
     } catch (err) {
       console.error(`[ontologySuite] shacl-wasm failed validating against ${file}:`, err);
     }

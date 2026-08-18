@@ -49,7 +49,7 @@ export function runSparqlChecks(quads: Quad[], registry: Registry): ResultRow[] 
       continue;
     }
     if (!Array.isArray(resultQuads) || resultQuads.length === 0) continue;
-    rows.push(...extractRows(resultQuads as OxiQuad[], registry, 'sparql'));
+    for (const r of extractRows(resultQuads as OxiQuad[], registry, 'sparql')) rows.push(r);
   }
   return rows;
 }

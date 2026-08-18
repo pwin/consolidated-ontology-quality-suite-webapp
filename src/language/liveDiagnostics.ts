@@ -77,7 +77,7 @@ export class LiveDiagnosticsProvider implements vscode.Disposable {
       }
     }
 
-    diagnostics.push(...findUndeclaredPrefixUsages(document, text, parsed.prefixes));
+    for (const d of findUndeclaredPrefixUsages(document, text, parsed.prefixes)) diagnostics.push(d);
 
     this.diagnostics.set(document.uri, diagnostics);
   }

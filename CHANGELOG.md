@@ -1,5 +1,48 @@
 # Changelog
 
+## 0.11.3
+
+### Fixed: `Maximum call stack size exceeded` on hover
+
+Reported against the installed 0.11.2 build:
+
+```
+ERR Maximum call stack size exceeded: RangeError: Maximum call stack size exceeded
+    at At.rebuild (…/dist/extension.js)
+    at async Object.provideHover (…/dist/extension.js)
+```
+
+`TermIndex.rebuild` merged each parsed file with `allQuads.push(...parsed.quads)`.
+Spreading an array into `push` makes **every element a function argument**, and
+this runtime throws at ~125,546 of them — measured, not estimated. So a single
+`.ttl` or `.owl` past that many quads crashed the index, and since `rebuild`
+scans the whole workspace (`**/*.{ttl,owl}`, up to 2000 files), one large data
+graph anywhere in the project was enough. The failure then surfaced as a stack
+overflow with nothing in the message naming the file responsible.
+
+The same pattern was in **nine** other places, each on an array whose length is
+set by the input rather than by syntax — `resolveImports` merging an imported
+graph, the SPARQL and SHACL runners collecting findings, live diagnostics,
+the registry walk, and the file/glob walks in `discovery.ts`. All ten now
+iterate. The five remaining spread-pushes are bounded by document syntax (the
+comment lines attached to one statement, one term’s annotation lines) and cannot
+approach the limit.
+
+Guarded by a behavioural regression test rather than a source grep: it builds a
+130,000-quad import and asserts the merge completes with every quad present.
+Confirmed to fail with the old code, reproducing exactly the reported
+`RangeError`, and to pass with the fix.
+
+### Fixed: one bad file left the editor looking permanently broken
+
+Found while fixing the above. `TermIndex.ensureBuilt` memoises the in-flight
+build so concurrent callers share one rebuild — but it memoised **rejections**
+too. Once a build failed, every later hover, completion and go-to-definition
+re-threw the same stale error until a save happened to invalidate the index.
+That is why the crash above presented as continuous rather than one-off. A
+failed build now clears the cached promise so the next caller retries, and
+rethrows so the failure stays visible instead of silently serving an empty index.
+
 ## 0.11.2
 
 ### `queryOntologyPaths` accepts glob patterns

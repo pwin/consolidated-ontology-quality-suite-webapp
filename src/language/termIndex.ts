@@ -31,7 +31,19 @@ export class TermIndex {
   private building: Promise<void> | undefined;
 
   async ensureBuilt(): Promise<void> {
-    if (!this.building) this.building = this.rebuild();
+    // A failed build must not be cached. `building` holds the in-flight promise so
+    // concurrent callers share one rebuild, but if it rejects and that rejection stays
+    // memoised, *every* later hover, completion and go-to-definition re-throws the same
+    // stale error until the next save happens to invalidate it -- which is how one bad
+    // file turns into an editor that looks permanently broken. Clearing it lets the next
+    // caller retry; rethrowing keeps the failure visible rather than silently serving an
+    // empty index.
+    if (!this.building) {
+      this.building = this.rebuild().catch((err) => {
+        this.building = undefined;
+        throw err;
+      });
+    }
     return this.building;
   }
 
@@ -58,7 +70,7 @@ export class TermIndex {
       const text = await readText(uri);
       if (text === undefined) continue;
       const parsed = parseTurtle(uri.toString(), text);
-      allQuads.push(...parsed.quads);
+      for (const q of parsed.quads) allQuads.push(q);
       const declaredSubjects = new Set(parsed.quads.filter((q) => q.subject.termType === 'NamedNode').map((q) => q.subject.value));
       scanFileForCuries(uri, text, parsed.prefixes, byIri, declaredSubjects);
     }
