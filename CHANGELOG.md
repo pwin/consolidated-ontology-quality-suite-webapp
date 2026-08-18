@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.11.4
+
+### Fixed: metrics could overflow the stack on a deep class hierarchy
+
+Found by auditing for the rest of the class of bug 0.11.3 fixed, rather than
+from a report.
+
+`computeMaxDepth` guarded *cycles* but not *descent*. Hierarchy depth follows the
+longest subclass chain, and the recursive walk cost one stack frame per link, so
+a long chain overflowed on what is only a metrics report. Memoisation hid it
+whenever classes happened to be visited shallowest-first; declared the other way
+round — which is just as valid a document — a 20,000-deep chain threw.
+
+A depth cap was the obvious fix and the wrong one: measured on this runtime,
+~5,000 frames of a closure that size already overflow, so any limit low enough to
+be safe was also low enough to silently truncate a real answer. The walk is now
+iterative over an explicit stack, which removes the ceiling instead of choosing
+one — a 100,000-deep chain reports 99,999. Cycles still terminate with the same
+result as before.
+
+Also replaced `Math.max(...parents.map(...))` there: spread makes every element a
+function argument, the same ~125k limit behind 0.11.3.
+
 ## 0.11.3
 
 ### Fixed: `Maximum call stack size exceeded` on hover

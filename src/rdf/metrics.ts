@@ -69,22 +69,51 @@ function computeMaxDepth(model: OntologyModel, edges: ReadonlyArray<readonly [st
     childToParents.get(child)!.push(parent);
   }
 
+  // Iterative, with an explicit stack. A cycle guard alone does not bound the
+  // descent: depth follows the longest subclass chain, and a recursive walk costs
+  // one JS frame per link. Measured on this runtime, ~5,000 frames of a closure
+  // this size already overflow -- so *any* fixed recursion limit low enough to be
+  // safe would also be low enough to silently truncate a real answer. Walking the
+  // DAG on the heap removes the ceiling instead of choosing one: a 100,000-deep
+  // chain reports 99,999 rather than throwing.
   const memo = new Map<string, number>();
-  const depthOf = (iri: string, seen: Set<string>): number => {
-    if (memo.has(iri)) return memo.get(iri)!;
-    if (seen.has(iri)) return 0; // cycle guard
-    const parents = childToParents.get(iri) ?? [];
-    if (parents.length === 0) return 0;
-    seen.add(iri);
-    const depth = 1 + Math.max(...parents.map((p) => depthOf(p, seen)));
-    seen.delete(iri);
-    memo.set(iri, depth);
-    return depth;
+  const depthOf = (start: string): number => {
+    const cached = memo.get(start);
+    if (cached !== undefined) return cached;
+
+    // `best` is max(parent depth + 1) so far; `next` is how many of this node's
+    // parents have been visited. `onPath` breaks cycles, exactly as the recursive
+    // form's `seen` did -- a node already being expanded contributes nothing.
+    const stack: { iri: string; next: number; best: number }[] = [{ iri: start, next: 0, best: 0 }];
+    const onPath = new Set<string>([start]);
+
+    while (stack.length > 0) {
+      const frame = stack[stack.length - 1];
+      const parents = childToParents.get(frame.iri) ?? [];
+
+      if (frame.next < parents.length) {
+        const parent = parents[frame.next++];
+        const known = memo.get(parent);
+        if (known !== undefined) frame.best = Math.max(frame.best, known + 1);
+        else if (!onPath.has(parent)) {
+          onPath.add(parent);
+          stack.push({ iri: parent, next: 0, best: 0 });
+        }
+        continue;
+      }
+
+      stack.pop();
+      onPath.delete(frame.iri);
+      memo.set(frame.iri, frame.best);
+      const caller = stack[stack.length - 1];
+      if (caller) caller.best = Math.max(caller.best, frame.best + 1);
+    }
+    return memo.get(start) ?? 0;
   };
 
   let max = 0;
   for (const iri of model.terms.keys()) {
-    max = Math.max(max, depthOf(iri, new Set()));
+    max = Math.max(max, depthOf(iri));
   }
   return max;
 }
