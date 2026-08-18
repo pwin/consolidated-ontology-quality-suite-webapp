@@ -125,16 +125,67 @@ export function activate(context: vscode.ExtensionContext): void {
     }
   }
 
-  /** Editing commands (Add Class/Property) work by textual append, which only makes sense for Turtle. */
-  function activeTurtleUri(): vscode.Uri | undefined {
-    const editor = vscode.window.activeTextEditor;
-    if (!editor || editor.document.languageId !== 'turtle') {
-      void vscode.window.showErrorMessage('Open a .ttl ontology file first.');
-      return undefined;
-    }
-    return editor.document.uri;
+  /**
+   * Editing commands (Add Class/Property, Sort/Clean Document) work by textual
+   * append or block reordering, which only makes sense for Turtle. Async because it
+   * shares `requireLanguage`'s files.associations diagnosis -- `.ttl` is claimed by
+   * other RDF extensions too, so the same stale-mapping trap applies here.
+   */
+  async function activeTurtleUri(): Promise<vscode.Uri | undefined> {
+    const doc = await requireLanguage('turtle', ['.ttl', '.owl'], 'a Turtle ontology file');
+    return doc?.uri;
   }
 
+  /**
+   * Returns the active document when it really is `languageId`, and otherwise says
+   * something useful about why it is not.
+   *
+   * The naive guard ("open a .tq file first") is actively misleading when a .tq file
+   * *is* open: `files.associations` overrides an extension's own language
+   * registration, so a stale mapping left over from working around a competing RDF
+   * extension silently sends the file to another language and every command here
+   * refuses it. That has now happened twice -- once for `.rq` against
+   * `faubulous.mentor`, once for `.tq` against a leftover `"*.tq": "sparql"`. The
+   * message names the real cause and offers to correct it, since the fix is a
+   * settings key most people would have no reason to suspect.
+   */
+  async function requireLanguage(languageId: string, extensions: string[], what: string): Promise<vscode.TextDocument | undefined> {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+      void vscode.window.showErrorMessage(`Open ${what} first (${extensions.join(", ")}).`);
+      return undefined;
+    }
+    if (editor.document.languageId === languageId) return editor.document;
+
+    const ext = extensions.find((e) => editor.document.uri.fsPath.toLowerCase().endsWith(e));
+    if (!ext) {
+      void vscode.window.showErrorMessage(`Open ${what} first (${extensions.join(", ")}).`);
+      return undefined;
+    }
+
+    // Right extension, wrong language: a files.associations mapping is winning.
+    const glob = `*${ext}`;
+    const fix = "Fix association";
+    const choice = await vscode.window.showErrorMessage(
+      `${editor.document.languageId === "plaintext" ? "This file has no language assigned" : `This file is open as "${editor.document.languageId}"`}, ` +
+        `but ${what} must be "${languageId}". A files.associations setting is overriding the extension's own registration for ${glob}.`,
+      fix,
+    );
+    if (choice !== fix) return undefined;
+
+    // Correct it where it is actually set, so the edit is not shadowed by a
+    // higher-precedence scope the user cannot see from here.
+    const config = vscode.workspace.getConfiguration("files");
+    const inspected = config.inspect<Record<string, string>>("associations");
+    const inWorkspace = inspected?.workspaceValue && glob in inspected.workspaceValue;
+    const target = inWorkspace ? vscode.ConfigurationTarget.Workspace : vscode.ConfigurationTarget.Global;
+    const current = (inWorkspace ? inspected?.workspaceValue : inspected?.globalValue) ?? {};
+    await config.update("associations", { ...current, [glob]: languageId }, target);
+    void vscode.window.showInformationMessage(
+      `Set ${glob} to "${languageId}" in ${inWorkspace ? "workspace" : "user"} settings. Reopen the file, then run the command again.`,
+    );
+    return undefined;
+  }
   /** Read-oriented commands (checks, metrics, graph view) work for any of the six supported serializations. */
   function activeRdfUri(): vscode.Uri | undefined {
     const editor = vscode.window.activeTextEditor;
@@ -156,7 +207,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
 
     vscode.commands.registerCommand('ontologySuite.addClass', async () => {
-      const uri = activeTurtleUri();
+      const uri = await activeTurtleUri();
       if (!uri) return;
       const editor = vscode.window.activeTextEditor!;
       const prefixes = parseTurtle(uri.toString(), editor.document.getText()).prefixes;
@@ -183,7 +234,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
 
     vscode.commands.registerCommand('ontologySuite.addProperty', async () => {
-      const uri = activeTurtleUri();
+      const uri = await activeTurtleUri();
       if (!uri) return;
       const editor = vscode.window.activeTextEditor!;
       const prefixes = parseTurtle(uri.toString(), editor.document.getText()).prefixes;
@@ -299,12 +350,9 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
 
     vscode.commands.registerCommand('ontologySuite.openQueryWorkbench', async () => {
-      const editor = vscode.window.activeTextEditor;
-      if (!editor || editor.document.languageId !== 'sparql-construct') {
-        void vscode.window.showErrorMessage('Open a CONSTRUCT query file first (.rq, .sparql, .tq or .tarql).');
-        return;
-      }
-      await queryWorkbench.open(editor.document.uri);
+      const doc = await requireLanguage('sparql-construct', ['.rq', '.sparql', '.tq', '.tarql'], 'a CONSTRUCT query file');
+      if (!doc) return;
+      await queryWorkbench.open(doc.uri);
     }),
 
     vscode.commands.registerCommand('ontologySuite.openGraphView', async () => {
@@ -505,8 +553,8 @@ export function activate(context: vscode.ExtensionContext): void {
    * is confirmed lossless at the RDF level and comment-preserving by its own test suite -- plus
    * VS Code's own undo stack makes the whole thing a single Ctrl+Z away from reverting regardless.
    */
-  function runOrganizeCommand(strategy: 'alphabetical' | 'byType', removeUnusedPrefixes: boolean, label: string): void {
-    const uri = activeTurtleUri();
+  async function runOrganizeCommand(strategy: 'alphabetical' | 'byType', removeUnusedPrefixes: boolean, label: string): Promise<void> {
+    const uri = await activeTurtleUri();
     if (!uri) return;
     const editor = vscode.window.activeTextEditor!;
     const text = editor.document.getText();
