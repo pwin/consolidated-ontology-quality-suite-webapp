@@ -45,7 +45,7 @@ export function registerManchesterCompletionProvider(index: TermIndex): vscode.D
       // Term completion after a known prefix, filtered by section.
       const curieMatch = /([A-Za-z][\w-]*):(\w*)$/.exec(linePrefix);
       if (curieMatch) {
-        await index.ensureBuilt();
+        if (!(await index.ensureBuiltQuietly())) return undefined;
         const [, prefix] = curieMatch;
         const ns = declared[prefix] ?? WELL_KNOWN_PREFIXES[prefix];
         if (ns) {

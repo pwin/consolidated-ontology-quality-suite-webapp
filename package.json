@@ -222,6 +222,10 @@
       {
         "command": "ontologySuite.cleanDocument",
         "title": "Ontology Suite: Clean Document (Remove Unused Prefixes + Sort)"
+      },
+      {
+        "command": "ontologySuite.resetIndex",
+        "title": "Ontology Suite: Reset Index & Diagnostics"
       }
     ],
     "menus": {
@@ -285,6 +289,9 @@
         {
           "command": "ontologySuite.addSubProperty",
           "when": "false"
+        },
+        {
+          "command": "ontologySuite.resetIndex"
         }
       ],
       "view/title": [

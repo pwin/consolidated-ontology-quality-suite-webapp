@@ -14,7 +14,7 @@ export function registerHoverProvider(index: TermIndex): vscode.Disposable {
       const iri = expand(curie, prefixes);
       if (!iri) return undefined;
 
-      await index.ensureBuilt();
+      if (!(await index.ensureBuiltQuietly())) return undefined;
       const term = index.lookupTerm(iri);
       if (!term) {
         return new vscode.Hover(new vscode.MarkdownString(`\`${iri}\`\n\n*(not declared in any workspace ontology)*`), wordRange);

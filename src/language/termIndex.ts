@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { parseTurtle, parseSparqlPrefixes } from '../rdf/parseDocument';
+import { parseSparqlPrefixes, readOntologyDocument } from '../rdf/parseDocument';
 import { buildOntologyModel, TermInfo } from '../rdf/ontologyModel';
 import { expand } from '../rdf/vocab';
 import { findStatementLineRange } from './statementRange';
@@ -13,6 +13,31 @@ export interface TermOccurrence {
   isDeclaration: boolean;
 }
 
+/**
+ * Every serialization this extension registers a language for, so the index covers
+ * what the editor can open. It previously globbed only `{ttl,owl}` and `{rq,sparql}`,
+ * which silently excluded TriG, N-Triples, N-Quads, Manchester and RDF/XML ontologies
+ * -- and, after 0.11.1 registered them, `.tq`/`.tarql` queries too. Terms declared in
+ * any of those were invisible to hover, completion, go-to-definition and rename.
+ */
+const ONTOLOGY_GLOB = '**/*.{ttl,owl,trig,nt,nq,nquads,omn,rdf}';
+const QUERY_GLOB = '**/*.{rq,sparql,tarql,tq}';
+const EXCLUDE_GLOB = '**/node_modules/**';
+const MAX_INDEXED_FILES = 2000;
+
+/**
+ * Whether a file's syntax actually uses CURIEs as written tokens.
+ *
+ * `scanFileForCuries` records *source positions*, which only mean something where
+ * `prefix:localName` is the surface syntax -- the Turtle family and Manchester. In
+ * RDF/XML the same pattern is an XML QName in an attribute (`rdf:about=`), so
+ * scanning it would invent occurrences of a term named `about` and offer them to
+ * find-references and rename. Its quads are still indexed; only the text scan is
+ * skipped.
+ */
+function hasCurieSyntax(uri: vscode.Uri): boolean {
+  return !uri.fsPath.toLowerCase().endsWith('.rdf');
+}
 const CURIE_TOKEN = /(^|[\s(),;.[\]{}])((?:[A-Za-z][\w-]*)?):([A-Za-z_][\w-]*)/g;
 
 /**
@@ -29,6 +54,8 @@ export class TermIndex {
   private mergedQuads: Quad[] = [];
   private mergedModel = buildOntologyModel([]);
   private building: Promise<void> | undefined;
+  /** Suppresses repeat logging while the index keeps failing; cleared on the next success. */
+  private reportedFailure = false;
 
   async ensureBuilt(): Promise<void> {
     // A failed build must not be cached. `building` holds the in-flight promise so
@@ -47,6 +74,29 @@ export class TermIndex {
     return this.building;
   }
 
+  /**
+   * `ensureBuilt` for the language providers, which must not throw at the user.
+   *
+   * A provider that lets an index failure escape turns one bad file into a raw
+   * `ERR ...` notification on every hover, completion and go-to-definition -- which is
+   * exactly how the 0.11.3 stack overflow presented. Returning false instead degrades
+   * to "no hover this time", which is the honest outcome, and the failure is logged
+   * once per streak rather than once per keystroke.
+   */
+  async ensureBuiltQuietly(): Promise<boolean> {
+    try {
+      await this.ensureBuilt();
+      this.reportedFailure = false;
+      return true;
+    } catch (err) {
+      if (!this.reportedFailure) {
+        this.reportedFailure = true;
+        console.error('[ontologySuite] term index unavailable; hover/completion/definition are degraded until it rebuilds:', err);
+      }
+      return false;
+    }
+  }
+
   invalidate(): void {
     this.building = undefined;
   }
@@ -63,18 +113,20 @@ export class TermIndex {
     const byIri = new Map<string, TermOccurrence[]>();
     const allQuads: Quad[] = [];
 
-    const ttlFiles = await vscode.workspace.findFiles('**/*.{ttl,owl}', '**/node_modules/**', 2000);
-    const rqFiles = await vscode.workspace.findFiles('**/*.{rq,sparql}', '**/node_modules/**', 2000);
+    const ontologyFiles = await vscode.workspace.findFiles(ONTOLOGY_GLOB, EXCLUDE_GLOB, MAX_INDEXED_FILES);
+    const queryFiles = await vscode.workspace.findFiles(QUERY_GLOB, EXCLUDE_GLOB, MAX_INDEXED_FILES);
 
-    for (const uri of ttlFiles) {
+    for (const uri of ontologyFiles) {
       const text = await readText(uri);
       if (text === undefined) continue;
-      const parsed = parseTurtle(uri.toString(), text);
+      // Format-aware: the index used to assume Turtle, so a .omn or .rdf file
+      // contributed nothing but parse errors even though its terms are just as real.
+      const parsed = await readOntologyDocument(uri.fsPath, text);
       for (const q of parsed.quads) allQuads.push(q);
       const declaredSubjects = new Set(parsed.quads.filter((q) => q.subject.termType === 'NamedNode').map((q) => q.subject.value));
-      scanFileForCuries(uri, text, parsed.prefixes, byIri, declaredSubjects);
+      if (hasCurieSyntax(uri)) scanFileForCuries(uri, text, parsed.prefixes, byIri, declaredSubjects);
     }
-    for (const uri of rqFiles) {
+    for (const uri of queryFiles) {
       const text = await readText(uri);
       if (text === undefined) continue;
       const prefixes = parseSparqlPrefixes(text);

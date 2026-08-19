@@ -28,6 +28,12 @@ export class LiveDiagnosticsProvider implements vscode.Disposable {
     for (const doc of vscode.workspace.textDocuments) this.scheduleValidate(doc, 0);
   }
 
+  /** Drops every live diagnostic. Used by the Reset Index command, so a stale or
+   *  wrong squiggle can be cleared without reloading the window. */
+  clear(): void {
+    this.diagnostics.clear();
+  }
+
   dispose(): void {
     this.diagnostics.dispose();
     for (const d of this.disposables) d.dispose();

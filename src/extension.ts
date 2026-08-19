@@ -43,6 +43,8 @@ import { CompetencyQuestionProvider } from './tests/competencyQuestionProvider';
 import { runOntologyScript } from './scripting/runScript';
 import { organizeDocument } from './ontology/documentSort';
 
+/** Language ids this extension registers whose files feed the workspace term index. */
+const INDEXED_LANGUAGES = new Set(['turtle', 'trig', 'ntriples', 'nquads', 'owl-manchester', 'sparql-construct']);
 export function activate(context: vscode.ExtensionContext): void {
   const termIndex = new TermIndex();
   const liveDiagnostics = new LiveDiagnosticsProvider();
@@ -101,7 +103,11 @@ export function activate(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     vscode.workspace.onDidSaveTextDocument((doc) => {
-      if (doc.languageId === 'turtle' || doc.languageId === 'sparql-construct') termIndex.invalidate();
+      // Every serialization the index covers (see language/termIndex.ts). Keyed on
+      // languageId where this extension owns it, and on detectFormat otherwise --
+      // `.rdf` registers as plain `xml`, which is shared with every other XML file,
+      // so invalidating on languageId alone would rebuild on unrelated saves.
+      if (INDEXED_LANGUAGES.has(doc.languageId) || detectFormat(doc.uri.fsPath, doc.getText())) termIndex.invalidate();
     }),
     vscode.window.onDidChangeActiveTextEditor((editor) => void updateStatusBar(editor)),
   );
@@ -329,6 +335,20 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
 
     vscode.commands.registerCommand('ontologySuite.refreshOutline', () => outlineProvider.refresh()),
+
+    // Explicit recovery. Saving any indexed file already invalidates, but that is a
+    // side effect nobody would guess at when the editor is misbehaving -- and Refresh
+    // Outline only refreshes the tree, which is an easy thing to reach for and be
+    // disappointed by. This clears everything held in memory: the term index behind
+    // hover/completion/definition/rename, and both diagnostic collections.
+    vscode.commands.registerCommand('ontologySuite.resetIndex', async () => {
+      termIndex.invalidate();
+      liveDiagnostics.clear();
+      cliDiagnostics.clear();
+      outlineProvider.refresh();
+      await termIndex.ensureBuilt().catch(() => undefined);
+      void vscode.window.showInformationMessage('Ontology Suite: index and diagnostics reset.');
+    }),
 
     // Outline left-click: go to the term's definition (its whole statement highlighted, not just
     // the CURIE token) *and* refocus the graph view (if open, or opened for the first time) on it

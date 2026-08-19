@@ -17,7 +17,7 @@ export function registerDefinitionProvider(index: TermIndex): vscode.Disposable 
     async provideDefinition(document, position) {
       const hit = iriAtPosition(document, position);
       if (!hit) return undefined;
-      await index.ensureBuilt();
+      if (!(await index.ensureBuiltQuietly())) return undefined;
       const occurrences = index.getOccurrences(hit.iri).filter((o) => o.isDeclaration);
       return occurrences.map((o) => new vscode.Location(o.uri, o.range.start));
     },
@@ -30,7 +30,7 @@ export function registerReferenceProvider(index: TermIndex): vscode.Disposable {
     async provideReferences(document, position) {
       const hit = iriAtPosition(document, position);
       if (!hit) return undefined;
-      await index.ensureBuilt();
+      if (!(await index.ensureBuiltQuietly())) return undefined;
       return index.getOccurrences(hit.iri).map((o) => new vscode.Location(o.uri, o.range));
     },
   };
@@ -52,7 +52,7 @@ export function registerRenameProvider(index: TermIndex): vscode.Disposable {
         void vscode.window.showErrorMessage('New name must be a valid Turtle local name.');
         return undefined;
       }
-      await index.ensureBuilt();
+      if (!(await index.ensureBuiltQuietly())) return undefined;
       const occurrences = index.getOccurrences(hit.iri);
       const edit = new vscode.WorkspaceEdit();
       for (const occ of occurrences) {
