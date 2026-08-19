@@ -1,5 +1,52 @@
 # Changelog
 
+## 0.12.4
+
+### The CURIE scan was the other half of the unresponsive-host profiles
+
+Three further profiles of the same session put `scanFileForCuries` above the parser:
+**2.2s of self time in one, and `expand` alone was 65% of another**. 0.12.3 stopped it
+running repeatedly; this makes the run itself cheaper.
+
+- **Occurrences hold line/column numbers instead of a `vscode.Range`.** The index keeps
+  one occurrence per CURIE token in the workspace -- 317k of them in the measured
+  corpus -- and a `Range` is three objects (itself plus two `Position`s) where three
+  numbers do. Every consumer (go-to-definition, find-references, rename) works on the
+  handful of occurrences for a single term, so the ranges are now built on demand.
+- **`expand` is inlined into the scan.** The regex has already separated prefix from
+  local name, so joining them into a CURIE only for `expand` to `indexOf`/`slice` it
+  apart again allocated a string per match -- once per term occurrence in the workspace.
+- **The first-non-whitespace search is hoisted out of the match loop.** It was
+  recomputed per match to answer the same question each time.
+
+### The merged quad array is no longer retained
+
+`TermIndex` kept a workspace-wide `Quad[]` alive purely to hand out through
+`getMergedQuads()`, which nothing called. It is only ever the input to
+`buildOntologyModel`; the per-file quads in the cache are what an incremental rebuild
+actually needs.
+
+One settled index over the same 7 MB / 18-file corpus:
+
+| | per index | 12 interleaved hover/save cycles |
+|---|---|---|
+| 0.12.1 | 184 MB | 1465 MB |
+| 0.12.2 | 193 MB | 2065 MB |
+| 0.12.3 | 193 MB | 270 MB |
+| 0.12.4 | **161 MB** | **238 MB** |
+
+Cold build 997 ms against 1107 ms, longest event-loop stall 101 ms against 121 ms.
+
+What remains is inherent: an index costs roughly a kilobyte per quad, and 113 MB of
+the 161 MB is the parsed quads themselves, held per file so that an edit to one
+ontology does not re-parse the rest. `ontologySuite.maxIndexedFileSizeKb` is the lever
+if a workspace holds data graphs that are not worth indexing.
+
+### `Reset Index & Diagnostics` now reports what it rebuilt
+
+Files, quads, term occurrences, and how many files were skipped for size. When the
+editor is struggling the first useful question is how much there actually is to index,
+and nothing in the UI answered it.
 ## 0.12.3
 
 ### Fixed: concurrent index rebuilds crashed the extension host at a 3.9 GB heap

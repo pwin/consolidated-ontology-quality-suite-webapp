@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { parseTurtle, parseSparqlPrefixes } from '../rdf/parseDocument';
 import { expand } from '../rdf/vocab';
-import type { TermIndex } from './termIndex';
+import { occurrenceRange, type TermIndex } from './termIndex';
 
 function iriAtPosition(document: vscode.TextDocument, position: vscode.Position): { iri: string; range: vscode.Range } | undefined {
   const wordRange = document.getWordRangeAtPosition(position, /[A-Za-z][\w-]*:[A-Za-z_][\w-]*/);
@@ -19,7 +19,7 @@ export function registerDefinitionProvider(index: TermIndex): vscode.Disposable 
       if (!hit) return undefined;
       if (!(await index.ensureBuiltQuietly())) return undefined;
       const occurrences = index.getOccurrences(hit.iri).filter((o) => o.isDeclaration);
-      return occurrences.map((o) => new vscode.Location(o.uri, o.range.start));
+      return occurrences.map((o) => new vscode.Location(o.uri, new vscode.Position(o.line, o.startCol)));
     },
   };
   return vscode.languages.registerDefinitionProvider([{ language: 'turtle' }, { language: 'sparql-construct' }], provider);
@@ -31,7 +31,7 @@ export function registerReferenceProvider(index: TermIndex): vscode.Disposable {
       const hit = iriAtPosition(document, position);
       if (!hit) return undefined;
       if (!(await index.ensureBuiltQuietly())) return undefined;
-      return index.getOccurrences(hit.iri).map((o) => new vscode.Location(o.uri, o.range));
+      return index.getOccurrences(hit.iri).map((o) => new vscode.Location(o.uri, occurrenceRange(o)));
     },
   };
   return vscode.languages.registerReferenceProvider([{ language: 'turtle' }, { language: 'sparql-construct' }], provider);
@@ -56,9 +56,10 @@ export function registerRenameProvider(index: TermIndex): vscode.Disposable {
       const occurrences = index.getOccurrences(hit.iri);
       const edit = new vscode.WorkspaceEdit();
       for (const occ of occurrences) {
-        const text = (await vscode.workspace.openTextDocument(occ.uri)).getText(occ.range);
+        const range = occurrenceRange(occ);
+        const text = (await vscode.workspace.openTextDocument(occ.uri)).getText(range);
         const prefix = text.split(':')[0];
-        edit.replace(occ.uri, occ.range, `${prefix}:${newLocalName}`);
+        edit.replace(occ.uri, range, `${prefix}:${newLocalName}`);
       }
       return edit;
     },

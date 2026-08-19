@@ -350,7 +350,14 @@ export function activate(context: vscode.ExtensionContext): void {
       cliDiagnostics.clear();
       outlineProvider.refresh();
       await termIndex.ensureBuilt().catch(() => undefined);
-      void vscode.window.showInformationMessage('Ontology Suite: index and diagnostics reset.');
+      // Report what got rebuilt. When the editor is struggling the useful question is
+      // how much there is to index, and this is the only command that can answer it.
+      const { files, quads, occurrences, skipped } = termIndex.stats();
+      const skippedNote = skipped > 0 ? `, ${skipped} skipped as too large (see ontologySuite.maxIndexedFileSizeKb)` : '';
+      void vscode.window.showInformationMessage(
+        `Ontology Suite: index and diagnostics reset -- ${files} file(s), ${quads.toLocaleString()} quads, ` +
+          `${occurrences.toLocaleString()} term occurrences${skippedNote}.`,
+      );
     }),
 
     // Outline left-click: go to the term's definition (its whole statement highlighted, not just
@@ -362,7 +369,7 @@ export function activate(context: vscode.ExtensionContext): void {
       if (decl) {
         const doc = await vscode.workspace.openTextDocument(decl.uri);
         const editor = await vscode.window.showTextDocument(doc);
-        const blockRange = findStatementRange(doc.getText(), decl.range.start.line);
+        const blockRange = findStatementRange(doc.getText(), decl.line);
         editor.selection = new vscode.Selection(blockRange.start, blockRange.end);
         editor.revealRange(blockRange, vscode.TextEditorRevealType.InCenter);
       }

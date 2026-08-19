@@ -1,16 +1,32 @@
 import * as vscode from 'vscode';
 import { parseSparqlPrefixes, readOntologyDocument } from '../rdf/parseDocument';
 import { buildOntologyModel, TermInfo } from '../rdf/ontologyModel';
-import { expand } from '../rdf/vocab';
 import { findStatementLineRange } from './statementRange';
 import type { Quad } from 'n3';
 
 export interface TermOccurrence {
   uri: vscode.Uri;
-  range: vscode.Range;
+  /** Zero-based source position, held as numbers -- see `occurrenceRange`. */
+  line: number;
+  startCol: number;
+  endCol: number;
   iri: string;
   /** True if this occurrence looks like a declaration (subject of `a owl:Class`/etc.), not just a usage. */
   isDeclaration: boolean;
+}
+
+/**
+ * The `vscode.Range` for an occurrence, built on demand.
+ *
+ * The index holds one occurrence per CURIE token in the workspace -- hundreds of
+ * thousands of them on a real project -- and a `Range` is three objects (itself plus
+ * two `Position`s) where three numbers will do. Building them eagerly was the largest
+ * single frame in a profile of an unresponsive host, and it is pure overhead: every
+ * consumer -- go-to-definition, find-references, rename -- works on the handful of
+ * occurrences belonging to one term.
+ */
+export function occurrenceRange(occurrence: TermOccurrence): vscode.Range {
+  return new vscode.Range(occurrence.line, occurrence.startCol, occurrence.line, occurrence.endCol);
 }
 
 /**
@@ -77,7 +93,6 @@ interface IndexedFile {
  */
 export class TermIndex {
   private byIri = new Map<string, TermOccurrence[]>();
-  private mergedQuads: Quad[] = [];
   private mergedModel = buildOntologyModel([]);
   /** The one rebuild allowed to be in flight, shared by every caller that asks meanwhile. */
   private building: Promise<void> | undefined;
@@ -203,6 +218,26 @@ export class TermIndex {
     return this.mergedModel;
   }
 
+  /**
+   * What the index currently holds, for the *Reset Index & Diagnostics* report.
+   *
+   * An index is roughly a kilobyte per quad, and the whole of it is live at once, so
+   * "how big is my workspace, really" is the first question when the editor is
+   * struggling -- and nothing else in the UI answers it. Counted on demand rather than
+   * tracked, since it is asked for about once a session.
+   */
+  stats(): { files: number; quads: number; occurrences: number; skipped: number } {
+    let quads = 0;
+    let skipped = 0;
+    for (const file of this.fileCache.values()) {
+      quads += file.quads.length;
+      if (file.skipped) skipped++;
+    }
+    let occurrences = 0;
+    for (const list of this.byIri.values()) occurrences += list.length;
+    return { files: this.fileCache.size, quads, occurrences, skipped };
+  }
+
   private async rebuild(): Promise<void> {
     const generation = this.generation;
     const ontologyFiles = await vscode.workspace.findFiles(ONTOLOGY_GLOB, EXCLUDE_GLOB, MAX_INDEXED_FILES);
@@ -297,14 +332,13 @@ export class TermIndex {
     }
 
     this.byIri = byIri;
-    this.mergedQuads = allQuads;
+    // `allQuads` is deliberately not retained. It is only the input to the model, and
+    // holding it kept a second full-workspace array alive for nothing -- the per-file
+    // quads in `fileCache` are what an incremental rebuild actually needs.
     this.mergedModel = buildOntologyModel(allQuads);
     this.built = true;
   }
 
-  getMergedQuads(): Quad[] {
-    return this.mergedQuads;
-  }
 
   lookupTerm(iri: string): TermInfo | undefined {
     return this.mergedModel.terms.get(iri);
@@ -361,21 +395,31 @@ function scanFileForCuries(
   for (let lineNo = 0; lineNo < lines.length; lineNo++) {
     const line = lines[lineNo];
     if (line.trimStart().startsWith('#')) continue;
+    // Hoisted out of the match loop: it was recomputed per match to answer the same
+    // question every time -- whether the match is the first thing on the line.
+    const firstNonSpace = line.search(/\S/);
     CURIE_TOKEN.lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = CURIE_TOKEN.exec(line))) {
       const leading = m[1];
       const prefix = m[2];
       const local = m[3];
-      const curie = `${prefix}:${local}`;
-      const iri = expand(curie, prefixes);
-      if (!iri) continue;
+      // `expand` inlined. The regex has already separated prefix from local name, so
+      // joining them into a CURIE only for expand() to split it apart again allocated a
+      // string per match -- and there is one match per term occurrence in the whole
+      // workspace. `expand` alone was 65% of one unresponsive-host profile.
+      const namespace = prefixes[prefix];
+      if (!namespace) continue;
+      const iri = namespace + local;
       const startCol = m.index + leading.length;
-      const endCol = startCol + curie.length;
-      const range = new vscode.Range(lineNo, startCol, lineNo, endCol);
-      const isDeclaration = declarationSubjectIris.has(iri) && startCol === line.search(/\S/);
-
-      occurrences.push({ uri, range, iri, isDeclaration });
+      occurrences.push({
+        uri,
+        line: lineNo,
+        startCol,
+        endCol: startCol + prefix.length + 1 + local.length,
+        iri,
+        isDeclaration: startCol === firstNonSpace && declarationSubjectIris.has(iri),
+      });
     }
   }
   return occurrences;
