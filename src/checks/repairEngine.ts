@@ -178,6 +178,12 @@ export function computeRepair(
     .map((k) => beforeBySignature.get(k))
     .filter((q): q is Quad => q !== undefined);
 
+  // Placed after the last read of afterOxiQuads, not next to the last use of `store`:
+  // those quads are the store's own objects, so freeing earlier would pull them out from
+  // under the addedQuads filter. Freeing at all matters because WASM linear memory never
+  // shrinks -- an unfreed store is heap the editor holds until it exits, once per Quick
+  // Fix applied (see 0.12.1 for the same fault in the preview path).
+  (store as unknown as { free?: () => void }).free?.();
   return { checkId: row.checkId, kind: resolved.kind, title: resolved.title, addedQuads, removedQuads, resultQuads };
 }
 
