@@ -1,5 +1,72 @@
 # Changelog
 
+## 0.12.0
+
+### The term index now covers every serialization the extension opens
+
+It globbed only `{ttl,owl}` and `{rq,sparql}`, so terms declared in a **TriG,
+N-Triples, N-Quads, Manchester or RDF/XML** ontology were invisible to hover,
+completion, go-to-definition and rename — as were `.tq`/`.tarql` queries, which
+0.11.1 registered as a language without teaching the index about them.
+
+Both globs now cover every registered serialization, and ontology files are read
+through `readOntologyDocument` rather than assumed to be Turtle, so a `.omn` or
+`.rdf` file contributes its terms instead of only parse errors.
+
+One deliberate exception: the CURIE text scan does not run over RDF/XML. It
+records *source positions*, which mean something only where `prefix:localName` is
+the surface syntax; in RDF/XML that pattern is an XML QName in an attribute, so
+scanning it would invent an occurrence of a term named `about` and offer it to
+find-references and rename. Its quads are still indexed.
+
+**Saving** now invalidates the index for any of those serializations, not just
+Turtle and SPARQL. Keyed on `languageId` where this extension owns it and on
+`detectFormat` otherwise, because `.rdf` registers as plain `xml` — shared with
+every other XML file — so keying on languageId alone would rebuild on unrelated
+saves.
+
+### New: `Ontology Suite: Reset Index & Diagnostics`
+
+Saving an indexed file already invalidates, but that is a side effect nobody
+would guess at when the editor is misbehaving, and *Refresh Outline* only
+refreshes the tree — an easy thing to reach for and be disappointed by. The new
+command clears the term index and both diagnostic collections, then rebuilds.
+
+### Language providers degrade instead of erroring
+
+`hover`, `manchesterCompletion` and `definitionReferencesRename` called
+`ensureBuilt` with no error handling, so an index failure escaped as a raw
+`ERR …` notification **on every hover** — which is exactly how the 0.11.3 stack
+overflow presented. New `ensureBuiltQuietly` returns false instead, degrading to
+"no hover this time", and logs once per failure streak rather than once per
+call. `ensureBuilt` still throws for callers that should report.
+
+### A `files.associations` mismatch now explains itself
+
+"Open a CONSTRUCT query file first" is actively misleading when such a file *is*
+open. `files.associations` overrides an extension's language registration, so a
+stale mapping silently sends the file elsewhere and every command gating on
+`languageId` refuses it, naming none of that. This caught the same user twice —
+`.rq` mapped away to work around a competing RDF extension, then `.tq` left
+mapped to `"sparql"` after 0.11.1 made that workaround unnecessary.
+
+The guard now distinguishes no-editor, unrelated-file, and **right extension /
+wrong language** — reporting which language the file actually got, which is
+needed, and that a `files.associations` entry for that glob is the cause, with a
+**Fix association** action that writes the correction into whichever scope
+currently defines the key.
+
+### SHACL engine updated to `shacl-wasm-node` 0.1.10
+
+Moves property descent off the call stack, so a recursive shape following a chain
+costs one heap frame per link instead of one call frame. Verified through the npm
+package the extension actually loads: a **20,000-link chain validates** (20,001
+findings) where the engine previously refused at 47 links and overflowed the
+stack at about 100.
+
+Findings were captured per finding — shape, focus node, path, value, severity —
+across `domain.ttl`, `clinic.ttl` and `expressions-demo.ttl` under 0.1.9, then
+re-captured under 0.1.10 and compared: **identical, no crashes**.
 ## 0.11.4
 
 ### Fixed: metrics could overflow the stack on a deep class hierarchy
