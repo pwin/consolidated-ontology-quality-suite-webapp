@@ -63,32 +63,51 @@ export class CompetencyQuestionProvider implements vscode.Disposable {
     if (request.include) items.push(...request.include);
     else this.controller.items.forEach((i) => items.push(i));
 
-    for (const item of items) {
-      if (token.isCancellationRequested) break;
-      if (!item.uri) continue;
-      run.started(item);
-      try {
-        const result = await this.evaluate(item.uri);
-        if (result.passed) run.passed(item, result.durationMs);
-        else run.failed(item, new vscode.TestMessage(result.message), result.durationMs);
-      } catch (err) {
-        run.errored(item, new vscode.TestMessage(err instanceof Error ? err.message : String(err)));
+    // Competency questions in one folder almost always ask about the same ontology, and
+    // each store cost a full read/parse/import-resolve, an N-Triples serialization of
+    // the whole graph and a re-parse of that -- once per test. Sharing them across the
+    // run makes N questions cost one load. Keyed on the resolved target paths, so a
+    // question with its own `@against` still gets its own graph.
+    const stores = new Map<string, OxiStore>();
+    try {
+      for (const item of items) {
+        if (token.isCancellationRequested) break;
+        if (!item.uri) continue;
+        run.started(item);
+        try {
+          const result = await this.evaluate(item.uri, stores);
+          if (result.passed) run.passed(item, result.durationMs);
+          else run.failed(item, new vscode.TestMessage(result.message), result.durationMs);
+        } catch (err) {
+          run.errored(item, new vscode.TestMessage(err instanceof Error ? err.message : String(err)));
+        }
       }
+    } finally {
+      // WASM linear memory never shrinks and wasm-bindgen frees lazily, so an unfreed
+      // store is heap the editor keeps until it exits (see 0.12.1).
+      for (const store of stores.values()) (store as unknown as { free?: () => void }).free?.();
+      run.end();
     }
-    run.end();
   }
 
-  private async evaluate(uri: vscode.Uri): Promise<{ passed: boolean; message: string; durationMs: number }> {
+  private async evaluate(
+    uri: vscode.Uri,
+    stores: Map<string, OxiStore>,
+  ): Promise<{ passed: boolean; message: string; durationMs: number }> {
     const start = Date.now();
     const text = new TextDecoder('utf-8').decode(await vscode.workspace.fs.readFile(uri));
     const directives = parseDirectives(text);
 
-    const dataQuads = await this.loadAgainst(uri, directives.against);
-
-     
-    const oxigraph = require('oxigraph') as typeof import('oxigraph');
-    const store = new oxigraph.Store();
-    store.load(serializeQuadsAsNTriples(dataQuads), { format: 'application/n-triples' });
+    const targetPaths = await this.resolveTargets(uri, directives.against);
+    const key = targetPaths.join('|');
+    let store = stores.get(key);
+    if (!store) {
+       
+      const oxigraph = require('oxigraph') as typeof import('oxigraph');
+      store = new oxigraph.Store();
+      store.load(serializeQuadsAsNTriples(await loadQuads(targetPaths)), { format: 'application/n-triples' });
+      stores.set(key, store);
+    }
 
     let queryResult: unknown;
     try {
@@ -117,23 +136,32 @@ export class CompetencyQuestionProvider implements vscode.Disposable {
     return { passed: false, message: 'Query must be ASK or SELECT for a competency-question test.', durationMs: Date.now() - start };
   }
 
-  private async loadAgainst(cqUri: vscode.Uri, against: string[] | undefined): Promise<import('n3').Quad[]> {
+  /** The ontology file(s) a question runs against -- its own `@against`, else the folder. */
+  private async resolveTargets(cqUri: vscode.Uri, against: string[] | undefined): Promise<string[]> {
     const dir = path.dirname(cqUri.fsPath);
-    const targetPaths = against && against.length > 0 ? against.map((p) => path.resolve(dir, p)) : await defaultOntologyFiles(dir);
-
-    const allQuads: import('n3').Quad[] = [];
-    for (const filePath of targetPaths) {
-      try {
-        const bytes = await vscode.workspace.fs.readFile(vscode.Uri.file(filePath));
-        const parsed = await readOntologyDocument(filePath, new TextDecoder('utf-8').decode(bytes));
-        const { mergedQuads } = await resolveImports(filePath, parsed.quads, path.dirname(filePath));
-        allQuads.push(...mergedQuads);
-      } catch {
-        /* missing @against file -- surfaced implicitly via an empty/failing test result */
-      }
-    }
-    return allQuads;
+    return against && against.length > 0 ? against.map((p) => path.resolve(dir, p)) : await defaultOntologyFiles(dir);
   }
+}
+
+type OxiStore = InstanceType<typeof import('oxigraph').Store>;
+
+async function loadQuads(targetPaths: string[]): Promise<import('n3').Quad[]> {
+  const allQuads: import('n3').Quad[] = [];
+  for (const filePath of targetPaths) {
+    try {
+      const bytes = await vscode.workspace.fs.readFile(vscode.Uri.file(filePath));
+      const parsed = await readOntologyDocument(filePath, new TextDecoder('utf-8').decode(bytes));
+      const { mergedQuads } = await resolveImports(filePath, parsed.quads, path.dirname(filePath));
+      // Never spread into push: every element becomes a function argument, which this
+      // runtime refuses at ~125k of them (0.11.3). This one was missed then, and the
+      // `catch` below swallowed the RangeError -- so a large ontology silently produced
+      // an empty graph and failed every competency question for the wrong reason.
+      for (const q of mergedQuads) allQuads.push(q);
+    } catch {
+      /* missing @against file -- surfaced implicitly via an empty/failing test result */
+    }
+  }
+  return allQuads;
 }
 
 async function defaultOntologyFiles(dir: string): Promise<string[]> {

@@ -1,5 +1,67 @@
 # Changelog
 
+## 0.12.5
+
+### Query conformance no longer rebuilds the ontology model on every refresh
+
+`checkUndeclaredTerms` ran `buildOntologyModel` over the whole merged ontology --
+imports included -- and copied every term into two arrays, each time the Query
+Workbench refreshed. None of it can have changed: it is derived entirely from the
+*ontology*, while what is being edited is the *query*.
+
+Against a 185k-quad ontology that was **100ms of a 110ms refresh**. The declared
+class and property sets are now cached against the quad array itself, which
+`QueryWorkbench`'s own ontology cache already keeps stable across refreshes. A
+`WeakMap` is the entire invalidation story: a changed graph is a new array, so it is
+a new key, and the old entry becomes collectible on its own.
+
+| full refresh (conformance + preview) | before | after |
+|---|---|---|
+| 67-quad ontology | 1.0 ms | 0.8 ms |
+| 185k-quad ontology | 110 ms | **5.8 ms** |
+
+Same findings before and after, and a genuinely different graph still recomputes.
+
+### Competency questions load their ontology once per run, not once per question
+
+Every `.cq.rq` test read, parsed and import-resolved its target ontologies, serialized
+the entire graph to N-Triples and re-parsed that into a fresh Oxigraph store --
+**per test**. Questions in one folder almost always ask about the same ontology.
+
+Stores are now shared across a run, keyed on the resolved target paths so a question
+with its own `@against` still gets its own graph, and freed when the run ends (an
+unfreed WASM store is heap the editor keeps until it exits -- see 0.12.1).
+
+One graph load measured at 12.0s for a 185k-triple target:
+
+| questions in a run | before | after |
+|---|---|---|
+| 2 | 24.0s | **12.0s** |
+| 5 | 59.9s | **12.0s** |
+| 20 | 239.5s | **12.0s** |
+
+### Fixed: a large ontology silently failed every competency question
+
+The same `push(...array)` overflow 0.11.3 fixed in ten places survived here, missed
+because the file sits under `src/tests/` and reads as test code -- it is the Test
+Explorer *provider*, which ships. Spreading makes every quad a function argument, and
+this runtime refuses at ~125k of them.
+
+Worse than the crash it caused elsewhere: the throw landed inside a `catch` meant for
+a missing `@against` file, so a large ontology produced an **empty graph** and every
+question failed against nothing, reporting the wrong reason.
+
+### Saving an unrelated file no longer invalidates the term index
+
+The save handler asked `detectFormat(path, document.getText())`. `detectFormat` falls
+back to `'turtle'` for anything it cannot place, so that predicate was true for
+**every file in the workspace**: saving a `.ts`, `.py`, `.json` or `.md` invalidated
+the index and, before 0.12.4, re-parsed every ontology in the workspace on the next
+hover. It also materialised the whole document to do it.
+
+The sniff was never needed for the case the code was guarding: `.rdf` resolves from
+its extension alone. Only `.owl` is genuinely content-ambiguous, and it answers
+`'turtle'` either way -- which is all this predicate needs to know.
 ## 0.12.4
 
 ### The CURIE scan was the other half of the unresponsive-host profiles

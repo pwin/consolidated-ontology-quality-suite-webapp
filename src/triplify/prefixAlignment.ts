@@ -83,6 +83,41 @@ export function checkPrefixAlignment(
  * every class (via rdf:type) or property it references that the ontology
  * never declares.
  */
+/**
+ * The ontology half of the conformance check, cached against the quad array itself.
+ *
+ * The Query Workbench re-runs conformance on every debounced edit, and this half
+ * cannot have changed: it is derived entirely from the ontology, while what is being
+ * edited is the *query*. Rebuilding it meant a full `buildOntologyModel` pass plus two
+ * copies of every term into arrays, per refresh -- measured at 100ms per refresh
+ * against a 185k-quad ontology, which is 91% of the whole validation.
+ *
+ * A `WeakMap` on the array is the whole invalidation story: `QueryWorkbench` holds one
+ * array across refreshes and builds a fresh one when the files change (see its
+ * `ontologyCache`), so a new graph is a new key and the old entry becomes collectible
+ * on its own. The one assumption is that callers do not mutate an array in place after
+ * handing it over -- nothing here does.
+ */
+const declaredTermCache = new WeakMap<Quad[], { declaredClasses: Set<string>; declaredProperties: Set<string> }>();
+
+function declaredTerms(ontologyQuads: Quad[]): { declaredClasses: Set<string>; declaredProperties: Set<string> } {
+  const cached = declaredTermCache.get(ontologyQuads);
+  if (cached) return cached;
+
+  const declaredClasses = new Set<string>();
+  const declaredProperties = new Set<string>();
+  for (const term of buildOntologyModel(ontologyQuads).terms.values()) {
+    if (term.kinds.includes('class')) declaredClasses.add(term.iri);
+    if (term.kinds.includes('objectProperty') || term.kinds.includes('datatypeProperty') || term.kinds.includes('annotationProperty')) {
+      declaredProperties.add(term.iri);
+    }
+  }
+
+  const entry = { declaredClasses, declaredProperties };
+  declaredTermCache.set(ontologyQuads, entry);
+  return entry;
+}
+
 export function checkUndeclaredTerms(queryText: string, ontologyQuads: Quad[]): UndeclaredTerm[] {
   const sketch = sketchQuery(queryText);
   const turtle = renderSketchTurtle([sketch]);
@@ -94,15 +129,7 @@ export function checkUndeclaredTerms(queryText: string, ontologyQuads: Quad[]): 
     return [];
   }
 
-  const model = buildOntologyModel(ontologyQuads);
-  const declaredClasses = new Set(
-    [...model.terms.values()].filter((t) => t.kinds.includes('class')).map((t) => t.iri),
-  );
-  const declaredProperties = new Set(
-    [...model.terms.values()]
-      .filter((t) => t.kinds.includes('objectProperty') || t.kinds.includes('datatypeProperty') || t.kinds.includes('annotationProperty'))
-      .map((t) => t.iri),
-  );
+  const { declaredClasses, declaredProperties } = declaredTerms(ontologyQuads);
 
   const usedClasses = new Set<string>();
   const usedProperties = new Set<string>();

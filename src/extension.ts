@@ -104,10 +104,17 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.workspace.onDidSaveTextDocument((doc) => {
       // Every serialization the index covers (see language/termIndex.ts). Keyed on
-      // languageId where this extension owns it, and on detectFormat otherwise --
-      // `.rdf` registers as plain `xml`, which is shared with every other XML file,
-      // so invalidating on languageId alone would rebuild on unrelated saves.
-      if (INDEXED_LANGUAGES.has(doc.languageId) || detectFormat(doc.uri.fsPath, doc.getText())) termIndex.invalidate();
+      // languageId where this extension owns it, and on the extension otherwise --
+      // `.rdf` registers as plain `xml`, which is shared with every other XML file.
+      //
+      // Deliberately **without** the document text. `detectFormat` falls back to
+      // 'turtle' for anything it cannot place, so passing the content made this
+      // predicate true for *every* file: saving a .ts, .py or .json invalidated the
+      // term index and, before 0.12.4, re-parsed the whole workspace on the next hover.
+      // Sniffing was never needed for the case above either -- `.rdf` resolves from its
+      // extension alone; only `.owl` is content-ambiguous, and it answers `turtle`
+      // either way here, which is all this needs to know.
+      if (INDEXED_LANGUAGES.has(doc.languageId) || detectFormat(doc.uri.fsPath) !== undefined) termIndex.invalidate();
     }),
     vscode.window.onDidChangeActiveTextEditor((editor) => void updateStatusBar(editor)),
   );
