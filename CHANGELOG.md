@@ -1,5 +1,65 @@
 # Changelog
 
+## 0.12.2
+
+### Fixed: the term index re-parsed the whole workspace on every invalidation
+
+Reported as `UNRESPONSIVE extension host: took 60% of 3008ms`, with a CPU profile.
+The profile was unambiguous: **98% of it was N3 lexing under `TermIndex.rebuild`**,
+reached through a single `provideHover` -- 3.5s in `_tokenizeToEnd`, plus 2s of GC
+from the garbage it produced.
+
+`rebuild` read and parsed *every* ontology in the workspace from scratch. Anything
+that invalidates the index -- saving a file, any scaffold command, applying a quick
+fix -- threw all of that away and paid for it again on the next hover, completion or
+go-to-definition. Invalidation is necessarily coarse; the work it triggered was total.
+
+Each file now keeps its own parse result, revalidated by size and mtime, so a rebuild
+costs only what actually changed. Keying on the file rather than on an event also
+covers changes the extension never hears about -- a `git checkout`, an external
+editor -- which an event-driven cache would miss.
+
+Measured over a 7 MB / 18-file workspace (185k quads):
+
+| | time | files read |
+|---|---|---|
+| rebuild after invalidate | 1090 ms | 18 |
+| **after** | **2 ms** | **0** |
+| rebuild after editing one file | 1564 ms | 18 |
+| **after** | **347 ms** | **1** |
+
+Cold build is slightly faster too (~1.4s either way): the old merge did a `Map.set`
+per *occurrence* rather than per new key.
+
+### The index no longer blocks the extension host while it builds
+
+A cold build is still real work, and it ran as one uninterrupted burst -- N3 parses
+synchronously, and the `await`s between files resolve as microtasks, so the event
+loop never got a turn. Measured on the same workspace: **the loop got zero turns**
+across the entire 1.35s build, which is precisely why the host could not answer a
+ping and VS Code declared it unresponsive.
+
+The build now hands the loop back every 40ms. Same workspace: 12 turns, longest
+stall 155ms -- of which 134ms is `buildOntologyModel`, a single pass that only runs
+when something changed.
+
+The yield is `setImmediate`, not `setTimeout(0)`: a zero timeout is clamped to the
+platform timer granularity (~15ms on Windows), and paying that per slice nearly
+doubled the cold build in measurement.
+
+### New: `ontologySuite.maxIndexedFileSizeKb` (default 5120)
+
+Files above the limit are stat'd but not parsed. A multi-MB data graph costs seconds
+of blocked editor to index terms nobody is going to hover; hand-authored ontologies
+are far below the default (gist core is under 1 MB). Skipped files are **named in the
+extension host log** along with what is lost -- hover, completion, go-to-definition
+and rename for their terms -- rather than silently disappearing.
+
+### `Reset Index & Diagnostics` really resets
+
+It called `invalidate()`, which now deliberately *keeps* per-file parse results. The
+command is what someone reaches for when the editor is misbehaving, so it drops those
+too.
 ## 0.12.1
 
 ### Fixed: the Query Workbench leaked memory until VS Code ran out of heap

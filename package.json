@@ -2,7 +2,7 @@
   "name": "ontology-dev-suite",
   "displayName": "Ontology Development Suite",
   "description": "Create ontologies (with imports) in Turtle, TriG, N-Triples, N-Quads, RDF/XML, or OWL Manchester Syntax, author TARQL-style CSV-to-RDF CONSTRUCT queries with live preview, and validate against a local SPARQL/SHACL/OWL2-RL checks engine.",
-  "version": "0.12.1",
+  "version": "0.12.2",
   "publisher": "pwin",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -387,7 +387,12 @@
           "default": true,
           "description": "Run the closed-world vocabulary check (VOC-001) as part of Run Local Checks: flags any class/property IRI used (as a predicate, rdf:type, rdfs:subClassOf/domain/range, owl:equivalentClass/disjointWith/..., sh:targetClass/class/path) that isn't declared anywhere in this document or its resolved imports -- catching typos/hallucinated terms that SHACL's open-world semantics never flag. Scoped to namespaces this graph has at least one declared term in already, so unimported external vocabularies aren't flagged."
         },
-        "ontologySuite.triplifyPreviewSampleSize": {
+        "ontologySuite.maxIndexedFileSizeKb": {
+          "type": "number",
+          "default": 5120,
+          "markdownDescription": "Files larger than this are not parsed into the term index, so their terms do not appear in hover, completion, go-to-definition or rename. A multi-MB data graph costs seconds of blocked editor to index terms nobody looks up; hand-authored ontologies are far below the default (gist core is under 1 MB). Skipped files are named in the extension host log."
+        },
+                "ontologySuite.triplifyPreviewSampleSize": {
           "type": "number",
           "default": 20,
           "description": "Number of CSV rows sampled for the live triplify preview."

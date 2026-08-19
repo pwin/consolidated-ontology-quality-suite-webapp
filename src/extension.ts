@@ -342,7 +342,10 @@ export function activate(context: vscode.ExtensionContext): void {
     // disappointed by. This clears everything held in memory: the term index behind
     // hover/completion/definition/rename, and both diagnostic collections.
     vscode.commands.registerCommand('ontologySuite.resetIndex', async () => {
-      termIndex.invalidate();
+      // reset(), not invalidate(): invalidate keeps per-file parse results and
+      // revalidates them by stamp, which is the point of it. A reset is what someone
+      // reaches for when the editor is misbehaving, so it drops those too.
+      termIndex.reset();
       liveDiagnostics.clear();
       cliDiagnostics.clear();
       outlineProvider.refresh();

@@ -415,6 +415,7 @@ Two different mechanisms, for two different kinds of customization:
 | `ontologySuite.enableVocabularyChecks` | `true` | Run the closed-world vocabulary check (`VOC-001`) — flags used-but-undeclared class/property IRIs (typos, hallucinated terms) within namespaces the graph has closed-world knowledge of |
 | `ontologySuite.queryOntologyPaths` | `[]` | Ontology file(s) a query is checked for conformance against. Each entry is a literal path **or** a glob (`*`, `?`, `**`), mixed freely in one list — e.g. `["core.ttl", "vocab/*_ontology.ttl"]`. Absolute or workspace-relative. Empty = discover automatically (query's own directory, then parent, then siblings). All resolved ontologies are merged |
 | `ontologySuite.triplifyPreviewSampleSize` | `20` | CSV rows sampled for the live triplify preview |
+| `ontologySuite.maxIndexedFileSizeKb` | `5120` | Files larger than this are not parsed into the term index, so their terms do not appear in hover, completion, go-to-definition or rename. A multi-MB data graph costs seconds of blocked editor to index terms nobody hovers; hand-authored ontologies are far below the default (gist core is under 1 MB). Skipped files are named in the extension host log |
 | `ontologySuite.projectStandardsPath` | `.ontology-suite/standards.json` | Project values (category class, language tag, versioning, policy) that complete Quick Fix repairs |
 | `ontologySuite.projectRulesPath` | `.ontology-suite/class-rules.json` | Minimum-required-content rules for classes/properties (`PRJ-REQUIRED`) |
 
@@ -453,7 +454,7 @@ this repo's own `.vscode/settings.json` already sets:
 3. Alternatively, install a packaged build directly — grab the `.vsix` from
    the [latest release](https://github.com/pwin/consolidated-ontology-quality-suite-webapp/releases/latest),
    or build one yourself with `npx @vscode/vsce package`:
-   `code --install-extension ontology-dev-suite-0.12.1.vsix`
+   `code --install-extension ontology-dev-suite-0.12.2.vsix`
 
 ## Publishing to the Marketplace
 
@@ -472,7 +473,7 @@ live in the repo:
    rebuilding:
    ```sh
    npx @vscode/vsce login pwin
-   npx @vscode/vsce publish --packagePath ontology-dev-suite-0.12.1.vsix
+   npx @vscode/vsce publish --packagePath ontology-dev-suite-0.12.2.vsix
    ```
 
 `engines.vscode` is currently `^1.125.0`, so the Marketplace will only offer
