@@ -79,7 +79,12 @@ export class TermIndex {
   private byIri = new Map<string, TermOccurrence[]>();
   private mergedQuads: Quad[] = [];
   private mergedModel = buildOntologyModel([]);
+  /** The one rebuild allowed to be in flight, shared by every caller that asks meanwhile. */
   private building: Promise<void> | undefined;
+  /** Set by `invalidate()`; cleared when a rebuild that accounts for it starts. */
+  private stale = true;
+  /** Bumped by `reset()`, so a rebuild already in flight discards its results. */
+  private generation = 0;
   /** Suppresses repeat logging while the index keeps failing; cleared on the next success. */
   private reportedFailure = false;
   /**
@@ -99,21 +104,49 @@ export class TermIndex {
   /** False until the first successful rebuild, so the no-op fast path can't skip it. */
   private built = false;
 
+  /**
+   * Builds the index if it is stale, and -- the part that matters -- never starts a
+   * second rebuild while one is running.
+   *
+   * Until 0.12.3 `invalidate()` dropped the in-flight promise, leaving that rebuild
+   * running with nothing pointing at it while the next hover started another from
+   * scratch. Invalidations arrive constantly in a real session -- every save, every
+   * scaffold command -- and each rebuild costs a second or more, so several ran at
+   * once, each holding its own copy of every quad in the workspace.
+   *
+   * That is what crashed the extension host at a 3.9 GB heap. The giveaway in the log
+   * was mark-compact running 4.7s and freeing 2 MB: the memory was not garbage waiting
+   * to be collected, it was N live indexes. Measured on a 7 MB workspace, four
+   * interleaved hover/save cycles held 692 MB at once where one index costs 184 MB,
+   * and a forced GC afterwards returned all of it -- confirming nothing leaked, the
+   * copies were simply all reachable. Serialising rebuilds caps the live cost at one.
+   *
+   * A caller that joins an in-flight build gets an index that may predate the very
+   * latest invalidation. That is bounded by one rebuild and resolved by the next call,
+   * which is the better trade.
+   */
   async ensureBuilt(): Promise<void> {
-    // A failed build must not be cached. `building` holds the in-flight promise so
-    // concurrent callers share one rebuild, but if it rejects and that rejection stays
-    // memoised, *every* later hover, completion and go-to-definition re-throws the same
-    // stale error until the next save happens to invalidate it -- which is how one bad
-    // file turns into an editor that looks permanently broken. Clearing it lets the next
-    // caller retry; rethrowing keeps the failure visible rather than silently serving an
-    // empty index.
-    if (!this.building) {
-      this.building = this.rebuild().catch((err) => {
-        this.building = undefined;
-        throw err;
-      });
+    const inFlight = this.building;
+    if (inFlight) return inFlight;
+    if (!this.stale) return;
+
+    this.stale = false;
+    // A failed build must not be cached: if the rejection stayed memoised, *every* later
+    // hover, completion and go-to-definition would re-throw the same stale error until
+    // something happened to invalidate it -- which is how one bad file turns into an
+    // editor that looks permanently broken. Marking it stale again lets the next caller
+    // retry; rethrowing keeps the failure visible rather than silently serving an empty
+    // index.
+    const build = this.rebuild().catch((err) => {
+      this.stale = true;
+      throw err;
+    });
+    this.building = build;
+    try {
+      await build;
+    } finally {
+      if (this.building === build) this.building = undefined;
     }
-    return this.building;
   }
 
   /**
@@ -142,14 +175,22 @@ export class TermIndex {
   /**
    * Marks the index stale. Per-file results are kept and revalidated by stamp on the
    * next rebuild, so invalidating costs only the files that actually changed.
+   *
+   * Deliberately leaves any in-flight rebuild alone -- see `ensureBuilt`.
    */
   invalidate(): void {
-    this.building = undefined;
+    this.stale = true;
   }
 
-  /** Drops everything, including cached parses -- the *Reset Index & Diagnostics* command. */
+  /**
+   * Drops everything, including cached parses -- the *Reset Index & Diagnostics* command.
+   *
+   * A rebuild already in flight cannot be cancelled, so the generation bump makes it
+   * throw its results away rather than repopulate the cache this just cleared.
+   */
   reset(): void {
-    this.building = undefined;
+    this.generation++;
+    this.stale = true;
     this.fileCache.clear();
     this.built = false;
   }
@@ -163,6 +204,7 @@ export class TermIndex {
   }
 
   private async rebuild(): Promise<void> {
+    const generation = this.generation;
     const ontologyFiles = await vscode.workspace.findFiles(ONTOLOGY_GLOB, EXCLUDE_GLOB, MAX_INDEXED_FILES);
     const queryFiles = await vscode.workspace.findFiles(QUERY_GLOB, EXCLUDE_GLOB, MAX_INDEXED_FILES);
 
@@ -233,6 +275,10 @@ export class TermIndex {
     // Nothing was reparsed and nothing disappeared, so the merged view already in hand
     // is still exactly right -- an invalidate with no underlying change costs one stat
     // per file and no more.
+    // `reset()` ran while this was building, so these results describe an index the user
+    // explicitly threw away. Writing them back would undo the reset.
+    if (generation !== this.generation) return;
+
     const unchanged = reparsed === 0 && next.size === this.fileCache.size;
     this.fileCache = next;
     if (unchanged && this.built) return;

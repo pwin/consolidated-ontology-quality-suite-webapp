@@ -1,5 +1,59 @@
 # Changelog
 
+## 0.12.3
+
+### Fixed: concurrent index rebuilds crashed the extension host at a 3.9 GB heap
+
+`Ineffective mark-compacts near heap limit -- JavaScript heap out of memory`,
+terminating the extension host and every extension running in it.
+
+**0.12.2 did not fix this**, and measured slightly worse. It addressed how *long* a
+rebuild took; this is about how many of them ran at once.
+
+The tell was in the GC log rather than the profile:
+
+```
+Mark-Compact 3940.7 (4016.0) -> 3938.9 (4026.2) MB, 4726.50 / 0.00 ms
+```
+
+Nearly five seconds of mark-compact to free **2 MB of 3.9 GB**. That is not a
+collector failing to keep up with garbage -- it is a collector finding almost
+everything still reachable.
+
+It was reachable because `invalidate()` set `building = undefined`. The rebuild it
+was cancelling could not actually be cancelled: it kept running with nothing pointing
+at it, while the next hover, completion or go-to-definition saw no build in flight and
+started another from scratch. Invalidations arrive constantly in a real session --
+every save, every scaffold command, every quick fix -- and each rebuild takes a second
+or more, so several ran at once, each holding its own copy of every quad in the
+workspace. Nothing leaked; there were simply N live indexes.
+
+Rebuilds are now serialised. A caller arriving mid-build joins the one in flight
+instead of starting a rival, so at most one index can be live no matter how many
+invalidations land.
+
+Measured on a 7 MB / 18-file workspace where **one settled index costs 184 MB**,
+driving interleaved hover/save cycles:
+
+| cycles | 0.12.1 | 0.12.2 | 0.12.3 |
+|---|---|---|---|
+| 4 | 691 MB | 847 MB | **265 MB** |
+| 12 | 1465 MB | 2065 MB | **270 MB** |
+
+Flat against the number of cycles, where both previous versions grow linearly with
+them -- which is the runaway that reached 3.9 GB. A forced GC returned every version
+to ~190 MB, confirming the diagnosis: all three hold the same amount of *retained*
+memory, and the difference is purely how much is simultaneously live.
+
+Cold build also came out faster (820 ms against 1330 ms) and the longest event-loop
+stall shorter (101 ms against 155 ms), because the concurrent rebuilds had been
+competing for the same CPU.
+
+### `Reset Index & Diagnostics` is now authoritative over an in-flight rebuild
+
+A rebuild already running cannot be cancelled -- that is the whole lesson above -- so
+it used to finish and repopulate the very cache the reset had just cleared. Rebuilds
+now carry a generation, and one superseded by a reset discards its results.
 ## 0.12.2
 
 ### Fixed: the term index re-parsed the whole workspace on every invalidation
