@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import type { Quad } from 'n3';
 import { readOntologyDocument } from '../rdf/parseDocument';
 import { resolveImports } from '../ontology/resolveImports';
 import { sketchQuery, renderSketchTurtle } from '../triplify/sketch';
@@ -16,6 +17,21 @@ export class QueryWorkbench implements vscode.Disposable {
   private queryUri: vscode.Uri | undefined;
   private timer: ReturnType<typeof setTimeout> | undefined;
   private readonly disposables: vscode.Disposable[] = [];
+  /**
+   * Parsed ontologies, reused until the files themselves change.
+   *
+   * refresh() runs on every edit, debounced at 500ms. It used to re-read, re-parse and
+   * re-resolve-imports every ontology each time -- work that cannot change while
+   * someone is typing a *query*. That was most of the "slows down considerably", and
+   * it also defeated previewEvaluator's store cache, which is keyed on the quad
+   * array's identity: a fresh array every refresh meant a fresh WASM store every
+   * refresh, and those leak (see that file's note). Holding one array across refreshes
+   * is what makes both caches work.
+   *
+   * Keyed on each file's path, size and mtime, so an edit to the ontology is picked up
+   * on the next refresh without watching anything.
+   */
+  private ontologyCache: { key: string; quads: Quad[]; prefixes: Record<string, string> } | undefined;
 
   constructor() {
     this.disposables.push(
@@ -65,28 +81,7 @@ export class QueryWorkbench implements vscode.Disposable {
     let rowsUsed = 0;
     let skippedColumns: string[] = [];
 
-    // Every resolved ontology contributes: an extension ontology plus the upper
-    // ontology it builds on is the normal case, not an edge case. Each is
-    // import-resolved in its own right, then all merged, so a term declared in any
-    // of them counts as declared for the conformance check.
-    const ontologyPaths = resolveOntologyPaths(this.queryUri);
-    let ontologyQuads: import('n3').Quad[] = [];
-    const ontologyPrefixes: Record<string, string> = {};
-    for (const ontologyPath of ontologyPaths) {
-      try {
-        const bytes = await vscode.workspace.fs.readFile(vscode.Uri.file(ontologyPath));
-        const parsed = await readOntologyDocument(ontologyPath, new TextDecoder('utf-8').decode(bytes));
-        const resolved = await resolveImports(ontologyPath, parsed.quads, path.dirname(ontologyPath));
-        ontologyQuads = [...ontologyQuads, ...resolved.mergedQuads];
-        // First binding wins, so an earlier ontology's prefix isn't silently rebound
-        // by a later one that spells the same prefix differently.
-        for (const [prefix, iri] of Object.entries(parsed.prefixes)) {
-          if (!(prefix in ontologyPrefixes)) ontologyPrefixes[prefix] = iri;
-        }
-      } catch (err) {
-        console.error(`[ontologySuite] could not read ontology ${ontologyPath} for conformance checking:`, err);
-      }
-    }
+    const { quads: ontologyQuads, prefixes: ontologyPrefixes } = await this.loadOntologies();
 
     if (csvPath) {
       const sampleSize = vscode.workspace.getConfiguration('ontologySuite').get<number>('triplifyPreviewSampleSize', 20);
@@ -102,6 +97,47 @@ export class QueryWorkbench implements vscode.Disposable {
     const alignment = ontologyQuads.length > 0 ? checkAlignment(queryText, ontologyPrefixes, ontologyQuads) : undefined;
 
     this.render(sketchTurtle, csvPath, previewTurtle, previewError, rowsUsed, skippedColumns, alignment);
+  }
+
+  private async loadOntologies(): Promise<{ quads: Quad[]; prefixes: Record<string, string> }> {
+    const paths = this.queryUri ? resolveOntologyPaths(this.queryUri) : [];
+
+    const stamps: string[] = [];
+    for (const p of paths) {
+      try {
+        const stat = await vscode.workspace.fs.stat(vscode.Uri.file(p));
+        stamps.push(`${p}:${stat.size}:${stat.mtime}`);
+      } catch {
+        stamps.push(`${p}:missing`);
+      }
+    }
+    const key = stamps.join('|');
+    if (this.ontologyCache && this.ontologyCache.key === key) return this.ontologyCache;
+
+    // Every resolved ontology contributes: an extension ontology plus the upper
+    // ontology it builds on is the normal case, not an edge case. Each is
+    // import-resolved in its own right, then all merged, so a term declared in any
+    // of them counts as declared for the conformance check.
+    const quads: Quad[] = [];
+    const prefixes: Record<string, string> = {};
+    for (const ontologyPath of paths) {
+      try {
+        const bytes = await vscode.workspace.fs.readFile(vscode.Uri.file(ontologyPath));
+        const parsed = await readOntologyDocument(ontologyPath, new TextDecoder('utf-8').decode(bytes));
+        const resolved = await resolveImports(ontologyPath, parsed.quads, path.dirname(ontologyPath));
+        for (const q of resolved.mergedQuads) quads.push(q);
+        // First binding wins, so an earlier ontology's prefix isn't silently rebound
+        // by a later one that spells the same prefix differently.
+        for (const [prefix, iri] of Object.entries(parsed.prefixes)) {
+          if (!(prefix in prefixes)) prefixes[prefix] = iri;
+        }
+      } catch (err) {
+        console.error(`[ontologySuite] could not read ontology ${ontologyPath} for conformance checking:`, err);
+      }
+    }
+
+    this.ontologyCache = { key, quads, prefixes };
+    return this.ontologyCache;
   }
 
   private render(

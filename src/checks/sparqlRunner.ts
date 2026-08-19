@@ -51,6 +51,10 @@ export function runSparqlChecks(quads: Quad[], registry: Registry): ResultRow[] 
     if (!Array.isArray(resultQuads) || resultQuads.length === 0) continue;
     for (const r of extractRows(resultQuads as OxiQuad[], registry, 'sparql')) rows.push(r);
   }
+  // Same reasoning as previewEvaluator: release the WASM store rather than waiting
+  // on finalization. Less pressing here (once per checks run, not per keystroke) but
+  // the store holds the whole merged graph, so it is the larger single allocation.
+  (store as unknown as { free?: () => void }).free?.();
   return rows;
 }
 

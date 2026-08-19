@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.12.1
+
+### Fixed: the Query Workbench leaked memory until VS Code ran out of heap
+
+Reported as the workbench slowing down badly in use, ending in
+`Ineffective mark-compacts near heap limit — JavaScript heap out of memory` at
+~3.8 GB, with GC mutator utilisation down at 1.8%: the collector running almost
+continuously and reclaiming almost nothing.
+
+`refresh()` runs on every edit, debounced at 500ms, and it rebuilt everything each
+time — re-reading, re-parsing and re-resolving imports for every ontology, then
+converting every resulting quad into wasm-bindgen wrappers to load a fresh Oxigraph
+store. None of that can change while someone is typing a *query*.
+
+The leak is that wasm-bindgen frees lazily through a `FinalizationRegistry` and
+**WASM linear memory never shrinks**, so a store per keystroke grows the heap
+monotonically. Measured against a **67-quad** ontology: **+59 MB over 200
+refreshes**, none of it returned by a forced GC. A real ontology in a real session
+is what reached 3.8 GB.
+
+Two caches, because each alone was insufficient — freeing the store explicitly
+recovered only 9 MB of the 59, since the per-quad wrappers were the bulk:
+
+- **Parsed ontologies are held across refreshes**, keyed on each file's path, size
+  and mtime, so an edit to the ontology is still picked up on the next refresh
+  without watching anything.
+- **The Oxigraph store is cached** against the quad array's identity -- which is
+  exactly what the first cache makes stable. A genuinely new graph frees the old
+  store before building the next, so at most one is ever live.
+
+Measured over 200 refreshes, before and after:
+
+| | memory | time |
+|---|---|---|
+| rebuilding each refresh | +59 MB | 909 ms |
+| ontology cached | **+1 MB** | **42 ms** |
+
+`runSparqlChecks` frees its store too. It runs once per checks run rather than per
+keystroke, so it was never the leak, but it holds the whole merged graph and is the
+larger single allocation.
+
 ## 0.12.0
 
 ### The term index now covers every serialization the extension opens

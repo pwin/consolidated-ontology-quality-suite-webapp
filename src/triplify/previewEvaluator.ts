@@ -1,3 +1,4 @@
+import type { Quad } from 'n3';
 import type { CsvSample } from '../types';
 
 const VALID_SPARQL_VAR = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -38,12 +39,7 @@ export function evaluatePreview(queryText: string, csv: CsvSample, ontologyQuads
 
    
   const oxigraph = require('oxigraph') as typeof import('oxigraph');
-  const store = new oxigraph.Store();
-  if (ontologyQuads.length > 0) {
-    for (const q of ontologyQuads) {
-      store.add(toOxiQuad(oxigraph, q));
-    }
-  }
+  const store = storeFor(oxigraph, ontologyQuads);
 
   try {
     const result = store.query(injected, { results_format: 'text/turtle' });
@@ -53,6 +49,40 @@ export function evaluatePreview(queryText: string, csv: CsvSample, ontologyQuads
     return { turtle: '', rowsUsed: 0, skippedColumns, error: message };
   }
 }
+
+/** wasm-bindgen emits `free()` at runtime but omits it from the .d.ts, hence the cast. */
+function freeWasm(handle: unknown): void {
+  (handle as { free?: () => void }).free?.();
+}
+
+/**
+ * One cached Oxigraph store, rebuilt only when the ontology graph itself changes.
+ *
+ * The Query Workbench re-evaluates on every edit, debounced at 500ms. Building a
+ * store per call meant converting every ontology quad into wasm-bindgen wrappers
+ * each time -- four per quad -- and wasm-bindgen frees lazily via FinalizationRegistry
+ * while WASM linear memory never shrinks. Measured: +59 MB over 200 refreshes against
+ * a 67-quad ontology, none of it reclaimed by a forced GC. A real session against a
+ * real ontology reached an out-of-memory crash at ~3.8 GB.
+ *
+ * The ontology does not change while someone types a *query*, so the store is keyed
+ * on the quad array's identity: the caller holds one array across refreshes and the
+ * store is reused untouched. A genuinely new graph frees the old store before
+ * building the next, so at most one is ever live.
+ */
+let cachedStore: { key: Quad[]; store: OxiStore } | undefined;
+
+function storeFor(oxigraph: typeof import('oxigraph'), ontologyQuads: Quad[]): OxiStore {
+  if (cachedStore && cachedStore.key === ontologyQuads) return cachedStore.store;
+  if (cachedStore) freeWasm(cachedStore.store);
+
+  const store = new oxigraph.Store();
+  for (const q of ontologyQuads) store.add(toOxiQuad(oxigraph, q));
+  cachedStore = { key: ontologyQuads, store };
+  return store;
+}
+
+type OxiStore = InstanceType<typeof import('oxigraph').Store>;
 
 function buildValuesClause(headers: string[], rows: Record<string, string>[]): string {
   if (headers.length === 0 || rows.length === 0) return '';
