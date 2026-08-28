@@ -1,5 +1,5 @@
 import * as fs from 'node:fs';
-import { Quad, Writer } from 'n3';
+import { DataFactory, Parser, Quad, Writer } from 'n3';
 import { localName, Registry } from './registryLoader';
 import type { ResultRow, Severity } from '../types';
 
@@ -37,8 +37,14 @@ interface WasmModule {
   Validator: { fromTurtle(text: string, base?: string | null): WasmValidator };
 }
 
-/** Shapes-file path -> its compiled Validator. Compiling is the expensive half; the shapes never change within a session. */
-const cachedValidators = new Map<string, WasmValidator>();
+interface CompiledShapes {
+  validator: WasmValidator;
+  /** Shape IRI -- including the skolem IRIs minted below -- to the registry check id it reports as. */
+  checkIdByShapeIri: Map<string, string>;
+}
+
+/** Shapes-file path -> its compiled shapes. Compiling is the expensive half; the shapes never change within a session. */
+const cachedShapes = new Map<string, CompiledShapes>();
 
 // The data graph is handed over as N-Triples rather than Turtle: the engine
 // parses either, but N-Triples needs no prefix table, so nothing here depends on
@@ -84,11 +90,11 @@ export function runShaclChecks(quads: Quad[], registry: Registry): ResultRow[] {
 
   const rows: ResultRow[] = [];
   for (const file of registry.shaclFiles) {
-    const validator = getOrBuildValidator(file);
-    if (!validator) continue;
+    const compiled = getOrBuildValidator(file, registry);
+    if (!compiled) continue;
     try {
-      const report = validator.validateTurtle(dataText, DATA_BASE, 'none');
-      for (const r of toResultRows(report.results, registry)) rows.push(r);
+      const report = compiled.validator.validateTurtle(dataText, DATA_BASE, 'none');
+      for (const r of toResultRows(report.results, registry, compiled.checkIdByShapeIri)) rows.push(r);
     } catch (err) {
       console.error(`[ontologySuite] shacl-wasm failed validating against ${file}:`, err);
     }
@@ -96,14 +102,19 @@ export function runShaclChecks(quads: Quad[], registry: Registry): ResultRow[] {
   return rows;
 }
 
-function toResultRows(results: WasmResult[], registry: Registry): ResultRow[] {
+function toResultRows(results: WasmResult[], registry: Registry, checkIdByShapeIri: Map<string, string>): ResultRow[] {
   const rows: ResultRow[] = [];
   for (const result of results) {
     // The registry's shapes are named `oq:<CHECK-ID>`, so the shape IRI's local
-    // name is the check id. A finding from a nested (blank-node) property shape
-    // has no such name; it keeps a null checkId and the generic message below,
-    // exactly as the previous engine's results did.
-    const checkId = result.sourceShape ? localName(result.sourceShape) : null;
+    // name is usually the check id outright. Where it is not -- a nested property
+    // shape, or a shape tagged with an `oq:checkId` annotation instead -- the map
+    // built while compiling the shapes answers it (see nameNestedShapes).
+    const direct = result.sourceShape ? localName(result.sourceShape) : null;
+    const checkId = direct !== null && registry.checksById.has(direct)
+      ? direct
+      : result.sourceShape
+        ? checkIdByShapeIri.get(result.sourceShape) ?? null
+        : null;
     const check = checkId ? registry.checksById.get(checkId) : undefined;
 
     rows.push({
@@ -122,8 +133,8 @@ function toResultRows(results: WasmResult[], registry: Registry): ResultRow[] {
   return rows;
 }
 
-function getOrBuildValidator(file: string): WasmValidator | undefined {
-  const cached = cachedValidators.get(file);
+function getOrBuildValidator(file: string, registry: Registry): CompiledShapes | undefined {
+  const cached = cachedShapes.get(file);
   if (cached) return cached;
 
   let shapesText: string;
@@ -146,14 +157,121 @@ function getOrBuildValidator(file: string): WasmValidator | undefined {
     return undefined;
   }
 
+  let named: { text: string; checkIdByShapeIri: Map<string, string> };
   try {
-    const validator = mod.Validator.fromTurtle(shapesText, DATA_BASE);
-    cachedValidators.set(file, validator);
-    return validator;
+    named = nameNestedShapes(shapesText, registry);
+  } catch (err) {
+    // A shapes file this project cannot parse itself is still one the engine may
+    // well compile, so fall back to the text as written rather than losing the file.
+    console.error(`[ontologySuite] could not pre-name the nested shapes in ${file}:`, err);
+    named = { text: shapesText, checkIdByShapeIri: new Map() };
+  }
+
+  try {
+    const compiled: CompiledShapes = {
+      validator: mod.Validator.fromTurtle(named.text, DATA_BASE),
+      checkIdByShapeIri: named.checkIdByShapeIri,
+    };
+    cachedShapes.set(file, compiled);
+    return compiled;
   } catch (err) {
     console.error(`[ontologySuite] failed to compile shapes file ${file}:`, err);
     return undefined;
   }
+}
+
+const SH_PROPERTY = 'http://www.w3.org/ns/shacl#property';
+/** Where the skolem IRIs minted for nested property shapes live. They never leave this module. */
+const SHAPE_SKOLEM_BASE = 'http://ontology-dev-suite.local/shape/';
+
+/**
+ * Gives every nested `sh:property [ ... ]` shape a real IRI before the file is
+ * compiled, and returns the map from those IRIs back to the check id they belong to.
+ *
+ * A property-constraint result reports `sh:sourceShape` as the *nested* property
+ * shape, not the enclosing `oq:<CHECK-ID>` node shape the id is readable from --
+ * and a blank node has no name to read one from. So every finding from a check
+ * written in native SHACL core (`DAT-004`, `LOG-001`, `LOG-003`, `QUA-009`,
+ * `QUA-010`, `STR-002`) arrived with a null checkId: no title, no category, no
+ * remediation, and no dedup key in common with its SPARQL twin, so both engines'
+ * copies of one finding survived into the Problems panel.
+ * `consolidated_ontology_suite_python` hit the same bug against pyshacl and fixed
+ * it by walking up `sh:property` in the shapes graph
+ * (`checks/registry.py::_resolve_shape_id`, step 4).
+ *
+ * Walking up needs the reported blank node to be findable in *our* parse of the
+ * shapes, and it is not: `_:0_b6` and n3's `_:b6_...` are two parsers' private
+ * labels for the same node, and nothing lines them up. Naming the shapes before
+ * compiling sidesteps the mismatch -- the engine then reports the IRI minted here,
+ * which is a key into a map built in the same pass.
+ *
+ * The same pass picks up `oq:checkId` annotations (step 3 upstream), which is how
+ * the split shapes -- `QUA-001`, `STR-003`, `STY-002` -- are tagged.
+ */
+function nameNestedShapes(shapesText: string, registry: Registry): { text: string; checkIdByShapeIri: Map<string, string> } {
+  const quads = new Parser().parse(shapesText);
+
+  const parentOf = new Map<string, string>();
+  const annotated = new Map<string, string>();
+  for (const q of quads) {
+    if (q.predicate.value === SH_PROPERTY && q.object.termType === 'BlankNode') {
+      parentOf.set(q.object.value, q.subject.value);
+    }
+    // Matched on local name rather than a fixed IRI: shapes/*.ttl and registry.json
+    // already disagree about which namespace `oq:` is, and every other id lookup in
+    // this runner is local-name based for the same reason.
+    if (localName(q.predicate.value) === 'checkId' && q.object.termType === 'Literal') {
+      annotated.set(q.subject.value, q.object.value);
+    }
+  }
+
+  /** The check id a shape node reports as, following annotations and `sh:property` upwards. */
+  const resolve = (node: string, seen = new Set<string>()): string | undefined => {
+    if (seen.has(node)) return undefined;
+    seen.add(node);
+    const local = localName(node);
+    if (registry.checksById.has(local)) return local;
+    const annotation = annotated.get(node);
+    if (annotation && registry.checksById.has(annotation)) return annotation;
+    const parent = parentOf.get(node);
+    return parent ? resolve(parent, seen) : undefined;
+  };
+
+  const skolemFor = new Map<string, string>();
+  const checkIdByShapeIri = new Map<string, string>();
+  for (const blank of parentOf.keys()) {
+    const checkId = resolve(blank);
+    if (!checkId) continue;
+    const iri = `${SHAPE_SKOLEM_BASE}${checkId}/property-${skolemFor.size + 1}`;
+    skolemFor.set(blank, iri);
+    checkIdByShapeIri.set(iri, checkId);
+  }
+  // A *named* shape can carry its id in an annotation rather than in its own IRI.
+  for (const [node, id] of annotated) {
+    if (registry.checksById.has(id) && !registry.checksById.has(localName(node))) {
+      checkIdByShapeIri.set(node, id);
+    }
+  }
+  if (skolemFor.size === 0) return { text: shapesText, checkIdByShapeIri };
+
+  const rename = <T extends Quad['subject'] | Quad['object']>(term: T): T =>
+    term.termType === 'BlankNode' && skolemFor.has(term.value)
+      ? (DataFactory.namedNode(skolemFor.get(term.value) as string) as unknown as T)
+      : term;
+  const renamed = quads.map((q) => DataFactory.quad(rename(q.subject), q.predicate, rename(q.object), q.graph));
+
+  // Handed back as N-Triples for the same reason the data graph is: no prefix table
+  // to keep in step, and `fromTurtle` reads it, N-Triples being a Turtle subset.
+  const writer = new Writer({ format: 'N-Triples' });
+  writer.addQuads(renamed);
+  let text = '';
+  let failure: Error | undefined;
+  writer.end((err, result) => {
+    if (err) failure = err;
+    else text = result;
+  });
+  if (failure) throw failure;
+  return { text, checkIdByShapeIri };
 }
 
 /**

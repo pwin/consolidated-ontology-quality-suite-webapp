@@ -2,7 +2,7 @@
   "name": "ontology-dev-suite",
   "displayName": "Ontology Development Suite",
   "description": "Create ontologies (with imports) in Turtle, TriG, N-Triples, N-Quads, RDF/XML, or OWL Manchester Syntax, author TARQL-style CSV-to-RDF CONSTRUCT queries with live preview, and validate against a local SPARQL/SHACL/OWL2-RL checks engine.",
-  "version": "0.12.5",
+  "version": "0.13.0",
   "publisher": "pwin",
   "license": "MIT",
   "icon": "resources/icon.png",
@@ -180,6 +180,10 @@
         "title": "Ontology Suite: Run Local Checks"
       },
       {
+        "command": "ontologySuite.reviewTarqlBinds",
+        "title": "Ontology Suite: Review TARQL BIND Consistency"
+      },
+      {
         "command": "ontologySuite.showMetrics",
         "title": "Ontology Suite: Show Metrics & DL Expressivity"
       },
@@ -247,6 +251,9 @@
         },
         {
           "command": "ontologySuite.runLocalChecks"
+        },
+        {
+          "command": "ontologySuite.reviewTarqlBinds"
         },
         {
           "command": "ontologySuite.showMetrics"
@@ -340,6 +347,13 @@
           "when": "view == ontologySuite.outline && (viewItem == objectPropertyTerm || viewItem == datatypePropertyTerm)",
           "group": "1_add"
         }
+      ],
+      "explorer/context": [
+        {
+          "command": "ontologySuite.reviewTarqlBinds",
+          "when": "explorerResourceIsFolder",
+          "group": "ontologySuite"
+        }
       ]
     },
     "views": {
@@ -387,12 +401,20 @@
           "default": true,
           "description": "Run the closed-world vocabulary check (VOC-001) as part of Run Local Checks: flags any class/property IRI used (as a predicate, rdf:type, rdfs:subClassOf/domain/range, owl:equivalentClass/disjointWith/..., sh:targetClass/class/path) that isn't declared anywhere in this document or its resolved imports -- catching typos/hallucinated terms that SHACL's open-world semantics never flag. Scoped to namespaces this graph has at least one declared term in already, so unimported external vocabularies aren't flagged."
         },
+        "ontologySuite.disabledChecks": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "markdownDescription": "Check ids to suppress in *Run Local Checks*, e.g. `[\"QUA-009\", \"QUA-010\"]`. A disabled check's SPARQL query is not run at all, and findings for the id are dropped whichever engine reported them. Aimed at the checks that encode a convention rather than a defect — `QUA-009`/`QUA-010` ask for SKOS documentation on every term, which an ontology documented with `rdfs:label` does not have and may not want."
+        },
         "ontologySuite.maxIndexedFileSizeKb": {
           "type": "number",
           "default": 5120,
           "markdownDescription": "Files larger than this are not parsed into the term index, so their terms do not appear in hover, completion, go-to-definition or rename. A multi-MB data graph costs seconds of blocked editor to index terms nobody looks up; hand-authored ontologies are far below the default (gist core is under 1 MB). Skipped files are named in the extension host log."
         },
-                "ontologySuite.triplifyPreviewSampleSize": {
+        "ontologySuite.triplifyPreviewSampleSize": {
           "type": "number",
           "default": 20,
           "description": "Number of CSV rows sampled for the live triplify preview."

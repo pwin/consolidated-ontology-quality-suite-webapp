@@ -63,6 +63,10 @@ export class LocalChecksEngine {
         const sparqlEnabled = config.get<boolean>('enableSparqlChecks', true);
         const shaclEnabled = config.get<boolean>('enableShaclChecks', true);
         const vocabularyEnabled = config.get<boolean>('enableVocabularyChecks', true);
+        // Per-check opt-out, for the checks that encode a convention rather than a
+        // defect: QUA-009/QUA-010 ask for SKOS documentation on every term, which an
+        // ontology documented with rdfs:label does not have and may not want.
+        const disabledChecks = new Set(config.get<string[]>('disabledChecks', []));
 
         // Both engines are now fast enough that neither toggle is worth reaching for in an
         // ordinary edit/check loop: SHACL-SPARQL runs via shacl-wasm (see shaclRunner.ts),
@@ -75,7 +79,7 @@ export class LocalChecksEngine {
         // Gated with the SPARQL tier because it is the same check id, reported from
         // the same source, and merges under the normal dedup key.
         const sparqlRows = sparqlEnabled
-          ? [...runSparqlChecks(mergedQuads, registry), ...runLiteralTypingChecks(mergedQuads as Quad[])]
+          ? [...runSparqlChecks(mergedQuads, registry, disabledChecks), ...runLiteralTypingChecks(mergedQuads as Quad[])]
           : [];
 
         progress.report({ message: 'shacl checks', increment: 20 });
@@ -104,7 +108,11 @@ export class LocalChecksEngine {
         const classRulesConfig = await loadClassRulesConfig();
         const projectRuleRows = evaluateClassRules(mergedQuads, classRulesConfig, doc.prefixes);
 
-        const merged = mergeResultRows(sparqlRows, shaclRows, reasoningRows, guidanceRows, vocabularyRows, projectRuleRows);
+        // Filtered after the merge, not before: a disabled id may still arrive from
+        // the SHACL tier (a shapes file is compiled whole, so one shape cannot be
+        // skipped the way its SPARQL twin's query file can) or from the reasoner.
+        const merged = mergeResultRows(sparqlRows, shaclRows, reasoningRows, guidanceRows, vocabularyRows, projectRuleRows)
+          .filter((row) => !(row.checkId !== null && disabledChecks.has(row.checkId)));
         const fileDiagnostics = resultRowsToDiagnostics(merged, doc, this.rowsByDiagnostic);
         this.diagnostics.set(fileUri, fileDiagnostics);
 

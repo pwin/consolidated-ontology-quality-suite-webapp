@@ -10,7 +10,7 @@ class expressions — `and`/`or`/`not`/`some`/`only`/cardinality
 restrictions — not just atomic declarations; see [Serializations](#serializations)).
 
 It grew out of two sibling projects: `consolidated_ontology_suite`
-(a mature Python CLI with a 50-check registry, reasoning, docgen, and the
+(a mature Python CLI with a 56-check registry, reasoning, docgen, and the
 real `oxi-gen` triplifier) and `turtle-editor-viewer`
 (a browser-based Turtle/SPARQL editor). This extension reuses the check
 registry's *data* (`registry.json` + `sparql/*.rq` + `shapes/*.ttl` —
@@ -158,7 +158,7 @@ Validation" and "Full Triplify" commands, degrading gracefully if absent.
   Python CLI) for production-scale output once a query is finalized.
 
 **Validation**
-- *Run Local Checks*: the registry's 39 SPARQL + 6 SHACL-SPARQL checks,
+- *Run Local Checks*: the registry's 44 SPARQL + 6 SHACL-SPARQL checks,
   OWL2-RL-ish inference/consistency, gist-informed modelling guidance, a
   closed-world vocabulary check (`VOC-001`, see below), and this project's
   own [minimum-required-content rules](#project-rules-minimum-required-content) —
@@ -179,6 +179,15 @@ Validation" and "Full Triplify" commands, degrading gracefully if absent.
   with false positives; `rdf:`/`rdfs:`/`owl:`/`sh:`/`skos:`/`xsd:` are
   excluded the same way, automatically. Toggle via
   `ontologySuite.enableVocabularyChecks` (default on).
+- *Review TARQL BIND Consistency*: `TQL-001`/`TQL-002`/`TQL-003` over a whole
+  folder of CONSTRUCT queries — the one variable minted two different ways in
+  two files, and the constructed-IRI variable a template uses but nothing ever
+  binds. Both are invisible in either file alone: each query is valid, each
+  produces triples, and the two IRIs for what should be one node simply never
+  join. Findings land on the queries in the Problems panel, and the reviewer’s
+  side-by-side report goes to the *TARQL BIND Review* output channel. Available
+  from the palette with a query open, or on any folder in the explorer’s context
+  menu.
 - *Run Deep Validation*: optional Python CLI fallback for full OWL2 DL
   reasoning (owlready2/HermiT).
 - Competency questions as VS Code tests: `.cq.rq` files (SPARQL ASK/SELECT
@@ -412,6 +421,7 @@ Two different mechanisms, for two different kinds of customization:
 | `ontologySuite.checksRegistryPath` | `""` | Point at your own registry.json/sparql/shapes checkout instead of the bundled copy — e.g. to add project-specific SPARQL/SHACL checks beyond what `class-rules.json` can express |
 | `ontologySuite.enableSparqlChecks` | `true` | Run the registry's SPARQL CONSTRUCT checks. Fast (~0.2s on this project's own fixtures) |
 | `ontologySuite.enableShaclChecks` | `true` | Run the registry's SHACL-SPARQL shapes (via `shacl-wasm-node`). Fast since 0.10.0 — ~0.3s for all six shapes files where the previous `shacl-engine` took ~71s — so there is rarely a reason to turn it off now |
+| `ontologySuite.disabledChecks` | `[]` | Check ids to suppress in *Run Local Checks*, e.g. `["QUA-009", "QUA-010"]`. A disabled check’s SPARQL query is not run at all, and findings for the id are dropped whichever engine reported them |
 | `ontologySuite.enableVocabularyChecks` | `true` | Run the closed-world vocabulary check (`VOC-001`) — flags used-but-undeclared class/property IRIs (typos, hallucinated terms) within namespaces the graph has closed-world knowledge of |
 | `ontologySuite.queryOntologyPaths` | `[]` | Ontology file(s) a query is checked for conformance against. Each entry is a literal path **or** a glob (`*`, `?`, `**`), mixed freely in one list — e.g. `["core.ttl", "vocab/*_ontology.ttl"]`. Absolute or workspace-relative. Empty = discover automatically (query's own directory, then parent, then siblings). All resolved ontologies are merged |
 | `ontologySuite.triplifyPreviewSampleSize` | `20` | CSV rows sampled for the live triplify preview |
@@ -454,7 +464,7 @@ this repo's own `.vscode/settings.json` already sets:
 3. Alternatively, install a packaged build directly — grab the `.vsix` from
    the [latest release](https://github.com/pwin/consolidated-ontology-quality-suite-webapp/releases/latest),
    or build one yourself with `npx @vscode/vsce package`:
-   `code --install-extension ontology-dev-suite-0.12.5.vsix`
+   `code --install-extension ontology-dev-suite-0.13.0.vsix`
 
 ## Publishing to the Marketplace
 
@@ -473,7 +483,7 @@ live in the repo:
    rebuilding:
    ```sh
    npx @vscode/vsce login pwin
-   npx @vscode/vsce publish --packagePath ontology-dev-suite-0.12.5.vsix
+   npx @vscode/vsce publish --packagePath ontology-dev-suite-0.13.0.vsix
    ```
 
 `engines.vscode` is currently `^1.125.0`, so the Marketplace will only offer

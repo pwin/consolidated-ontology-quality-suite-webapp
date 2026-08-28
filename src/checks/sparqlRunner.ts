@@ -1,4 +1,5 @@
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { Quad } from 'n3';
 import { localName, Registry } from './registryLoader';
 import type { ResultRow, Severity } from '../types';
@@ -23,8 +24,12 @@ const SEVERITY_LABEL: Record<string, Severity> = {
  * constructs sh:ValidationResult individuals (portable across engines);
  * this walks the constructed graph back into ResultRow, mirroring
  * consolidated_ontology_suite's checks/merge.py::_extract_rows.
+ *
+ * `disabled` holds check ids from `ontologySuite.disabledChecks`. Their queries
+ * are skipped rather than run and filtered, since each is a full pass over the
+ * merged graph.
  */
-export function runSparqlChecks(quads: Quad[], registry: Registry): ResultRow[] {
+export function runSparqlChecks(quads: Quad[], registry: Registry, disabled: ReadonlySet<string> = new Set()): ResultRow[] {
   // Imported lazily: oxigraph's WASM module is only needed when checks run.
    
   const oxigraph = require('oxigraph') as typeof import('oxigraph');
@@ -33,6 +38,8 @@ export function runSparqlChecks(quads: Quad[], registry: Registry): ResultRow[] 
 
   const rows: ResultRow[] = [];
   for (const file of registry.sparqlFiles) {
+    // The file is named for the check it runs, so this needs no parse to decide.
+    if (disabled.has(path.basename(file, '.rq'))) continue;
     let queryText: string;
     try {
       queryText = fs.readFileSync(file, 'utf8');

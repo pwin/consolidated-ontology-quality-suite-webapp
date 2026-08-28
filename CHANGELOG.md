@@ -1,5 +1,101 @@
 # Changelog
 
+## 0.13.0
+
+Six checks brought across from `consolidated_ontology_suite_python` (0.9.0 and
+0.10.0), and the two things in this project that had to be fixed before they
+could report properly.
+
+### Three new graph checks: `QUA-009`, `QUA-010`, `DAT-004`
+
+- **`QUA-009`** — a declared class or property must carry at least one
+  `skos:prefLabel`, and no more than one per language. Not "exactly one":
+  SKOS defines `prefLabel` as unique *per language tag*, so `"Road"@en` +
+  `"Ffordd"@cy` is correct and flagging it would be wrong about SKOS rather
+  than strict about it. An **untagged** literal counts as its own language —
+  RDF 1.1 types a plain literal `xsd:string` with no tag, so it is a real slot
+  with room for one value. That case needs stating because SHACL’s own
+  `sh:uniqueLang` ignores untagged values entirely, and untagged is how
+  gist-based ontologies label everything.
+- **`QUA-010`** — a declared class or property must carry a `skos:definition`.
+  Distinct from `STR-004`, which asks whether a class is formally *defined* by
+  an axiom: that is a question about logic, this one about prose, and a term
+  can be fully axiomatised and still leave a reader unable to act on it.
+- **`DAT-004`** — a `gist:Magnitude` must have a `gist:hasUnitOfMeasure` value
+  typed `gist:UnitOfMeasure`. A magnitude without a unit is not a quantity, and
+  the omission stays invisible until someone tries to compare two of them.
+  Both subclass walks come free from SHACL’s own semantics, so a project
+  subclass of `gist:Magnitude` is still checked.
+
+Each ships in both formulations — a SPARQL CONSTRUCT and a native SHACL core
+shape — so the two engines cross-validate through genuinely different
+mechanisms rather than running the same SPARQL twice.
+`examples/gist_patterns/` comes across with them, seeding one case per check
+plus the negative cases that pin the rules from the other side: two prefLabels
+in *different* languages, and a magnitude typed through a subclass.
+
+**`QUA-009` and `QUA-010` will be noisy on an ontology documented with
+`rdfs:label`.** They ask for SKOS specifically; `examples/tutorial/clinic.ttl`
+gains 52 findings. The new `ontologySuite.disabledChecks` setting is the way to
+turn a check off — its SPARQL query is then not run at all, and findings for
+the id are dropped whichever engine reported them.
+
+### Fixed: every native-SHACL-core finding arrived with no check id
+
+A property-constraint result reports `sh:sourceShape` as the *nested*
+`sh:property [ ... ]` shape, not the enclosing `oq:<CHECK-ID>` node shape the
+id is readable from — and a blank node has no name to read one from. So every
+finding from a check written in native SHACL core (`DAT-004`, `LOG-001`,
+`LOG-003`, `QUA-009`, `QUA-010`, `STR-002`) came back with a null `checkId`: no
+title, no category, no remediation, and no dedup key in common with its SPARQL
+twin, so **both engines’ copies of one finding survived into the Problems
+panel**. 52 of 81 rows across this project’s two fixtures.
+
+Upstream fixed the same bug against pyshacl by walking up `sh:property` in the
+shapes graph. Walking up needs the reported blank node to be findable in *our*
+parse of the shapes, and it is not: `_:0_b6` and n3’s `_:b6_…` are two parsers’
+private labels for the same node. The shapes are now given real IRIs before
+they are compiled, so the engine reports an IRI that is a key into a map built
+in the same pass. The finding set is unchanged — same 81 rows, same severities
+— every one of them now carrying its id.
+
+### Three new query checks: the TARQL BIND review (`TQL-001`…`TQL-003`)
+
+A folder of TARQL queries is a program, and like any program it drifts. The
+same conceptual IRI gets minted in six files, five of them the same way. That
+drift is invisible in the output — each query is valid, each produces triples,
+and the two IRIs for what should be one node simply never join. It surfaces
+much later as a dangling reference or a duplicate entity, a long way from the
+query that caused it.
+
+- **`TQL-001`** — one target variable bound by structurally different
+  expressions across files. Compared as **skeletons**, with every `?var` reduced
+  to `?`, so two files feeding the same template from differently-named columns
+  are not reported and two files wrapping one of them in a `REPLACE()` are.
+  Comparing raw text would report both and be ignored accordingly.
+- **`TQL-002`** — a `?something_IRI` variable used in a CONSTRUCT template and
+  never bound. By that naming convention it is built rather than read from a
+  column, so nothing will bind it and every triple using it is dropped.
+- **`TQL-003`** — the same for a variable *not* following that convention,
+  reported at Info. TARQL binds each CSV header as a variable of the same name,
+  so an unbound `?roadname` is ordinarily just a column; telling a column from a
+  typo means reading the CSV header, which is a reviewer’s judgement.
+
+These are **native** checks: `sketch.ts` keeps only a query’s prefixes and its
+CONSTRUCT template, so the WHERE clause and every BIND in it is gone before the
+sketch graph exists. No SPARQL or SHACL formulation over that graph can see any
+of this. It reads the query text instead — with a comment stripper that knows
+`#` is the fragment separator in almost every RDF namespace, and a
+bracket-matcher rather than a regex, because a non-greedy regex stops at the
+wrong paren the moment `AS` is not the outermost thing in the statement.
+
+Run from *Ontology Suite: Review TARQL BIND Consistency*, with a query open or
+on any folder in the explorer’s context menu. `TQL-001` is a cross-file finding,
+so this is folder-scoped rather than document-scoped, and reports both ways:
+diagnostics on the queries (each competing BIND pointing at the others through
+related information) and the side-by-side reviewer’s report in a *TARQL BIND
+Review* output channel.
+
 ## 0.12.5
 
 ### Query conformance no longer rebuilds the ontology model on every refresh

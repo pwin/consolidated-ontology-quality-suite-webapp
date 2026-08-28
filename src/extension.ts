@@ -29,6 +29,7 @@ import { applyRepair } from './checks/applyRepair';
 import { loadProjectStandards } from './checks/projectStandards';
 import type { ResultRow } from './types';
 import { profileCsv, draftFromProfile } from './triplify/csvProfiler';
+import { reviewTarqlBinds, TARQL_DIAGNOSTIC_SOURCE } from './triplify/tarqlReview';
 import { parseCsv } from './triplify/csv';
 import { QueryWorkbench } from './webviews/queryWorkbench';
 import { openGraphView, focusGraphOnTerm } from './webviews/graphView';
@@ -54,6 +55,11 @@ export function activate(context: vscode.ExtensionContext): void {
   const queryWorkbench = new QueryWorkbench();
   const cqProvider = new CompetencyQuestionProvider();
   const cliDiagnostics = vscode.languages.createDiagnosticCollection(`${CHECKS_DIAGNOSTIC_SOURCE}-deep`);
+  // Kept apart from the checks collection: those are keyed on an ontology file and
+  // cleared per run of that file, while these are keyed on query files and replaced
+  // wholesale each time a folder is reviewed.
+  const tarqlDiagnostics = vscode.languages.createDiagnosticCollection(TARQL_DIAGNOSTIC_SOURCE);
+  const tarqlOutput = vscode.window.createOutputChannel('TARQL BIND Review');
   const statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
   statusBarItem.command = 'ontologySuite.showMetrics';
 
@@ -85,6 +91,8 @@ export function activate(context: vscode.ExtensionContext): void {
     queryWorkbench,
     cqProvider,
     cliDiagnostics,
+    tarqlDiagnostics,
+    tarqlOutput,
     statusBarItem,
     outlineTreeView,
     registerHoverProvider(termIndex),
@@ -199,6 +207,27 @@ export function activate(context: vscode.ExtensionContext): void {
     );
     return undefined;
   }
+  /**
+   * The folder of CONSTRUCT queries to review: the active query file's own folder
+   * where there is one, otherwise asked for. Not `activeRdfUri`'s job -- a `.rq`
+   * file is not one of the RDF serializations that helper accepts.
+   */
+  async function pickQueryFolder(): Promise<vscode.Uri | undefined> {
+    const active = vscode.window.activeTextEditor?.document.uri;
+    if (active && ['.rq', '.sparql', '.tarql', '.tq'].includes(path.extname(active.fsPath).toLowerCase())) {
+      return vscode.Uri.file(path.dirname(active.fsPath));
+    }
+    const picked = await vscode.window.showOpenDialog({
+      canSelectFiles: false,
+      canSelectFolders: true,
+      canSelectMany: false,
+      openLabel: 'Review BIND statements',
+      defaultUri: vscode.workspace.workspaceFolders?.[0]?.uri,
+      title: 'Folder of TARQL/CONSTRUCT queries to review',
+    });
+    return picked?.[0];
+  }
+
   /** Read-oriented commands (checks, metrics, graph view) work for any of the six supported serializations. */
   function activeRdfUri(): vscode.Uri | undefined {
     const editor = vscode.window.activeTextEditor;
@@ -402,6 +431,16 @@ export function activate(context: vscode.ExtensionContext): void {
       const uri = activeRdfUri();
       if (!uri) return;
       await localChecks.runForFile(uri);
+    }),
+
+    // TQL-001 is a cross-file finding -- one variable minted two different ways in
+    // two queries is invisible in either one alone -- so this is scoped to a folder
+    // rather than to the active document, and lives outside the per-file checks
+    // engine (which runs over an ontology's graph, and there is no graph here).
+    vscode.commands.registerCommand('ontologySuite.reviewTarqlBinds', async (target?: vscode.Uri) => {
+      const folder = target ?? (await pickQueryFolder());
+      if (!folder) return;
+      await reviewTarqlBinds(folder, tarqlDiagnostics, tarqlOutput);
     }),
 
     // Every repair is preview-then-apply: computeRepair() only ever computes

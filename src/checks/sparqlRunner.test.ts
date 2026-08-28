@@ -31,6 +31,14 @@ describe('runSparqlChecks against examples/tutorial/clinic.ttl', () => {
     const rows = runSparqlChecks([], registry);
     expect(rows.map((r) => r.checkId)).toEqual(['QUA-005']);
   });
+
+  it('skips a disabled check rather than running it and filtering the rows', () => {
+    // `ontologySuite.disabledChecks` -- the query file is named for its check, so
+    // the id is known before the query is read, and each one is a full pass over
+    // the merged graph.
+    const registry = loadRegistry(path.resolve(__dirname, '../../resources/checks-registry'));
+    expect(runSparqlChecks([], registry, new Set(['QUA-005']))).toEqual([]);
+  });
 });
 
 /**

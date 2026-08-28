@@ -97,4 +97,37 @@ describe('runShaclChecks against examples/tutorial/clinic.ttl', () => {
     expect(Array.isArray(rows)).toBe(true);
     for (const row of rows) expect(row.sources).toEqual(['shacl']);
   }, 30000);
+
+  /**
+   * Every finding resolves to a registry check id, including the ones from a
+   * nested `sh:property [ ... ]` shape.
+   *
+   * The engine reports such a result's `sh:sourceShape` as the property shape's
+   * own blank node, one level below the `oq:<CHECK-ID>` node the id is readable
+   * from -- so a check written in native SHACL core produced rows with a null
+   * checkId: no title, no category, no remediation, and no dedup key in common
+   * with its SPARQL twin, so both copies of one finding survived. 52 of 81 rows
+   * across the two fixtures here. See shaclRunner.ts::nameNestedShapes.
+   */
+  it('resolves a check id for every finding, nested property shapes included', () => {
+    const registry = loadRegistry(REGISTRY_DIR);
+    const domainPath = path.resolve(__dirname, '../../examples/ontology/domain.ttl');
+    const doc = parseTurtle(domainPath, fs.readFileSync(domainPath, 'utf8'));
+
+    const rows = runShaclChecks(doc.quads, registry);
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.filter((r) => r.checkId === null)).toEqual([]);
+    for (const row of rows) {
+      expect(registry.checksById.has(row.checkId as string)).toBe(true);
+      // A resolved id is what carries the registry's metadata onto the finding.
+      expect(row.title).not.toBeNull();
+      expect(row.category).not.toBeNull();
+    }
+    // QUA-009/QUA-010 are the nested-property-shape cases; STY-003 is a plain
+    // named shape, and must keep resolving the way it always did.
+    const ids = new Set(rows.map((r) => r.checkId));
+    expect(ids.has('QUA-009')).toBe(true);
+    expect(ids.has('QUA-010')).toBe(true);
+    expect(ids.has('STY-003')).toBe(true);
+  }, 30000);
 });

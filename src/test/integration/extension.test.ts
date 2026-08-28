@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 
 const EXTENSION_ID = 'local.ontology-dev-suite';
 const TUTORIAL_DIR = path.resolve(__dirname, '../../../examples/tutorial');
+const TARQL_DRIFT_DIR = path.resolve(__dirname, '../../../examples/tarql_drift');
 
 suite('Ontology Development Suite (extension host)', () => {
   suiteSetup(async () => {
@@ -26,10 +27,35 @@ suite('Ontology Development Suite (extension host)', () => {
       'ontologySuite.runDeepValidation',
       'ontologySuite.runFullTriplify',
       'ontologySuite.convertFormat',
+      'ontologySuite.reviewTarqlBinds',
     ]) {
       assert.ok(commands.includes(id), `command ${id} was not registered`);
     }
   });
+
+  test('Review TARQL BIND Consistency reports TQL findings on examples/tarql_drift', async () => {
+    // Folder-scoped rather than document-scoped, so it is invoked with the folder
+    // the explorer context menu would pass -- see triplify/tarqlReview.ts.
+    const folder = vscode.Uri.file(TARQL_DRIFT_DIR);
+    await vscode.commands.executeCommand('ontologySuite.reviewTarqlBinds', folder);
+
+    const lanes = vscode.Uri.file(path.join(TARQL_DRIFT_DIR, 'lanes_to_rdf.rq'));
+    const roads = vscode.Uri.file(path.join(TARQL_DRIFT_DIR, 'roads_to_rdf.rq'));
+    let codes: (string | number | undefined)[] = [];
+    for (let attempt = 0; attempt < 20; attempt++) {
+      codes = [...vscode.languages.getDiagnostics(lanes), ...vscode.languages.getDiagnostics(roads)]
+        .map((d) => (typeof d.code === 'object' ? d.code.value : d.code));
+      if (codes.length > 0) break;
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+
+    // The fixture seeds exactly one of each: ?road_IRI minted two ways across the
+    // pair (TQL-001, reported on both competing BINDs), ?direction_IRI never bound
+    // (TQL-002), and ?roadname, which is a CSV column (TQL-003).
+    assert.ok(codes.includes('TQL-001'), `expected a TQL-001 finding, got ${JSON.stringify(codes)}`);
+    assert.ok(codes.includes('TQL-002'), `expected a TQL-002 finding, got ${JSON.stringify(codes)}`);
+    assert.ok(codes.includes('TQL-003'), `expected a TQL-003 finding, got ${JSON.stringify(codes)}`);
+  }).timeout(30000);
 
   test('opening clinic.ttl assigns the turtle language', async () => {
     const doc = await vscode.workspace.openTextDocument(path.join(TUTORIAL_DIR, 'clinic.ttl'));
