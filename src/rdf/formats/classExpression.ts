@@ -371,21 +371,60 @@ function rdfList(items: (NamedNode | BlankNode)[], out: Quad[]): NamedNode | Bla
   return tail;
 }
 
+/**
+ * How deep a blank-node class expression may nest before this gives up.
+ *
+ * Well past anything an ontology contains -- gist's deepest is single figures --
+ * and the point is only to fail as `undefined` rather than as a stack overflow.
+ */
+const MAX_CLASS_EXPRESSION_DEPTH = 200;
+
 /** Reads an OWL2 blank-node class expression back out of a quad set (the inverse of classExprToRdf). */
 export function rdfToClassExpr(term: Term, bySubject: Map<string, Quad[]>): ClassExpr | undefined {
+  return readClassExpr(term, bySubject, new Set(), 0);
+}
+
+/**
+ * `ancestors` holds the blank nodes on the path down to `term`, so a node that is
+ * its own ancestor stops here instead of recurring forever.
+ *
+ * A cyclic class expression is malformed OWL but perfectly well-formed RDF, and it
+ * takes two triples: `_:b owl:complementOf _:b`. Before this guard that was a hard
+ * `RangeError: Maximum call stack size exceeded` out of the Manchester serializer,
+ * so one corrupt file took down whatever asked to render it. Legitimate depth blew
+ * the stack too, between 2,000 and 20,000 levels. Same class of bug as the
+ * `computeMaxDepth` fix in 0.11.4 and the six walks
+ * `consolidated_ontology_suite_python` rewrote onto the heap in its 0.7.0: a graph
+ * walk that guards neither cycles nor descent.
+ *
+ * Path-scoped rather than a single visited set for the whole walk: one blank node
+ * legitimately reached down two different branches should render in both, and only
+ * a node reached from itself is a cycle.
+ */
+function readClassExpr(term: Term, bySubject: Map<string, Quad[]>, ancestors: Set<string>, depth: number): ClassExpr | undefined {
   if (term.termType === 'NamedNode') return { kind: 'class', iri: term.value };
   if (term.termType !== 'BlankNode') return undefined;
+  if (depth > MAX_CLASS_EXPRESSION_DEPTH || ancestors.has(term.value)) return undefined;
 
+  ancestors.add(term.value);
+  try {
+    return readClassExprBody(term, bySubject, ancestors, depth);
+  } finally {
+    ancestors.delete(term.value);
+  }
+}
+
+function readClassExprBody(term: Term, bySubject: Map<string, Quad[]>, ancestors: Set<string>, depth: number): ClassExpr | undefined {
   const own = bySubject.get(term.value) ?? [];
   const get = (pred: string) => own.find((q) => q.predicate.value === pred)?.object;
 
   const intersectionOf = get(`${OWL}intersectionOf`);
-  if (intersectionOf) return { kind: 'and', operands: readRdfList(intersectionOf, bySubject).map((t) => rdfToClassExpr(t, bySubject)!).filter(Boolean) };
+  if (intersectionOf) return { kind: 'and', operands: readRdfList(intersectionOf, bySubject).map((t) => readClassExpr(t, bySubject, ancestors, depth + 1)!).filter(Boolean) };
   const unionOf = get(`${OWL}unionOf`);
-  if (unionOf) return { kind: 'or', operands: readRdfList(unionOf, bySubject).map((t) => rdfToClassExpr(t, bySubject)!).filter(Boolean) };
+  if (unionOf) return { kind: 'or', operands: readRdfList(unionOf, bySubject).map((t) => readClassExpr(t, bySubject, ancestors, depth + 1)!).filter(Boolean) };
   const complementOf = get(`${OWL}complementOf`);
   if (complementOf) {
-    const operand = rdfToClassExpr(complementOf, bySubject);
+    const operand = readClassExpr(complementOf, bySubject, ancestors, depth + 1);
     return operand ? { kind: 'not', operand } : undefined;
   }
   const oneOf = get(`${OWL}oneOf`);
@@ -395,9 +434,9 @@ export function rdfToClassExpr(term: Term, bySubject: Map<string, Quad[]>): Clas
   if (onProperty) {
     const property = onProperty.value;
     const someValuesFrom = get(`${OWL}someValuesFrom`);
-    if (someValuesFrom) return { kind: 'restriction', property, type: 'some', filler: rdfToClassExpr(someValuesFrom, bySubject) };
+    if (someValuesFrom) return { kind: 'restriction', property, type: 'some', filler: readClassExpr(someValuesFrom, bySubject, ancestors, depth + 1) };
     const allValuesFrom = get(`${OWL}allValuesFrom`);
-    if (allValuesFrom) return { kind: 'restriction', property, type: 'only', filler: rdfToClassExpr(allValuesFrom, bySubject) };
+    if (allValuesFrom) return { kind: 'restriction', property, type: 'only', filler: readClassExpr(allValuesFrom, bySubject, ancestors, depth + 1) };
     const hasValue = get(`${OWL}hasValue`);
     if (hasValue) {
       if (hasValue.termType === 'NamedNode') return { kind: 'restriction', property, type: 'value', individual: hasValue.value };
@@ -422,7 +461,7 @@ export function rdfToClassExpr(term: Term, bySubject: Map<string, Quad[]>): Clas
           property,
           type: kind,
           cardinality: Number(card.value),
-          filler: onClass ? rdfToClassExpr(onClass, bySubject) : undefined,
+          filler: onClass ? readClassExpr(onClass, bySubject, ancestors, depth + 1) : undefined,
         };
       }
     }
