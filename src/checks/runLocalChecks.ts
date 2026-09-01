@@ -13,6 +13,7 @@ import { runVocabularyChecks } from './vocabularyChecks';
 import { evaluateClassRules } from './classRules';
 import { loadClassRulesConfig } from './classRulesLoader';
 import { mergeResultRows } from './merge';
+import { dominantCheck } from './findingSummary';
 import { CHECKS_DIAGNOSTIC_SOURCE, resultRowsToDiagnostics } from './toDiagnostics';
 import type { ResultRow } from '../types';
 
@@ -119,10 +120,51 @@ export class LocalChecksEngine {
         progress.report({ message: 'done', increment: 10 });
         const violations = merged.filter((r) => r.severity === 'Violation').length;
         const warnings = merged.filter((r) => r.severity === 'Warning').length;
-        void vscode.window.showInformationMessage(
-          `Ontology Suite: ${merged.length} finding(s) (${violations} violation(s), ${warnings} warning(s)). See Problems panel.`,
-        );
+        void this.report(merged, violations, warnings, disabledChecks);
       },
     );
   }
+
+  /**
+   * The run's summary, plus a way out when one check is most of it.
+   *
+   * A check that encodes a convention rather than a defect reports once per term,
+   * so on a graph it does not suit it does not add findings, it *is* the findings
+   * -- QUA-009/QUA-010 ask for SKOS documentation and produce 52 on an ontology
+   * documented with rdfs:label. `ontologySuite.disabledChecks` answers that, but a
+   * setting nobody knows about answers nothing, so the id doing the flooding is
+   * named here and offered directly.
+   */
+  private async report(rows: ResultRow[], violations: number, warnings: number, disabled: ReadonlySet<string>): Promise<void> {
+    const summary = `Ontology Suite: ${rows.length} finding(s) (${violations} violation(s), ${warnings} warning(s)). See Problems panel.`;
+
+    const flooding = dominantCheck(rows, disabled);
+    if (!flooding) {
+      void vscode.window.showInformationMessage(summary);
+      return;
+    }
+    const { checkId: dominant, count } = flooding;
+
+    const title = this.getRegistry().checksById.get(dominant)?.title ?? dominant;
+    const action = `Disable ${dominant}`;
+    const choice = await vscode.window.showInformationMessage(
+      `${summary} ${count} of them are ${dominant} (${title}).`,
+      action,
+    );
+    if (choice !== action) return;
+
+    const config = vscode.workspace.getConfiguration('ontologySuite');
+    const current = config.get<string[]>('disabledChecks', []);
+    if (current.includes(dominant)) return;
+    // Workspace where there is one, so the choice travels with the project rather
+    // than silencing the check in every other ontology this user opens.
+    const target = vscode.workspace.workspaceFolders?.length
+      ? vscode.ConfigurationTarget.Workspace
+      : vscode.ConfigurationTarget.Global;
+    await config.update('disabledChecks', [...current, dominant], target);
+    void vscode.window.showInformationMessage(
+      `Ontology Suite: ${dominant} disabled in ${target === vscode.ConfigurationTarget.Workspace ? 'workspace' : 'user'} settings. Run Local Checks again to clear its findings.`,
+    );
+  }
 }
+

@@ -5,6 +5,8 @@ import { parseTurtle } from '../rdf/parseDocument';
 import { resolveImports } from '../ontology/resolveImports';
 import { loadRegistry } from './registryLoader';
 import { runShaclChecks } from './shaclRunner';
+import { runSparqlChecks } from './sparqlRunner';
+import { mergeResultRows } from './merge';
 
 const REGISTRY_DIR = path.resolve(__dirname, '../../resources/checks-registry');
 
@@ -129,5 +131,43 @@ describe('runShaclChecks against examples/tutorial/clinic.ttl', () => {
     expect(ids.has('QUA-009')).toBe(true);
     expect(ids.has('QUA-010')).toBe(true);
     expect(ids.has('STY-003')).toBe(true);
+  }, 30000);
+
+  /**
+   * The user-visible half of the same fix: a check written as a nested property
+   * shape was reported *twice* in the Problems panel, not merely without its id.
+   * `checkId` is part of the dedup key in merge.ts, so a null one could never
+   * match its SPARQL twin -- one coded row, and one anonymous row reading only
+   * `SHACL validation failed`, for a single defect.
+   *
+   * `LOG-003` and `STR-002` are the pre-existing checks that behaved that way,
+   * and they are the ones nobody would notice regressing: the checks added in
+   * 0.13.0 have their own coverage in checks/gistPatternChecks.test.ts.
+   */
+  it('lets a nested-property-shape finding merge with its SPARQL twin instead of duplicating', () => {
+    const ttl = `
+      @prefix owl:  <http://www.w3.org/2002/07/owl#> .
+      @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+      @prefix ex:   <https://example.org/nested/> .
+      <https://example.org/nested> a owl:Ontology ; owl:versionIRI <https://example.org/nested/1.0.0> .
+      ex:Animal a owl:Class ; rdfs:label "Animal"@en .
+      ex:Beast a owl:Class ; rdfs:label "Beast"@en ;
+        owl:equivalentClass ex:Animal ; rdfs:subClassOf ex:Animal .
+      ex:Animal ex:undeclaredProp "x" .
+    `;
+    const { quads } = parseTurtle('file:///nested.ttl', ttl);
+    const registry = loadRegistry(REGISTRY_DIR);
+
+    const sparql = runSparqlChecks(quads, registry);
+    const shacl = runShaclChecks(quads, registry);
+    const merged = mergeResultRows(sparql, shacl);
+
+    for (const id of ['LOG-003', 'STR-002']) {
+      expect(sparql.filter((r) => r.checkId === id).length, `${id} did not fire via SPARQL`).toBe(1);
+      expect(shacl.filter((r) => r.checkId === id).length, `${id} did not fire via SHACL`).toBe(1);
+      const rows = merged.filter((r) => r.checkId === id);
+      expect(rows.length, `${id} survived twice`).toBe(1);
+      expect(rows[0].sources.sort()).toEqual(['shacl', 'sparql']);
+    }
   }, 30000);
 });
