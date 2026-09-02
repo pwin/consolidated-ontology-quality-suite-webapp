@@ -1,0 +1,191 @@
+# A defect for every check that has *both* a SHACL shape and a SPARQL twin.
+#
+# Not a demo ontology: it is deliberately, comprehensively broken, which is why
+# it lives here rather than in examples/. dualFormulation.test.ts runs both
+# tiers over it and asserts each of those checks fires from both and merges to
+# a single row -- see that file for why the property is worth a fixture.
+#
+# Everything is seeded in one graph on purpose. Checks interfere with each
+# other here (a class seeded for STY-001 also has no label, so QUA-001 sees it
+# too), and the test asserts presence and merging rather than counts, so that
+# interference costs nothing and adding a defect later does not renumber
+# anything.
+
+@prefix owl:     <http://www.w3.org/2002/07/owl#> .
+@prefix rdf:     <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix rdfs:    <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix xsd:     <http://www.w3.org/2001/XMLSchema#> .
+@prefix skos:    <http://www.w3.org/2004/02/skos/core#> .
+@prefix dcterms: <http://purl.org/dc/terms/> .
+@prefix gist:    <https://w3id.org/semanticarts/ns/ontology/gist/> .
+@prefix ex:      <https://example.org/dual#> .
+
+# QUA-002: no owl:versionInfo, no dcterms:title, no label.
+<https://example.org/dual> a owl:Ontology .
+
+# QUA-001 (no label anywhere below), QUA-009/QUA-010 (no skos:prefLabel,
+# no definition), STR-003 (no domain/range on the properties).
+ex:Thing a owl:Class .
+
+# STY-001: not UpperCamelCase.
+ex:bad_class_name a owl:Class .
+
+# STY-002: not lowerCamelCase.
+ex:BadPropertyName a owl:ObjectProperty .
+
+# LOG-001: disjoint with its own ancestor, so unsatisfiable.
+ex:Ancestor a owl:Class .
+ex:Unsatisfiable a owl:Class ;
+  rdfs:subClassOf ex:Ancestor ;
+  owl:disjointWith ex:Ancestor .
+
+# LOG-003: equivalentClass and subClassOf the same target.
+ex:Target a owl:Class .
+ex:Redundant a owl:Class ;
+  owl:equivalentClass ex:Target ;
+  rdfs:subClassOf ex:Target .
+
+# LOG-002: two distinct values for a functional property.
+ex:functionalProp a owl:ObjectProperty, owl:FunctionalProperty .
+ex:v1 a ex:Thing .
+ex:v2 a ex:Thing .
+ex:multiValued a ex:Thing ;
+  ex:functionalProp ex:v1, ex:v2 .
+
+# QUA-003: a deprecated term still in use.
+ex:deprecatedProp a owl:DatatypeProperty ;
+  owl:deprecated true .
+
+# DAT-001 (lexical form contradicts the datatype), DAT-002 (an IRI object that
+# is never a subject and types nothing), DAT-003 (the same literal string twice
+# under one predicate, as two distinct terms).
+ex:subject a ex:Thing ;
+  ex:birthDate "not-a-date"^^xsd:date ;
+  ex:deprecatedProp "still in use" ;
+  ex:refersTo ex:NothingIsEverSaidAboutThis ;
+  rdfs:comment "duplicated", "duplicated"@en .
+ex:birthDate a owl:DatatypeProperty .
+ex:refersTo a owl:ObjectProperty .
+
+# DAT-004: a gist magnitude with no unit of measure.
+ex:unitlessMagnitude a gist:Magnitude ;
+  gist:numericValue 221.78 .
+
+# STR-001: typed with a class nothing declares.
+# STR-002: a predicate nothing declares.
+ex:untypedUse a ex:NeverDeclaredClass ;
+  ex:neverDeclaredPredicate "value" .
+
+# STY-003: an rdfs:label with no language tag. The only labelled term here,
+# so it is also the one term QUA-001 does not report.
+ex:LabelledButUntagged a owl:Class ;
+  rdfs:label "labelled but untagged" .
+
+# EFF-001: a subClassOf chain six hops deep.
+ex:Depth0 a owl:Class ; rdfs:subClassOf ex:Depth1 .
+ex:Depth1 a owl:Class ; rdfs:subClassOf ex:Depth2 .
+ex:Depth2 a owl:Class ; rdfs:subClassOf ex:Depth3 .
+ex:Depth3 a owl:Class ; rdfs:subClassOf ex:Depth4 .
+ex:Depth4 a owl:Class ; rdfs:subClassOf ex:Depth5 .
+ex:Depth5 a owl:Class ; rdfs:subClassOf ex:Depth6 .
+ex:Depth6 a owl:Class .
+
+# EFF-003: 51 values for one property on one subject.
+ex:fanOut a owl:DatatypeProperty .
+ex:wideSubject a ex:Thing ;
+  ex:fanOut
+    "value 00",
+    "value 01",
+    "value 02",
+    "value 03",
+    "value 04",
+    "value 05",
+    "value 06",
+    "value 07",
+    "value 08",
+    "value 09",
+    "value 10",
+    "value 11",
+    "value 12",
+    "value 13",
+    "value 14",
+    "value 15",
+    "value 16",
+    "value 17",
+    "value 18",
+    "value 19",
+    "value 20",
+    "value 21",
+    "value 22",
+    "value 23",
+    "value 24",
+    "value 25",
+    "value 26",
+    "value 27",
+    "value 28",
+    "value 29",
+    "value 30",
+    "value 31",
+    "value 32",
+    "value 33",
+    "value 34",
+    "value 35",
+    "value 36",
+    "value 37",
+    "value 38",
+    "value 39",
+    "value 40",
+    "value 41",
+    "value 42",
+    "value 43",
+    "value 44",
+    "value 45",
+    "value 46",
+    "value 47",
+    "value 48",
+    "value 49",
+    "value 50" .
+
+# EFF-002: blank nodes are more than 20% of all graph nodes.
+ex:blankHeavy a ex:Thing ;
+  ex:refersTo
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ],
+    [ ex:refersTo ex:subject ] .

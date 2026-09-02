@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import { DataFactory, Parser, Quad, Writer } from 'n3';
 import { localName, Registry } from './registryLoader';
+import { renderPathExpression } from './pathExpression';
 import type { ResultRow, Severity } from '../types';
 
 const SEVERITY_LABEL: Record<string, Severity> = {
@@ -53,6 +54,8 @@ interface CompiledShapes {
   validator: WasmValidator;
   /** Shape IRI -- including the skolem IRIs minted below -- to the registry check id it reports as. */
   checkIdByShapeIri: Map<string, string>;
+  /** Shape IRI to its `sh:path` rendered as a property-path expression, for the paths that are not plain IRIs. */
+  pathExpressionByShapeIri: Map<string, string>;
 }
 
 /** Shapes-file path -> its compiled shapes. Compiling is the expensive half; the shapes never change within a session. */
@@ -106,7 +109,7 @@ export function runShaclChecks(quads: Quad[], registry: Registry): ResultRow[] {
     if (!compiled) continue;
     try {
       const report = compiled.validator.validateTurtle(dataText, DATA_BASE, 'none');
-      for (const r of toResultRows(report.results, registry, compiled.checkIdByShapeIri)) rows.push(r);
+      for (const r of toResultRows(report.results, registry, compiled)) rows.push(r);
     } catch (err) {
       console.error(`[ontologySuite] shacl-wasm failed validating against ${file}:`, err);
     }
@@ -114,7 +117,8 @@ export function runShaclChecks(quads: Quad[], registry: Registry): ResultRow[] {
   return rows;
 }
 
-function toResultRows(results: WasmResult[], registry: Registry, checkIdByShapeIri: Map<string, string>): ResultRow[] {
+function toResultRows(results: WasmResult[], registry: Registry, compiled: CompiledShapes): ResultRow[] {
+  const { checkIdByShapeIri, pathExpressionByShapeIri } = compiled;
   const rows: ResultRow[] = [];
   for (const result of results) {
     // The registry's shapes are named `oq:<CHECK-ID>`, so the shape IRI's local
@@ -129,20 +133,62 @@ function toResultRows(results: WasmResult[], registry: Registry, checkIdByShapeI
         : null;
     const check = checkId ? registry.checksById.get(checkId) : undefined;
 
+    // A path that is a *path expression* rather than a plain IRI comes back as the
+    // engine's own blank-node label (`_:0_b0`), which is meaningless to a reader and,
+    // being part of the dedup key, never matches what the SPARQL twin renders -- so
+    // LOG-001 reported one unsatisfiable class as two findings. The expression was
+    // rendered while the shapes were compiled, keyed by the shape IRI minted in the
+    // same pass; see nameNestedShapes.
+    const rawPath = result.path ?? null;
+    const path = rawPath !== null && rawPath.startsWith('_:') && result.sourceShape
+      ? pathExpressionByShapeIri.get(result.sourceShape) ?? rawPath
+      : rawPath;
+    const value = result.value ?? result.focusNode;
+
     rows.push({
       checkId: check ? checkId : null,
       category: check?.category ?? null,
       title: check?.title ?? null,
       severity: SEVERITY_LABEL[result.severity] ?? 'Info',
       focusNode: result.focusNode,
-      path: result.path,
-      value: result.value ?? result.focusNode,
-      message: result.message || (check ? `Violates ${checkId}.` : 'SHACL validation failed.'),
+      path,
+      value,
+      message: fillMessageTemplate(result.message, result.focusNode, path, value)
+        || (check ? `Violates ${checkId}.` : 'SHACL validation failed.'),
       remediation: check?.remediation ?? null,
       sources: ['shacl'],
     });
   }
   return rows;
+}
+
+/**
+ * Substitutes the SHACL message-template placeholders the engine leaves as written.
+ *
+ * `sh:message` is a template, not a string: SHACL 1.0 section 6.2 says `{$this}`,
+ * `{$path}` and `{$value}` (and the `{?name}` spelling) are replaced with the
+ * corresponding values of the result. `shacl-wasm` returns the template verbatim,
+ * so seventeen of this registry's twenty shape messages reached the Problems panel
+ * reading literally "{$this} is disjoint with one of its own transitive
+ * superclasses" -- the placeholder being exactly the part that says *which* class.
+ *
+ * Only the three result-level placeholders are filled. A constraint parameter
+ * (`{$maxCount}` and friends) is left as written rather than replaced with
+ * something wrong or with the word "undefined": the parameter values are not in
+ * the result, and a visible placeholder at least says so.
+ */
+function fillMessageTemplate(message: string, focusNode: string, path: string | null, value: string | null): string {
+  if (!message.includes('{')) return message;
+  const substitutions: [RegExp, string | null][] = [
+    [/\{[$?]this\}/g, focusNode],
+    [/\{[$?]path\}/g, path],
+    [/\{[$?]value\}/g, value],
+  ];
+  let out = message;
+  for (const [pattern, replacement] of substitutions) {
+    if (replacement !== null) out = out.replace(pattern, () => replacement);
+  }
+  return out;
 }
 
 function getOrBuildValidator(file: string, registry: Registry): CompiledShapes | undefined {
@@ -169,20 +215,21 @@ function getOrBuildValidator(file: string, registry: Registry): CompiledShapes |
     return undefined;
   }
 
-  let named: { text: string; checkIdByShapeIri: Map<string, string> };
+  let named: NamedShapes;
   try {
     named = nameNestedShapes(shapesText, registry);
   } catch (err) {
     // A shapes file this project cannot parse itself is still one the engine may
     // well compile, so fall back to the text as written rather than losing the file.
     console.error(`[ontologySuite] could not pre-name the nested shapes in ${file}:`, err);
-    named = { text: shapesText, checkIdByShapeIri: new Map() };
+    named = { text: shapesText, checkIdByShapeIri: new Map(), pathExpressionByShapeIri: new Map() };
   }
 
   try {
     const compiled: CompiledShapes = {
       validator: mod.Validator.fromTurtle(named.text, DATA_BASE),
       checkIdByShapeIri: named.checkIdByShapeIri,
+      pathExpressionByShapeIri: named.pathExpressionByShapeIri,
     };
     cachedShapes.set(file, compiled);
     return compiled;
@@ -193,6 +240,15 @@ function getOrBuildValidator(file: string, registry: Registry): CompiledShapes |
 }
 
 const SH_PROPERTY = 'http://www.w3.org/ns/shacl#property';
+const SH_PATH = 'http://www.w3.org/ns/shacl#path';
+interface NamedShapes {
+  text: string;
+  /** Shape IRI to the registry check id it reports as. */
+  checkIdByShapeIri: Map<string, string>;
+  /** Shape IRI to its `sh:path` rendered as a property-path expression -- only the paths that are not plain IRIs. */
+  pathExpressionByShapeIri: Map<string, string>;
+}
+
 /** Where the skolem IRIs minted for nested property shapes live. They never leave this module. */
 const SHAPE_SKOLEM_BASE = 'http://ontology-dev-suite.local/shape/';
 
@@ -220,7 +276,7 @@ const SHAPE_SKOLEM_BASE = 'http://ontology-dev-suite.local/shape/';
  * The same pass picks up `oq:checkId` annotations (step 3 upstream), which is how
  * the split shapes -- `QUA-001`, `STR-003`, `STY-002` -- are tagged.
  */
-function nameNestedShapes(shapesText: string, registry: Registry): { text: string; checkIdByShapeIri: Map<string, string> } {
+function nameNestedShapes(shapesText: string, registry: Registry): NamedShapes {
   const quads = new Parser().parse(shapesText);
 
   const parentOf = new Map<string, string>();
@@ -249,14 +305,32 @@ function nameNestedShapes(shapesText: string, registry: Registry): { text: strin
     return parent ? resolve(parent, seen) : undefined;
   };
 
+  // Indexed for renderPathExpression, which walks the blank-node structure a path
+  // expression is encoded as.
+  const bySubject = new Map<string, Quad[]>();
+  for (const q of quads) {
+    const list = bySubject.get(q.subject.value);
+    if (list) list.push(q);
+    else bySubject.set(q.subject.value, [q]);
+  }
+  /** Every shape node's `sh:path`, where that path is an expression rather than a plain IRI. */
+  const pathExpressionOf = new Map<string, string>();
+  for (const q of quads) {
+    if (q.predicate.value !== SH_PATH || q.object.termType !== 'BlankNode') continue;
+    pathExpressionOf.set(q.subject.value, renderPathExpression(q.object, bySubject));
+  }
+
   const skolemFor = new Map<string, string>();
   const checkIdByShapeIri = new Map<string, string>();
+  const pathExpressionByShapeIri = new Map<string, string>();
   for (const blank of parentOf.keys()) {
     const checkId = resolve(blank);
     if (!checkId) continue;
     const iri = `${SHAPE_SKOLEM_BASE}${checkId}/property-${skolemFor.size + 1}`;
     skolemFor.set(blank, iri);
     checkIdByShapeIri.set(iri, checkId);
+    const expression = pathExpressionOf.get(blank);
+    if (expression !== undefined) pathExpressionByShapeIri.set(iri, expression);
   }
   // A *named* shape can carry its id in an annotation rather than in its own IRI.
   for (const [node, id] of annotated) {
@@ -264,7 +338,11 @@ function nameNestedShapes(shapesText: string, registry: Registry): { text: strin
       checkIdByShapeIri.set(node, id);
     }
   }
-  if (skolemFor.size === 0) return { text: shapesText, checkIdByShapeIri };
+  // A named shape reports under its own IRI, so its path expression is keyed by it.
+  for (const [node, expression] of pathExpressionOf) {
+    if (!skolemFor.has(node)) pathExpressionByShapeIri.set(node, expression);
+  }
+  if (skolemFor.size === 0) return { text: shapesText, checkIdByShapeIri, pathExpressionByShapeIri };
 
   const rename = <T extends Quad['subject'] | Quad['object']>(term: T): T =>
     term.termType === 'BlankNode' && skolemFor.has(term.value)
@@ -283,7 +361,7 @@ function nameNestedShapes(shapesText: string, registry: Registry): { text: strin
     else text = result;
   });
   if (failure) throw failure;
-  return { text, checkIdByShapeIri };
+  return { text, checkIdByShapeIri, pathExpressionByShapeIri };
 }
 
 /**
