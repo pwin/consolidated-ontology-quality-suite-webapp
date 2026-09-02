@@ -1,5 +1,61 @@
 # Changelog
 
+## 0.13.1
+
+### Fixed: a cyclic class expression crashed the Manchester serializer
+
+`rdfToClassExpr` walked blank-node class expressions with no guard on either
+cycles or descent. Two triples were enough to take it down:
+
+```turtle
+_:b owl:complementOf _:b .
+```
+
+That is malformed OWL and perfectly well-formed RDF, so it survives a parse and
+reaches the serializer, where it came out as an unhandled
+`RangeError: Maximum call stack size exceeded` — *Convert / Save As
+Serialization* to Manchester dying on one corrupt file. Legitimate depth broke it
+too, somewhere between 2,000 and 20,000 nested levels.
+
+Same class of bug as `computeMaxDepth` in 0.11.4, and as the six walks
+`consolidated_ontology_suite_python` moved onto the heap in its 0.7.0: a graph
+walk that guards neither cycles nor descent. `readRdfList` beside it has been
+cycle-guarded all along, but its `seen` set is per list, so a cycle running
+between *levels* of an expression was invisible to it.
+
+The path down to a node is now tracked, so a node that is its own ancestor stops
+and returns `undefined`, and depth is capped at 200 — gist’s deepest expression
+is single figures. Path-scoped rather than one visited set for the whole walk, so
+a blank node legitimately reached down two different branches still renders in
+both. Callers already handle `undefined`: the unrenderable axiom is dropped and
+the rest of the class still serializes.
+
+### The check that floods a run now says so, and offers to stop
+
+`QUA-009`/`QUA-010` ask for SKOS documentation on every term, so on an ontology
+documented with `rdfs:label` they do not *add* findings, they **are** the
+findings — 52 of them on `examples/tutorial/clinic.ttl`. 0.13.0 shipped
+`ontologySuite.disabledChecks` as the answer and left the user to find it.
+
+The run summary now names the id when one check is both **half the findings** and
+**at least ten** of them, and offers to disable it in one click — workspace
+settings where there is a workspace, so the choice travels with the project
+rather than silencing the check in every other ontology you open. Below either
+threshold nothing changes: four findings, three of them one check, is true and
+not a reason to change a setting.
+
+### Correction to 0.13.0: the nested-shape fix was bigger than described
+
+Those release notes said findings from a nested `sh:property` shape arrived
+*without their check id*. Measured properly, it was worse: `checkId` is part of
+the dedup key in `merge.ts`, so a null one could never match its SPARQL twin, and
+a single defect reached the Problems panel as **two diagnostics** — one coded,
+one anonymous, reading only `SHACL validation failed`.
+
+`LOG-003` and `STR-002` are the pre-existing checks that behaved that way. Both
+now merge to one row each, pinned by a test, since they are the ones nobody would
+notice regressing — the checks added in 0.13.0 have their own coverage.
+
 ## 0.13.0
 
 Six checks brought across from `consolidated_ontology_suite_python` (0.9.0 and
