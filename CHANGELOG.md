@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.13.3
+
+### The TARQL testing guide uses examples a reader can run
+
+Documentation only; no behaviour changes. `docs/TESTING_TARQL.md` ships inside
+the `.vsix`, and its command examples named one particular repository's
+layout — `--queries scripts/to_rdf`, an `ontology/MergedOntologies.ttl` — while
+the worked `bind-review.txt` sample and the typo it illustrates were quoted
+from that project's output. None of it was needed to make the point, and
+nobody following the document could run any of it.
+
+The paths are generic now, and the sample is real output from the Python
+suite's own `examples/tarql_drift/` fixture, so it can actually be
+reproduced. The typo is described rather than quoted: what matters about
+`TQL-001` is that a single character buried in a long IRI template survived
+several readings, not which name it was in.
+
 ## 0.13.2
 
 ### One defect, one finding, for all 21 checks written twice
