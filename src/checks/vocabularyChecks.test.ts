@@ -9,6 +9,7 @@ import { runVocabularyChecks } from './vocabularyChecks';
 const { namedNode, quad } = DataFactory;
 const EX = 'http://example.org/clinic#';
 const RDFS_SUBCLASS_OF = 'http://www.w3.org/2000/01/rdf-schema#subClassOf';
+const RDF_TYPE = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type';
 
 async function loadClinicQuads() {
   const dir = path.resolve(__dirname, '../../examples/tutorial');
@@ -32,13 +33,28 @@ describe('runVocabularyChecks', () => {
     expect(rows[0]).toMatchObject({ checkId: 'VOC-001', focusNode: `${EX}Dog`, path: RDFS_SUBCLASS_OF, value: `${EX}Mammall` });
   });
 
-  it('flags a typoed predicate itself, not just object references', async () => {
+  /**
+   * The predicate position is STR-002's and the rdf:type object is STR-001's.
+   *
+   * Both were reported here too, so an undeclared predicate arrived as STR-002 *and*
+   * VOC-001, and an undeclared type as STR-001 *and* VOC-001 -- with, in the type
+   * case, an identical focus node and value, so the two rows differed only by id.
+   * Neither of those checks applies the namespace guard below, so they were already
+   * reporting a superset of what this could: nothing is lost by standing down, and a
+   * duplicate per defect is gone.
+   */
+  it('leaves the predicate position to STR-002', async () => {
     const mergedQuads = await loadClinicQuads();
     const withTypo = [...mergedQuads, quad(namedNode(`${EX}Dog`), namedNode(`${EX}hasOwnerx`), namedNode(`${EX}Owner`))];
 
-    const rows = runVocabularyChecks(withTypo);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ checkId: 'VOC-001', focusNode: `${EX}Dog`, path: `${EX}hasOwnerx`, value: `${EX}hasOwnerx` });
+    expect(runVocabularyChecks(withTypo)).toEqual([]);
+  });
+
+  it('leaves the rdf:type object to STR-001', async () => {
+    const mergedQuads = await loadClinicQuads();
+    const withTypo = [...mergedQuads, quad(namedNode(`${EX}rex`), namedNode(RDF_TYPE), namedNode(`${EX}Dogg`))];
+
+    expect(runVocabularyChecks(withTypo)).toEqual([]);
   });
 
   it('does not flag a namespace with zero closed-world knowledge (never imported/declared here)', async () => {

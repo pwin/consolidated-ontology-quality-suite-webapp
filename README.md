@@ -10,7 +10,7 @@ class expressions — `and`/`or`/`not`/`some`/`only`/cardinality
 restrictions — not just atomic declarations; see [Serializations](#serializations)).
 
 It grew out of two sibling projects: `consolidated_ontology_suite`
-(a mature Python CLI with a 56-check registry, reasoning, docgen, and the
+(a mature Python CLI with a 59-check registry, reasoning, docgen, and the
 real `oxi-gen` triplifier) and `turtle-editor-viewer`
 (a browser-based Turtle/SPARQL editor). This extension reuses the check
 registry's *data* (`registry.json` + `sparql/*.rq` + `shapes/*.ttl` —
@@ -166,12 +166,14 @@ Validation" and "Full Triplify" commands, degrading gracefully if absent.
 - **`VOC-001` (closed-world vocabulary check)**: SHACL's open-world
   semantics never flag "used `ex:Dgo`, meant `ex:Dog`" — nothing
   *contradicts* an undeclared class/property existing, it's just never
-  asserted to. `VOC-001` walks every triple's predicate (always a property
-  reference) and, for a fixed set of term-referencing predicates
-  (`rdf:type`, `rdfs:subClassOf`/`subPropertyOf`/`domain`/`range`,
-  `owl:equivalentClass`/`disjointWith`/`inverseOf`/restriction predicates,
-  `sh:targetClass`/`class`/`path`), its object too, flagging any IRI that
-  isn't declared anywhere in the document or its resolved imports.
+  asserted to. `VOC-001` reads the object position of a fixed set of
+  term-referencing predicates (`rdfs:subClassOf`/`subPropertyOf`/`domain`/
+  `range`, `owl:equivalentClass`/`disjointWith`/`inverseOf`/restriction
+  predicates, `sh:targetClass`/`class`/`path`), flagging any IRI that isn't
+  declared anywhere in the document or its resolved imports. Deliberately
+  **not** the `rdf:type` object or the predicate itself: those are `STR-001`
+  and `STR-002`, which report the same focus node — covering them here meant
+  one defect arriving as two findings under two ids.
   Scoped to namespaces the graph has *some* closed-world knowledge of —
   at least one declared term already exists there — so an external
   vocabulary that was never actually imported (`dcterms:`, `foaf:`, or
@@ -190,7 +192,14 @@ Validation" and "Full Triplify" commands, degrading gracefully if absent.
   menu. [docs/TESTING_TARQL.md](docs/TESTING_TARQL.md) covers what these three
   catch, what nothing here catches, and a review order.
 - *Run Deep Validation*: optional Python CLI fallback for full OWL2 DL
-  reasoning (owlready2/HermiT).
+  reasoning (owlready2/HermiT). **Nine of the 59 registry checks can only be
+  produced this way**, and are listed with the reason in
+  [`registryCoverage.test.ts`](src/checks/registryCoverage.test.ts): `REA-020`/
+  `REA-021`/`REA-022` need a real DL reasoner, `REA-010`/`REA-011`/`REA-012`
+  are OWL2 profile membership (computed here for *Show Metrics*, not reported
+  as findings), and `CNF-001`/`CNF-002`/`CNF-005` compare a data graph against
+  a *separate* ontology — where *Run Local Checks* merges a document with its
+  imports into one graph, so there is no second graph to be absent from.
 - Competency questions as VS Code tests: `.cq.rq` files (SPARQL ASK/SELECT
   + expected-result directives) show up in Test Explorer.
 - *Quick Fix*: 16 checks (see [Quick Fix](#quick-fix-schematron-quick-fix-style-repair))
@@ -423,7 +432,7 @@ Two different mechanisms, for two different kinds of customization:
 | `ontologySuite.enableSparqlChecks` | `true` | Run the registry's SPARQL CONSTRUCT checks. Fast (~0.2s on this project's own fixtures) |
 | `ontologySuite.enableShaclChecks` | `true` | Run the registry's SHACL-SPARQL shapes (via `shacl-wasm-node`). Fast since 0.10.0 — ~0.3s for all six shapes files where the previous `shacl-engine` took ~71s — so there is rarely a reason to turn it off now |
 | `ontologySuite.disabledChecks` | `[]` | Check ids to suppress in *Run Local Checks*, e.g. `["QUA-009", "QUA-010"]`. A disabled check’s SPARQL query is not run at all, and findings for the id are dropped whichever engine reported them |
-| `ontologySuite.enableVocabularyChecks` | `true` | Run the closed-world vocabulary check (`VOC-001`) — flags used-but-undeclared class/property IRIs (typos, hallucinated terms) within namespaces the graph has closed-world knowledge of |
+| `ontologySuite.enableVocabularyChecks` | `true` | Run the closed-world vocabulary check (`VOC-001`) — flags an axiom (`rdfs:subClassOf`, `rdfs:domain`, `sh:class`, …) pointing at an undeclared IRI, within namespaces the graph has closed-world knowledge of. `STR-001`/`STR-002` cover the `rdf:type` object and the predicate position |
 | `ontologySuite.queryOntologyPaths` | `[]` | Ontology file(s) a query is checked for conformance against. Each entry is a literal path **or** a glob (`*`, `?`, `**`), mixed freely in one list — e.g. `["core.ttl", "vocab/*_ontology.ttl"]`. Absolute or workspace-relative. Empty = discover automatically (query's own directory, then parent, then siblings). All resolved ontologies are merged |
 | `ontologySuite.triplifyPreviewSampleSize` | `20` | CSV rows sampled for the live triplify preview |
 | `ontologySuite.maxIndexedFileSizeKb` | `5120` | Files larger than this are not parsed into the term index, so their terms do not appear in hover, completion, go-to-definition or rename. A multi-MB data graph costs seconds of blocked editor to index terms nobody hovers; hand-authored ontologies are far below the default (gist core is under 1 MB). Skipped files are named in the extension host log |

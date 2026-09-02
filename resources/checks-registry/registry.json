@@ -398,6 +398,28 @@
       "cucumber_scenario": "No individual is inferred to be a member of owl:Nothing"
     },
     {
+      "id": "REA-005",
+      "category": "reasoning",
+      "metric": "logical consistency",
+      "default_severity": "Violation",
+      "title": "Individual both owl:sameAs and owl:differentFrom the same node",
+      "description": "After closure, one individual is asserted (or inferred) to be both owl:sameAs and owl:differentFrom the same other individual. The two are direct contradictions: sameAs says the IRIs denote one thing, differentFrom says they denote two, and no model satisfies both. Usually an alignment merged from two sources that disagreed, and it stays invisible until something reasons over the identity links rather than reading them.",
+      "remediation": "Decide which is correct and remove the other. If the pair came from an automated alignment, the differentFrom is usually the assertion to trust and the sameAs the one to withdraw.",
+      "cucumber_feature": "Reasoning",
+      "cucumber_scenario": "No individual is asserted both identical to and distinct from another"
+    },
+    {
+      "id": "REA-006",
+      "category": "reasoning",
+      "metric": "logical consistency",
+      "default_severity": "Violation",
+      "title": "Reasoner-derived contradiction (unclassified)",
+      "description": "The reasoning ruleset derived a contradiction it labelled with a reason this suite does not yet render specifically. Reported rather than dropped: an unrecognised reason is still a contradiction the reasoner found, and silently discarding it would be the worst of the available answers. Firing at all means the ruleset has grown a case its reader has not -- the fix is to add it, not to widen this.",
+      "remediation": "Read the message for the raw reason and the nodes involved. If this recurs, the reason needs adding to the reader in checks/reasoningRunner.ts so it reports under a specific id.",
+      "cucumber_feature": "Reasoning",
+      "cucumber_scenario": "An unrecognised reasoner contradiction is still reported"
+    },
+    {
       "id": "REA-010",
       "category": "reasoning",
       "metric": "OWL2 profile expressiveness",
@@ -583,6 +605,17 @@
       "remediation": "Expected for a partial batch/sketch; investigate only if this class should always be populated by a complete export.",
       "cucumber_feature": "Conformance",
       "cucumber_scenario": "Report which declared classes, if any, a graph never populates"
+    },
+    {
+      "id": "VOC-001",
+      "category": "vocabulary",
+      "metric": "referential integrity of term references",
+      "default_severity": "Warning",
+      "title": "Undeclared term referenced by an axiom",
+      "description": "A term-referencing axiom points at an IRI that nothing declares. SHACL's open-world semantics never flag this: nothing *contradicts* an undeclared class existing, it is simply never asserted to. Covers the object position of rdfs:subClassOf/subPropertyOf/domain/range, owl:equivalentClass/disjointWith/inverseOf/onProperty/onClass/someValuesFrom/allValuesFrom and sh:targetClass/class/path. Deliberately NOT the rdf:type object or the predicate position, which are STR-001 and STR-002 -- reporting those here produced two findings with different ids for one defect. Scoped to namespaces this graph already declares at least one term in, so an external vocabulary that was never imported is left alone rather than flooded.",
+      "remediation": "Check the spelling against the declaring ontology, or add the missing owl:imports if the term is meant to come from elsewhere.",
+      "cucumber_feature": "Vocabulary Integrity",
+      "cucumber_scenario": "Every term an axiom references is declared somewhere"
     },
     {
       "id": "TQL-001",

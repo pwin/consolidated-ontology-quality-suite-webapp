@@ -1,6 +1,5 @@
 import { buildOntologyModel } from '../rdf/ontologyModel';
 import {
-  RDF_TYPE,
   RDFS_SUBCLASS_OF,
   RDFS_SUBPROPERTY_OF,
   RDFS_DOMAIN,
@@ -26,9 +25,12 @@ import type { Quad } from 'n3';
  * elaborate sh:path expressions (alternative/sequence paths, blank-node-headed) -- a heuristic
  * scoped to the common, high-value cases, consistent with this project's other text/graph
  * heuristics (e.g. language/completionContext.ts, language/termIndex.ts's statement-span scan).
+ *
+ * `rdf:type` is deliberately absent: an undeclared class in the type position is STR-001, which
+ * reports the same focus node and the same value, so listing it here produced two findings with
+ * two ids for one defect. STR-002 owns the predicate position for the same reason.
  */
 const TERM_REFERENCING_OBJECT_PREDICATES = new Set([
-  RDF_TYPE,
   RDFS_SUBCLASS_OF,
   RDFS_SUBPROPERTY_OF,
   RDFS_DOMAIN,
@@ -53,13 +55,19 @@ function namespaceOf(iri: string): string {
 /**
  * Closed-world check for undeclared vocabulary terms: SHACL's open-world semantics never flag
  * "used ex:Dgo, meant ex:Dog" since nothing *contradicts* an undeclared class/property existing --
- * it's simply never asserted to say anything about it either way. This walks every triple's
- * predicate (always a property reference) and, for a fixed set of term-referencing predicates
- * (rdf:type, rdfs:subClassOf/subPropertyOf/domain/range, owl:equivalentClass/disjointWith/
- * inverseOf/..., sh:targetClass/class/path), its NamedNode object too, flagging any IRI that
- * isn't declared as a class/property/individual/annotation-property anywhere in `quads` -- the
- * document plus its resolved imports (see ontology/resolveImports.ts), since callers pass in the
- * same merged-quads graph every other local check runs against.
+ * it's simply never asserted to say anything about it either way. For a fixed set of
+ * term-referencing predicates (rdfs:subClassOf/subPropertyOf/domain/range,
+ * owl:equivalentClass/disjointWith/inverseOf/..., sh:targetClass/class/path) this flags a
+ * NamedNode object that isn't declared as a class/property/individual/annotation-property
+ * anywhere in `quads` -- the document plus its resolved imports (see
+ * ontology/resolveImports.ts), since callers pass in the same merged-quads graph every other
+ * local check runs against.
+ *
+ * The two positions it does *not* cover are the ones the registry already owns: an undeclared
+ * class in the rdf:type object is STR-001, and an undeclared predicate is STR-002. Both report
+ * the same focus node this would, so covering them here meant one defect arriving as two
+ * findings under two ids -- and since neither of those applies the namespace guard below, they
+ * were already reporting a superset. What is left is the axiom positions nothing else reads.
  *
  * Scoped to namespaces this graph has *some* closed-world knowledge of -- i.e. at least one
  * declared term already exists in that namespace somewhere in `quads` -- so a namespace this
@@ -88,7 +96,10 @@ export function runVocabularyChecks(quads: Quad[]): ResultRow[] {
     rows.push({
       checkId: 'VOC-001',
       category: 'vocabulary',
-      title: 'Undeclared vocabulary term',
+      // Kept in step with registry.json's VOC-001 entry, which is where the id is now
+      // declared -- so the Problems panel, `disabledChecks` and the run summary all name
+      // this check the same way.
+      title: 'Undeclared term referenced by an axiom',
       severity: 'Warning',
       focusNode: subj,
       path: pred,
@@ -104,8 +115,10 @@ export function runVocabularyChecks(quads: Quad[]): ResultRow[] {
     const subj = q.subject.value;
     const pred = q.predicate.value;
 
-    if (pred !== RDF_TYPE) flag(subj, pred, pred); // predicate position -- every predicate is a property reference; rdf:type is the one universal exception
-
+    // The predicate position is STR-002's, and the rdf:type object is STR-001's. Both are
+    // registry checks with SHACL and SPARQL formulations and their own Quick Fix templates,
+    // and neither applies this check's namespace guard -- so they already report a superset
+    // of what this would, and reporting it again only doubled the finding.
     if (q.object.termType === 'NamedNode' && TERM_REFERENCING_OBJECT_PREDICATES.has(pred)) {
       flag(subj, pred, q.object.value);
     }

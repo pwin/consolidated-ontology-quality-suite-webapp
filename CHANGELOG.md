@@ -2,6 +2,57 @@
 
 ## 0.13.2 (unreleased)
 
+### One defect, one finding: the check ids are sorted out
+
+Three pairs of checks were reporting the same defect twice, under two ids, and two
+tiers were emitting ids the registry never declared. All of it surfaced from one
+graph with four seeded defects, which produced **seven findings**.
+
+**`REA-001` and the reasoning tier were the same check under different names.**
+The tier emitted `REA-DISJOINT`/`REA-SAMEDIFF`/`REA-CONTRADICTION` — ids nothing
+declared — while `registry.json` declared `REA-001`..`REA-004` it never produced.
+And `REA-001` *is* the disjointness check ("after closure, an individual is a
+member of two classes declared `owl:disjointWith`"), so the asserted case was
+caught by both the tier and `sparql/reasoning/REA-001.rq` and arrived twice.
+
+The reasons now map onto registry ids, and the reasoner binds the same `value` its
+SPARQL twin does — both classes, distinct, sorted, joined — so the two merge
+instead, exactly as the SHACL and SPARQL formulations of every other check do:
+
+```
+before   REA-001      | tibbles | v=Cat, Dog | sparql
+         REA-DISJOINT | tibbles | v=         | reasoning
+after    REA-001      | tibbles | v=Cat, Dog | reasoning+sparql
+```
+
+`sameAsAndDifferentFrom` gets a real entry as **`REA-005`**, and the unclassified
+fallback **`REA-006`** — reported rather than dropped, because an unrecognised
+reason is still a contradiction the reasoner found.
+
+**`VOC-001` was duplicating `STR-001` and `STR-002`.** It read the `rdf:type`
+object and the predicate position as well as the axiom positions, so an undeclared
+class produced `STR-001` *and* `VOC-001` — with an identical focus node and value,
+differing only by id — and an undeclared predicate produced `STR-002` *and*
+`VOC-001`. Neither of those checks applies `VOC-001`'s namespace guard, so they
+were already reporting a superset: nothing is lost by standing down. `VOC-001` now
+covers only the axiom positions nothing else reads — `rdfs:subClassOf`/
+`subPropertyOf`/`domain`/`range`, `owl:equivalentClass`/`disjointWith`/`inverseOf`/
+restriction predicates, `sh:targetClass`/`class`/`path` — and is declared in the
+registry, so the Problems panel, `disabledChecks` and the run summary all name it
+the same way.
+
+The same four defects now produce four findings, and a fifth defect in an axiom
+position still produces exactly one.
+
+**Nine declared checks can only come from the Python CLI**, which was true before
+and invisible: a reader opening `registry.json` had no way to tell which entries
+could ever fire. They are now named with the reason, and pinned as an exact set by
+`checks/registryCoverage.test.ts` — adding an implementation makes that test fail
+and say so. `REA-020`/`021`/`022` need a real DL reasoner; `REA-010`/`011`/`012`
+are OWL2 profile membership, which this project computes for *Show Metrics* but
+does not report as findings; `CNF-001`/`002`/`005` compare a data graph against a
+*separate* ontology, where *Run Local Checks* has merged the document with its
+imports into one graph before anything runs.
 ### Fixed: `CNF-004` reported a valid integer against a decimal range
 
 The range check compared the literal’s datatype to the declared range by exact

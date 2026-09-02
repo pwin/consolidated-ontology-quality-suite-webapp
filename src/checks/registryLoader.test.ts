@@ -5,13 +5,17 @@ import { loadRegistry, localName } from './registryLoader';
 describe('loadRegistry against the copied-in resources/checks-registry', () => {
   const registry = loadRegistry(path.resolve(__dirname, '../../resources/checks-registry'));
 
-  it('loads all 56 registry.json checks', () => {
-    expect(registry.checksById.size).toBe(56);
+  it('loads all 59 registry.json checks', () => {
+    expect(registry.checksById.size).toBe(59);
     expect(registry.checksById.get('STR-001')?.category).toBe('structural');
     // TQL-001..003 are native (checks/../triplify/bindAnalysis.ts) and have no
     // sparql/shapes file of their own, but they are registry entries like any
     // other -- their rows resolve title/severity/remediation the same way.
     expect(registry.checksById.get('TQL-001')?.category).toBe('tarql');
+    // REA-005/REA-006 and VOC-001 are likewise native, and likewise declared here:
+    // an id a tier emits without a registry entry is one nothing can look up.
+    // checks/registryCoverage.test.ts pins both directions of that.
+    expect(registry.checksById.get('VOC-001')?.category).toBe('vocabulary');
   });
 
   it('finds sparql/**/*.rq and shapes/*.ttl files', () => {
