@@ -33,6 +33,18 @@ interface WasmValidator {
   validateTurtle(text: string, base?: string | null, inference?: string | null): { results: WasmResult[] };
 }
 
+/**
+ * Only the `Validator` path is used, never the module-level `validateTurtle`
+ * one-shot beside it -- shapes here are compiled once per session and validated
+ * against many graphs, which is what that split is for.
+ *
+ * Worth stating because the two are diverging. The engine's 0.2.0 reorders the
+ * one-shot's arguments from `(shapes, data)` to `(data, shapes)`, having found
+ * that a transposed call silently *conformed*: the data compiles as a shapes
+ * graph, declares no shapes, and validating against no shapes passes. The
+ * `Validator` method's own signature is unchanged across 0.1.10, 0.1.12 and that
+ * rework, so nothing here moves with it.
+ */
 interface WasmModule {
   Validator: { fromTurtle(text: string, base?: string | null): WasmValidator };
 }

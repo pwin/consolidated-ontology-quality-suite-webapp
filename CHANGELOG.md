@@ -1,5 +1,65 @@
 # Changelog
 
+## 0.13.2 (unreleased)
+
+### SHACL engine 0.1.10 → 0.1.12
+
+`shacl-wasm-node`, the WebAssembly build of
+[the native Rust SHACL engine](https://github.com/pwin/SHACL_Engine). Two fixes
+in it matter here, neither of which changes a single finding this project
+currently produces — verified by diffing every SHACL and merged row across four
+fixtures before and after, 106 and 134 rows respectively, identical down to the
+severities and merge sources.
+
+- **A term that left through `to_oxrdf` and came back could vanish.** Three
+  functions claimed to reverse that rendering and each had its own idea of what
+  could be reversed; an unresolvable term was not an error anywhere, so a result
+  quietly lost its `sh:value`. That matters more here than the finding count
+  suggests: `value` is part of the dedup key in `merge.ts`, so a lost one is a
+  row that cannot merge with its SPARQL twin — the same failure this project hit
+  from the other end in 0.13.0. Blank nodes were fixed in 0.1.10; RDF 1.2 triple
+  terms survived neither boundary until 0.1.11.
+- **Shape compilation is iterative rather than recursive**, so a deeply nested
+  shapes file cannot overflow the stack while compiling. Not reachable through
+  the bundled registry, whose shapes nest three deep at most; reachable through
+  `ontologySuite.checksRegistryPath` and someone else’s shapes.
+
+The engine’s next release reorders the arguments of its module-level
+`validateTurtle` one-shot, having found that a transposed call silently
+*conformed* — the data compiles as a shapes graph, declares no shapes, and
+validating against no shapes passes. This project only ever uses the `Validator`
+path, whose signature is unchanged across all three versions, so nothing here
+moves with it. `shaclRunner.ts` now says so, since the two names are identical
+and only the receiver tells them apart.
+
+### Fixed: the Python CLI could never be found
+
+`consolidated_ontology_suite` renamed its console script to
+`ontology-quality-suite`, and `ontologySuite.pythonCliPath` still defaulted to
+the old `ontology-suite`. So *Run Deep Validation*, *Run Full Triplify* and
+*Generate Documentation* could not launch out of the box against any current
+install — the default itself was unreachable, whatever the user had.
+
+The old name is named in the failure message for anyone whose install predates
+the rename, rather than tried as a silent fallback: `shell: true` on Windows
+means a missing command surfaces as a non-zero exit rather than an `ENOENT`, so
+there is no reliable signal to retry on and guessing twice would bury the real
+error.
+
+### `docs/TESTING_TARQL.md`
+
+The companion to the `TQL-00x` checks added in 0.13.0: what goes wrong in a
+folder of CONSTRUCT queries, which surface here catches each thing, what nothing
+here catches, and a review order that puts the cheapest checks first. Adapted
+from the same file upstream rather than copied — that one is written around CLI
+stages, and two differences needed saying rather than glossing. The `TQL` checks
+report twice here (diagnostics on the queries, each competing `BIND` carrying the
+others as related information, plus the reviewer’s report in an output channel).
+And this extension has **no sketch-graph stage**: the CLI renders CONSTRUCT
+templates into a placeholder graph and runs `CNF-001`..`CNF-005` over it before
+any data exists, while the Query Workbench covers only the undeclared-term half
+of that.
+
 ## 0.13.1
 
 ### Fixed: a cyclic class expression crashed the Manchester serializer
