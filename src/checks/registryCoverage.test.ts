@@ -19,7 +19,17 @@ import { loadRegistry } from './registryLoader';
  */
 const REGISTRY_DIR = path.resolve(__dirname, '../../resources/checks-registry');
 
-/** Declared in the registry, but nothing in this extension can report them. */
+/**
+ * Declared in the registry, but nothing in this extension can report them.
+ *
+ * The mirror of this list -- the three checks only *this* extension can
+ * produce, VOC-001/REA-005/REA-006 -- is `EXTENSION_ONLY_IDS` in the Python
+ * suite's `tests/test_check_coverage.py`. Between them the two lists account
+ * for every entry in the shared registry that one side declares and the other
+ * cannot run, which is the thing a reader of registry.json otherwise has no
+ * way to discover. `registryParity.test.ts` pins that the two sides are
+ * reading the same registry in the first place.
+ */
 const CLI_ONLY = [
   // A full OWL2 DL reasoner (HermiT/Pellet via owlready2). The in-process tier is
   // EYE over an OWL2-RL-subset ruleset: sound, not complete, and it cannot answer

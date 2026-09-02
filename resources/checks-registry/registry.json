@@ -1,5 +1,5 @@
 {
-  "namespace": "http://example.org/ontology-quality#",
+  "namespace": "https://semantechs.co.uk/ontology-quality/",
   "checks": [
     {
       "id": "STR-001",
@@ -172,7 +172,7 @@
       "metric": "literal well-formedness",
       "default_severity": "Violation",
       "title": "Literal lexical form invalid for its datatype",
-      "description": "A literal is not valid for its declared datatype -- either its lexical form does not match the expected pattern (checked portably for xsd:date, xsd:integer and xsd:boolean) or it does not denote a value of that datatype at all (checked for date/dateTime/gMonth/gDay, which also covers lexically well-formed impossibilities such as \"2021-02-30\"^^xsd:date).",
+      "description": "A literal is not valid for its declared datatype -- either its lexical form does not match the expected pattern (checked portably for xsd:date, xsd:integer and xsd:boolean) or it does not denote a value of that datatype at all, which also covers lexically well-formed impossibilities such as \"2021-02-30\"^^xsd:date. How far the value-space half reaches depends on the implementation: the Python suite defers to its RDF parser and so covers every XSD datatype that parser validates, while the VS Code extension decides the value space itself and covers date, dateTime, gMonth and gDay.",
       "remediation": "Correct the literal so its lexical form is valid for the declared datatype, or correct the declared datatype.",
       "cucumber_feature": "Data Quality",
       "cucumber_scenario": "Typed literals are lexically valid for their datatype"
