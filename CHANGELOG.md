@@ -1,6 +1,119 @@
 # Changelog
 
-## 0.13.2 (unreleased)
+## 0.13.2
+
+### One defect, one finding, for all 21 checks written twice
+
+Twenty-one checks have both a SHACL shape and a SPARQL twin, and *Run Local
+Checks* runs both tiers in the same pass. So a check written twice reports
+twice unless its two formulations agree on the whole dedup key `merge.ts`
+uses — `(checkId, focusNode, path, value)`. One field differing is enough,
+nothing throws, and the result looks like an ontology with more wrong with it
+than it has.
+
+That had happened four times in this registry and been found by hand each
+time, after shipping. `checks/__fixtures__/dual-formulation.ttl` now seeds a
+defect for every one of the 21, and `checks/dualFormulation.test.ts` asserts
+each fires from both tiers and arrives as a single row. It found two more:
+
+**`LOG-001` reported one unsatisfiable class as two findings.** Its path is a
+path *expression*, `[ sh:oneOrMorePath rdfs:subClassOf ]` — a blank-node
+structure, not an IRI. The SPARQL side has rendered those as SPARQL 1.1
+property paths since the day the same bug was fixed there; the SHACL side
+passed through whatever the engine reported, which is its own private label
+for the node:
+
+```
+before   shacl   path=_:0_b0                                    "{$this} is disjoint with ..."
+         sparql  path=(...rdf-schema#subClassOf)+               "Class ...#Unsatisfiable is ..."
+after    both    path=(...rdf-schema#subClassOf)+               "...#Unsatisfiable is disjoint ..."
+```
+
+A label like `_:0_b0` is meaningless to a reader and different on every parse,
+so those two rows could never have merged however correct both were. The
+renderer is now one function in `checks/pathExpression.ts` that both runners
+call, which is the part that lasts: two renderings of one path need only
+differ by a bracket to stop merging, and nothing about that looks like a bug —
+it looks like the two engines disagreeing.
+
+**Seventeen of the twenty shape messages showed a placeholder where the term
+should be.** `sh:message` is a template — SHACL 1.0 §6.2 says `{$this}`,
+`{$path}` and `{$value}` are replaced with the values of the result — and
+`shacl-wasm` returns it verbatim. So the Problems panel read, literally:
+
+> `{$this}` is disjoint with one of its own transitive superclasses, making it logically unsatisfiable.
+
+The placeholder being exactly the part that says *which* class. They are
+substituted now. A constraint parameter (`{$maxCount}` and friends) is left as
+written rather than replaced with the word "undefined": those values are not in
+the result, and a visible placeholder at least says so.
+
+A third, smaller thing on the way past: a node-shape constraint has no path,
+and the engine returns `undefined` where the row's own type says
+`string | null`. It reached the panel as the word "undefined", and would have
+been a distinct dedup key from the twin's real `null` had `merge.ts` not
+coalesced both to `''`.
+
+### `CNF-003`/`CNF-004` are held to the gist behaviour they claim
+
+Both queries read gist-style `domainIncludes`/`rangeIncludes` as well as
+`rdfs:domain`/`rdfs:range`, and have since they were written — but nothing
+checked it. `checks/conformanceGistDomainRange.test.ts` now does, including
+the two halves that are easy to lose: a subclass of an *included* domain
+satisfies it (the whole reason gist can declare a domain once on a property
+reused across a hierarchy), and an includes annotation does **not** declare the
+property — it is `rdfs:subPropertyOf skos:scopeNote` and entails nothing about
+its subject, so a property known only by one is still `STR-002`'s business.
+
+This is the counterpart of the cases added upstream, where the same check had
+the `rdfs:domain`-only blind spot for real: on a gist ontology it was not less
+sensitive, it was dead — and silence is also what a correct ontology looks
+like.
+### The check registry is one document again
+
+`resources/checks-registry/` is a **copy**. The original is in
+`consolidated_ontology_suite_python`, `ontologySuite.checksRegistryPath` can
+point this extension at that checkout instead, and both copies are editable. So
+the registry is the second place these two projects meet — the first being the
+CLI, whose contract was silently wrong for six releases until 0.13.2 checked it
+— and nothing had ever compared the two.
+
+They had drifted, in five registry fields and three whole entries. The
+consequential one was `CNF-003`/`CNF-004`: this copy's queries read gist-style
+`domainIncludes`/`rangeIncludes`, the Python suite's native implementation read
+only `rdfs:domain`/`rdfs:range`, and each side's description had drifted to
+describe its own behaviour. gist *prefers* those annotations to `rdfs:domain`
+for shared properties, so on a gist ontology the CLI's domain and range
+conformance checks were not less sensitive — they were dead. The same graph
+produced findings here and silence there.
+
+Upstream now reads them too, and both copies carry the same `registry.json`,
+character for character:
+
+- `REA-005`, `REA-006` and `VOC-001` are declared in both, so this extension no
+  longer emits three ids that a registry loaded from the Python checkout would
+  be unable to name.
+- `DAT-001`'s description says which value spaces each implementation actually
+  covers, instead of each copy describing its own and neither saying so.
+- `namespace` is `https://semantechs.co.uk/ontology-quality/` — the IRI every
+  shape and query actually binds to `oq:`. Both copies previously carried a
+  different placeholder, and neither of them was it. Nothing reads the field,
+  which is exactly how it stayed wrong.
+
+`checks/registryParity.test.ts` is the part that lasts: it compares
+`registry.json`, the shapes, the queries and the repair templates against the
+Python checkout whenever this machine has one, and skips when it does not — so
+it is a test for whoever edits both, which is who breaks it. Line endings are
+excluded and only line endings; neither repo has a `.gitattributes`, so
+`core.autocrlf` decides those per checkout.
+
+`conformance/CNF-003.rq` and `CNF-004.rq` stay one-sided, and the test says so
+rather than tolerating it silently. They exist here because *Run Local Checks*
+merges a document with its resolved imports into one graph and so has no second
+graph to compare against; the Python suite has both graphs and does the same
+check natively. Copying them upstream would make them fire against the
+ontology's own axioms.
+
 
 ### One defect, one finding: the check ids are sorted out
 
