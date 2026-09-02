@@ -2,6 +2,39 @@
 
 ## 0.13.2 (unreleased)
 
+### Fixed: `CNF-004` reported a valid integer against a decimal range
+
+The range check compared the literal’s datatype to the declared range by exact
+IRI equality, so `gist:numericValue 2` against `rdfs:range xsd:decimal` was a
+Violation. That is correct RDF — XSD derives `xsd:integer` from `xsd:decimal`,
+and a Turtle `2` is an `xsd:integer` — and numeric ranges are most ranges, so it
+was a false positive on the commonest data there is. A range of `rdfs:Literal`
+matched nothing at all for the same reason.
+
+Found by running `consolidated_ontology_suite`’s own conformance stage over
+`examples/gist_patterns` and diffing it against this project’s: the Python side
+reported one `CNF-004` where this reported two, and the extra one was ours.
+
+The accepted set is now written against **what the store reports**, not the XSD
+hierarchy alone, which the first attempt at this got wrong. Measured:
+
+| declared | `DATATYPE()` reports |
+|---|---|
+| `xsd:short`/`long`/`byte`, `nonNegativeInteger`, `unsignedByte`, `negativeInteger` | **`xsd:integer`** |
+| `xsd:token`, `NCName`, `language`, `normalizedString` | unchanged |
+| `xsd:dateTimeStamp` | **`xsd:dateTime`** |
+| `decimal`, `double`, `float`, `date`, `boolean` | unchanged |
+
+So the integer family has to be accepted in *both* directions — a range of
+`xsd:nonNegativeInteger` can only ever see `xsd:integer`, the store having
+already discarded what would tell a conforming value from a violating one.
+Whether `5` is actually non-negative is a value-space question, which is what
+`DAT-001` and `checks/literalTyping.ts` are for. The string family survives the
+store intact, so that side is real XSD derivation read downward from the range.
+
+The check still fires on everything it should: a decimal where an integer is
+declared, a string where a number is, a language-tagged literal against
+`xsd:string`.
 ### SHACL engine 0.1.10 → 0.1.12
 
 `shacl-wasm-node`, the WebAssembly build of

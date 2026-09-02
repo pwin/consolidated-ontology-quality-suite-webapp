@@ -12,11 +12,26 @@ PREFIX oq: <https://semantechs.co.uk/ontology-quality/>
 # name -- same reasoning as CNF-003.rq/STR-003.rq for domainIncludes.
 #
 # Covers both range shapes a declared range can take: a literal value is
-# checked by exact datatype IRI match (no XSD subtype hierarchy, e.g.
-# xsd:integer as a kind of xsd:decimal, is modelled -- direct equality
-# only, to keep this check simple and avoid false confidence); a resource
-# value is checked the same way CNF-003 checks domain, by asserted type
-# (or ancestor via rdfs:subClassOf*) against the declared range classes.
+# checked against the declared datatype, exactly or as a datatype *derived*
+# from it; a resource value is checked the same way CNF-003 checks domain, by
+# asserted type (or ancestor via rdfs:subClassOf*) against the declared range
+# classes.
+#
+# The derivation matters more than it sounds. Exact equality alone reports
+# `gist:numericValue 2` against `rdfs:range xsd:decimal`, which is correct RDF:
+# XSD derives xsd:integer from xsd:decimal, and a Turtle `2` is an xsd:integer.
+# Numeric ranges are most ranges, so that one omission was a false positive on
+# the commonest data there is -- found by diffing this check against the Python
+# suite's own conformance stage over examples/gist_patterns.
+#
+# The closure is spelled out rather than walked, because XSD is not in the graph:
+# nothing declares xsd:integer a subtype of xsd:decimal, so `rdfs:subClassOf*`
+# has nothing to traverse. It is also written against what the *store* reports
+# rather than against the XSD hierarchy alone -- Oxigraph collapses every
+# integer-derived datatype to xsd:integer before DATATYPE() ever sees it, which
+# the FILTER below documents and measures. rdfs:Literal is included as the top: a
+# range of rdfs:Literal accepts any literal at all, and matching it by equality
+# accepted none.
 #
 # A resource-valued object is only flagged if it has SOME asserted type
 # that fails to match every declared range class -- an entirely untyped
@@ -46,7 +61,44 @@ WHERE {
   FILTER(
     ( isLiteral(?o) && NOT EXISTS {
         { ?p rdfs:range ?rc } UNION { ?p ?rip2 ?rc . FILTER(STRENDS(STR(?rip2), "rangeIncludes")) }
-        FILTER(datatype(?o) = ?rc)
+        # A pure expression on purpose -- no extra pattern, no UNION, no EXISTS --
+        # so none of the Oxigraph caveats in this file's header apply to it.
+        FILTER(datatype(?o) = ?rc || ?rc = rdfs:Literal
+          # The integer family, in both directions, because the store collapses it.
+          # Measured against this project's Oxigraph: xsd:short, xsd:long, xsd:byte,
+          # xsd:nonNegativeInteger, xsd:unsignedByte and xsd:negativeInteger all come
+          # back from DATATYPE() as xsd:integer, while the string family (xsd:token,
+          # xsd:NCName, xsd:language, ...) survives intact and xsd:dateTimeStamp
+          # narrows to xsd:dateTime.
+          #
+          # So a range of xsd:nonNegativeInteger can only ever *see* xsd:integer, and
+          # accepting it is the honest reading: the store has already discarded what
+          # would distinguish a conforming value from a violating one. Whether 5 is
+          # actually non-negative is a value-space question, which is DAT-001's --
+          # see checks/literalTyping.ts, which exists because a lexical check cannot
+          # answer it either.
+          || (?rc = xsd:decimal && datatype(?o) = xsd:integer)
+          || (datatype(?o) = xsd:integer && ?rc IN (
+                xsd:long, xsd:int, xsd:short, xsd:byte,
+                xsd:nonNegativeInteger, xsd:positiveInteger, xsd:unsignedLong,
+                xsd:unsignedInt, xsd:unsignedShort, xsd:unsignedByte,
+                xsd:nonPositiveInteger, xsd:negativeInteger))
+          # The string family is preserved by the store, so this side is the real
+          # XSD derivation, read down from the declared range.
+          || (?rc = xsd:string && datatype(?o) IN (
+                xsd:normalizedString, xsd:token, xsd:language, xsd:Name,
+                xsd:NMTOKEN, xsd:NCName, xsd:ID, xsd:IDREF, xsd:ENTITY))
+          || (?rc = xsd:normalizedString && datatype(?o) IN (
+                xsd:token, xsd:language, xsd:Name, xsd:NMTOKEN, xsd:NCName,
+                xsd:ID, xsd:IDREF, xsd:ENTITY))
+          || (?rc = xsd:token && datatype(?o) IN (
+                xsd:language, xsd:Name, xsd:NMTOKEN, xsd:NCName,
+                xsd:ID, xsd:IDREF, xsd:ENTITY))
+          || (?rc = xsd:Name && datatype(?o) IN (xsd:NCName, xsd:ID, xsd:IDREF, xsd:ENTITY))
+          || (?rc = xsd:NCName && datatype(?o) IN (xsd:ID, xsd:IDREF, xsd:ENTITY))
+          # Narrowed by the store, so read the other way round from the string family.
+          || (?rc = xsd:dateTimeStamp && datatype(?o) = xsd:dateTime)
+        )
       }
     )
     ||
