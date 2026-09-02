@@ -73,7 +73,7 @@ flowchart LR
     end
 
     subgraph Optional["Optional fallback"]
-        CLI["Python `ontology-suite` CLI\nfull OWL2 DL reasoning · docgen\nversion-diff · real oxi-gen triplify"]
+        CLI["Python `ontology-quality-suite` CLI\nfull OWL2 DL reasoning · docgen\nversion-diff · real oxi-gen triplify"]
     end
 
     Editor --> Local
@@ -187,7 +187,8 @@ Validation" and "Full Triplify" commands, degrading gracefully if absent.
   join. Findings land on the queries in the Problems panel, and the reviewer’s
   side-by-side report goes to the *TARQL BIND Review* output channel. Available
   from the palette with a query open, or on any folder in the explorer’s context
-  menu.
+  menu. [docs/TESTING_TARQL.md](docs/TESTING_TARQL.md) covers what these three
+  catch, what nothing here catches, and a review order.
 - *Run Deep Validation*: optional Python CLI fallback for full OWL2 DL
   reasoning (owlready2/HermiT).
 - Competency questions as VS Code tests: `.cq.rq` files (SPARQL ASK/SELECT
@@ -386,7 +387,7 @@ other format and opens the result — warns first if the target is lossy.
 | Ontology Suite: Infer Ontology + Query from CSV... | Draft an ontology + query from a raw CSV |
 | Ontology Suite: Run Deep Validation (Python CLI) | Optional full-OWL2-DL fallback |
 | Ontology Suite: Run Full Triplify (Python CLI / oxi-gen) | Production-scale triplification |
-| Ontology Suite: Generate Documentation (Python CLI) | HTML reference docs (classes/properties/diagrams) via `ontology-suite docgen` |
+| Ontology Suite: Generate Documentation (Python CLI) | HTML reference docs (classes/properties/diagrams) via `ontology-quality-suite docgen` |
 | Ontology Suite: Convert / Save As Serialization... | Convert the active document to another format |
 | Ontology Suite: Run Ontology Script (.ontology.ts) | Build/extend an ontology from a TypeScript DSL script |
 | Ontology Suite: Sort Document (Alphabetically / By Type) | Reorder statements, comment-preserving |
@@ -417,7 +418,7 @@ Two different mechanisms, for two different kinds of customization:
 | Setting | Default | Purpose |
 |---|---|---|
 | `ontologySuite.modellingGuidance` | `"gist"` | `"gist"` or `"off"` — advisory MDL-001/002/003 hints |
-| `ontologySuite.pythonCliPath` | `"ontology-suite"` | CLI executable for the optional deep-validation/docgen/version-diff fallback — see the [Appendix](#appendix-configuring-ontologysuite-settings) for how to set it and how to get a working CLI in the first place |
+| `ontologySuite.pythonCliPath` | `"ontology-quality-suite"` | CLI executable for the optional deep-validation/docgen/version-diff fallback — see the [Appendix](#appendix-configuring-ontologysuite-settings) for how to set it and how to get a working CLI in the first place |
 | `ontologySuite.checksRegistryPath` | `""` | Point at your own registry.json/sparql/shapes checkout instead of the bundled copy — e.g. to add project-specific SPARQL/SHACL checks beyond what `class-rules.json` can express |
 | `ontologySuite.enableSparqlChecks` | `true` | Run the registry's SPARQL CONSTRUCT checks. Fast (~0.2s on this project's own fixtures) |
 | `ontologySuite.enableShaclChecks` | `true` | Run the registry's SHACL-SPARQL shapes (via `shacl-wasm-node`). Fast since 0.10.0 — ~0.3s for all six shapes files where the previous `shacl-engine` took ~71s — so there is rarely a reason to turn it off now |
@@ -591,19 +592,25 @@ actually setting one, and the practical detail behind each.
 
 ### Setting-by-setting notes
 
-- **`pythonCliPath`** (default `"ontology-suite"`, a bare command name) —
+- **`pythonCliPath`** (default `"ontology-quality-suite"`, a bare command name) —
   used only by the three commands that shell out to the Python CLI (*Run
   Deep Validation*, *Run Full Triplify*, *Generate Documentation*); every
   other command here is in-process JS/WASM and ignores this entirely. It's
   passed straight to Node's `child_process.spawn()` (`src/cli/ontologySuiteClient.ts`,
   through a shell on Windows so `.exe`/`.cmd` PATH shims resolve normally), so:
-  - Leave it as the default if `ontology-suite` is already on your `PATH`
-    (typical right after `pip install -e .` from `consolidated_ontology_suite`
-    into whichever Python environment is currently active).
+  - Leave it as the default if `ontology-quality-suite` is already on your
+    `PATH` (typical right after `pip install -e .` from
+    `consolidated_ontology_suite` into whichever Python environment is
+    currently active).
+  - **Set it to `"ontology-suite"` if your install predates that project
+    renaming itself** — the console script changed name, and an older
+    checkout still provides the old one. Through v0.13.1 this default *was*
+    the old name, so the three CLI-backed commands could not launch at all
+    against a current install.
   - Set it to a **full path** if the CLI lives in a specific virtualenv not
     on your global `PATH`, e.g.
-    `"C:\\repos\\consolidated_ontology_suite\\.venv\\Scripts\\ontology-suite.exe"`
-    (Windows) or `"/path/to/venv/bin/ontology-suite"` (macOS/Linux).
+    `"C:\\repos\\consolidated_ontology_suite\\.venv\\Scripts\\ontology-quality-suite.exe"`
+    (Windows) or `"/path/to/venv/bin/ontology-quality-suite"` (macOS/Linux).
   - This setting alone doesn't get you a working CLI — a real Python
     interpreter has to exist and `consolidated_ontology_suite` has to
     actually be installed into it first. Worth checking directly: the
@@ -647,7 +654,7 @@ uv sync
 This creates `.venv/` in that directory and installs the exact locked
 versions (30 packages, incl. `rdflib`/`pyshacl`/`owlready2`/`owlrl`/`pandas`/
 `matplotlib`). Verified directly while writing this doc — `uv sync` +
-`ontology-suite docgen --ontology .../clinic.ttl --instances .../instances.ttl
+`ontology-quality-suite docgen --ontology .../clinic.ttl --instances .../instances.ttl
 --ref .../core.ttl --out-dir ...` produced a real 1,388-line
 `ontology-documentation.html` with 9 class diagrams, not a dry read of the
 source. Point `pythonCliPath` at the venv it creates:

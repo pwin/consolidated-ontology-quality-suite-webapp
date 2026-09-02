@@ -378,8 +378,8 @@
         },
         "ontologySuite.pythonCliPath": {
           "type": "string",
-          "default": "ontology-suite",
-          "description": "Path to the consolidated_ontology_suite 'ontology-suite' CLI executable, used only for deep validation, docgen, version-diff, and full-scale triplify. Optional — leave default to rely on PATH."
+          "default": "ontology-quality-suite",
+          "markdownDescription": "Path to the `consolidated_ontology_suite` CLI, used only for deep validation, docgen, version-diff and full-scale triplify. Optional — leave the default to rely on PATH. An installation from before that project renamed itself provides `ontology-suite` instead; set that here if the commands cannot find it."
         },
         "ontologySuite.checksRegistryPath": {
           "type": "string",

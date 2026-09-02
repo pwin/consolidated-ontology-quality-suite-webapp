@@ -7,8 +7,23 @@ import { parseCsv } from '../triplify/csv';
 import type { ResultRow, Severity } from '../types';
 
 /**
+ * The console script `consolidated_ontology_suite` installs
+ * (`[project.scripts]` in its pyproject.toml).
+ *
+ * It was `ontology-suite` until that project's "Rename package to Ontology
+ * Quality Suite" commit, and this default was never moved with it -- so every
+ * CLI-backed command here failed to launch out of the box, whatever the user had
+ * installed. The old name is named in the failure message rather than tried as a
+ * fallback: `shell: true` on Windows means a missing command surfaces as a
+ * non-zero exit rather than an ENOENT, so there is no reliable signal to retry
+ * on, and guessing twice would only make the real error harder to read.
+ */
+const DEFAULT_CLI = 'ontology-quality-suite';
+const LEGACY_CLI = 'ontology-suite';
+
+/**
  * Optional deep-validation / full-triplify backend: shells out to the
- * existing Python `ontology-suite` CLI (consolidated_ontology_suite) for
+ * existing Python `ontology-quality-suite` CLI (consolidated_ontology_suite) for
  * whatever the in-process JS/WASM engines don't cover -- full OWL2 DL
  * reasoning (owlready2/HermiT), docgen, version-diff, and the real
  * `oxi-gen` triplifier. Entirely optional: absent gracefully if the CLI
@@ -24,7 +39,7 @@ export class OntologySuiteClient {
   }
 
   private cliPath(): string {
-    return vscode.workspace.getConfiguration('ontologySuite').get<string>('pythonCliPath', 'ontology-suite');
+    return vscode.workspace.getConfiguration('ontologySuite').get<string>('pythonCliPath', DEFAULT_CLI);
   }
 
   async runChecks(ontologyPath: string, dataPaths: string[] = []): Promise<ResultRow[]> {
@@ -47,7 +62,7 @@ export class OntologySuiteClient {
   }
 
   /**
-   * Shells out to `ontology-suite docgen`: a human-readable HTML reference page (classes,
+   * Shells out to `ontology-quality-suite docgen`: a human-readable HTML reference page (classes,
    * properties, per-class diagrams) for one ontology. `refPaths` resolves external-term
    * definitions -- callers pass resolveImports.ts's own `resolvedFilePaths` for this, so imported
    * ontologies' terms get real labels/comments in the output instead of showing as bare IRIs.
@@ -78,14 +93,16 @@ export class OntologySuiteClient {
       proc.on('error', (err) => {
         this.output.appendLine(`\nFailed to launch '${cli}': ${err.message}`);
         void vscode.window.showErrorMessage(
-          `Could not run the ontology-suite CLI ('${cli}'). Install consolidated_ontology_suite and/or set ontologySuite.pythonCliPath, or use the in-process "Run Local Checks" command instead.`,
+          `Could not run the Ontology Quality Suite CLI ('${cli}'). Install consolidated_ontology_suite, or set ontologySuite.pythonCliPath` +
+          `${cli === DEFAULT_CLI ? ` -- an installation from before that project's rename provides '${LEGACY_CLI}' instead` : ''}. ` +
+          'The in-process "Run Local Checks" command needs none of this.',
         );
         reject(err);
       });
       proc.on('close', (code) => {
         this.output.appendLine(`\n(exit code ${code})`);
         if (code === 0) resolve();
-        else reject(new Error(`ontology-suite exited with code ${code}`));
+        else reject(new Error(`${cli} exited with code ${code}`));
       });
     });
   }
