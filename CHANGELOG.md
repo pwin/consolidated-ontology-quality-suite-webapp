@@ -34,6 +34,16 @@ and only the receiver tells them apart.
 
 ### Fixed: the Python CLI could never be found
 
+Verified end to end this time rather than inferred from the manifest: the
+installed console script is `ontology-quality-suite` and nothing else, the argv
+*Run Deep Validation* builds (`run --ontology … --out-dir …`) produces the
+`full_results.csv` it expects, and that file’s ten columns are what
+`parseResultsCsv` reads. The parser moved to `cli/resultsCsv.ts` so it could be
+tested at all, against a fixture cut from real output — including the row whose
+message quotes a Java stack trace, so it carries an embedded newline and doubled
+quotes. That is the only place these two projects meet at runtime, and the other
+thing joining them was silently wrong for six releases.
+
 `consolidated_ontology_suite` renamed its console script to
 `ontology-quality-suite`, and `ontologySuite.pythonCliPath` still defaulted to
 the old `ontology-suite`. So *Run Deep Validation*, *Run Full Triplify* and

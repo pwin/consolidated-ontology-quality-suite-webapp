@@ -3,8 +3,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
-import { parseCsv } from '../triplify/csv';
-import type { ResultRow, Severity } from '../types';
+import { parseResultsCsv } from './resultsCsv';
+import type { ResultRow } from '../types';
 
 /**
  * The console script `consolidated_ontology_suite` installs
@@ -106,20 +106,4 @@ export class OntologySuiteClient {
       });
     });
   }
-}
-
-function parseResultsCsv(csvText: string): ResultRow[] {
-  const { rows } = parseCsv(csvText);
-  return rows.map((r) => ({
-    checkId: r.check_id === 'UNMAPPED' ? null : r.check_id || null,
-    category: r.category === 'unmapped' ? null : r.category || null,
-    title: r.title || null,
-    severity: (r.severity as Severity) || 'Info',
-    focusNode: r.focus_node ?? '',
-    path: r.path || null,
-    value: r.value || null,
-    message: r.message ?? '',
-    remediation: r.remediation || null,
-    sources: r.sources ? r.sources.split('+') : ['python-cli'],
-  }));
 }

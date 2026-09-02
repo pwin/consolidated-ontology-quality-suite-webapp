@@ -1,0 +1,27 @@
+check_id,category,title,severity,focus_node,path,value,message,remediation,sources
+REA-022,reasoning,External DL reasoner unavailable -- only owlrl-based checks ran,Info,oq:Graph,,,"The external DL reasoner ('hermit') could not be run: Java error message is:
+Exception in thread ""main"" org.semanticweb.HermiT.datatypes.UnsupportedDatatypeException: HermiT supports all and only the datatypes of the OWL 2 datatype map, see 
+http://www.w3.org/TR/owl2-syntax/#Datatype_Maps. 
+The datatype 'http://www.w3.org/2001/XMLSchema#date' is not part of the OWL 2 datatype map and 
+no custom datatype definition is given; 
+therefore, HermiT cannot handle this datatype.
+	at org.semanticweb.HermiT.datatypes.DatatypeRegistry.getDatatypeHandlerFor(Unknown Source)
+	at org.semanticweb.HermiT.datatypes.DatatypeRegistry.getDatatypeHandlerFor(Unknown Source)
+	at org.semanticweb.HermiT.datatypes.DatatypeRegistry.validateDatatypeRestriction(Unknown Source)
+	at org.semanticweb.HermiT.structural.OWLClausification$DataRangeConverter.visit(Unknown Source)
+	at uk.ac.manchester.cs.owl.owlapi.OWLDatatypeImpl.accept(OWLDatatypeImpl.java:343)
+	at org.semanticweb.HermiT.structural.OWLClausification$DataRangeConverter.convertDataRange(Unknown Source)
+	at org.semanticweb.HermiT.structural.OWLClausification$NormalizedAxiomClausifier.visit(Unknown Source)
+	at uk.ac.manchester.cs.owl.owlapi.OWLDataAllValuesFromImpl.accept(OWLDataAllValuesFromImpl.java:99)
+	at org.semanticweb.HermiT.structural.OWLClausification.clausify(Unknown Source)
+	at org.semanticweb.HermiT.structural.OWLClausification.preprocessAndClausify(Unknown Source)
+	at org.semanticweb.HermiT.Reasoner.loadOntology(Reasoner.java:117)
+	at org.semanticweb.HermiT.Reasoner.<init>(Reasoner.java:108)
+	at org.semanticweb.HermiT.Reasoner.<init>(Reasoner.java:86)
+	at org.semanticweb.HermiT.cli.CommandLine.main(CommandLine.java:830)
+. Only the always-on owlrl RDFS/OWL2-RL closure and pattern checks (REA-001..004, LOG-001..007) ran. These are sound but not complete for full OWL2 DL -- a class can be genuinely unsatisfiable without any of them firing.","Install the 'reasoner' extra (`uv sync --extra reasoner`, i.e. owlready2) and ensure a Java runtime is on PATH if you need complete OWL2 DL consistency/satisfiability checking; see docs/REASONING.md.",external-reasoner
+QUA-001,quality,Class or property missing rdfs:label,Warning,http://example.org/clinic#Vaccination,,http://example.org/clinic#Vaccination,{$this} has no rdfs:label or skos:prefLabel.,"Add at least one rdfs:label, ideally with a language tag, e.g. rdfs:label ""Person""@en.",shacl+sparql
+QUA-004,quality,Resource missing skos:prefLabel,Warning,http://example.org/clinic#Vaccination,http://www.w3.org/2004/02/skos/core#prefLabel,http://example.org/clinic#Vaccination,Resource http://example.org/clinic#Vaccination has no skos:prefLabel or rdfs:label.,"Add a skos:prefLabel to the resource, ideally with a language tag.",sparql
+QUA-008,quality,Ontology or version IRI does not use the https:// scheme,Warning,http://example.org/clinic,,http://example.org/clinic,The ontology IRI http://example.org/clinic (for ontology http://example.org/clinic) does not use the https:// scheme.,Mint the ontology IRI and versionIRI under an https:// base.,sparql
+QUA-009,quality,Class or property without one skos:prefLabel per language,Warning,http://example.org/clinic#Animal,http://www.w3.org/2004/02/skos/core#prefLabel,http://example.org/clinic#Animal,"Term must have at least one skos:prefLabel, and at most one per language.","Add a skos:prefLabel if the term has none. If it has several sharing one language (including several with no language tag at all), keep the canonical one for that language and move the rest to skos:altLabel.",shacl+sparql
+QUA-009,quality,Class or property without one skos:prefLabel per language,Warning,http://example.org/clinic#AnimalDoctor,http://www.w3.org/2004/02/skos/core#prefLabel,http://example.org/clinic#AnimalDoctor,"Term must have at least one skos:prefLabel, and at most one per language.","Add a skos:prefLabel if the term has none. If it has several sharing one language (including several with no language tag at all), keep the canonical one for that language and move the rest to skos:altLabel.",shacl+sparql
