@@ -90,9 +90,11 @@ differently-named columns. The gain is modest there because that folder's column
 naming is fairly consistent; it grows with the number of files reading the same
 concept under different column names.
 
-The 7 it kept included a literal typo — `_Magnitude_LaneSegementTexture_` against
-`_Magnitude_LaneSegmentTexture_` — which had survived human review precisely
-because it reads correctly at a glance.
+One of the 7 was a genuine defect. Two files spelled the same IRI template
+differently by a single character buried in a long name, and reviewers had read
+past it more than once. That is exactly the case this check exists for: a
+difference small enough to be invisible, and large enough to mint two IRIs for
+one thing.
 
 ### `TQL-002` and `TQL-003` are one situation split by naming convention
 
@@ -239,8 +241,8 @@ This extension has no headless mode; the checks run in the editor. For a build
 that fails on `TQL-002`, use the Python CLI directly:
 
 ```bash
-ontology-quality-suite sketch --queries scripts/to_rdf \
-  --ontology ontology/MergedOntologies.ttl \
+ontology-quality-suite sketch --queries queries/ \
+  --ontology ontology/merged-ontology.ttl \
   --out-dir out/sketch --fail-on Violation
 ```
 
