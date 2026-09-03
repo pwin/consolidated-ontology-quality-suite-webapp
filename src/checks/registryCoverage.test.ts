@@ -50,6 +50,14 @@ const CLI_ONLY = [
   'CNF-001', 'CNF-002',
   // Likewise two-graph: a declared class the assessed data never populates.
   'CNF-005',
+  // Query files, but over the Python suite's BIND *facts* graph -- one node
+  // per BIND statement with its target, expression, skeleton, file and line.
+  // Nothing here builds that graph (Run Local Checks reads an ontology
+  // document), so the query would match nothing. It is excluded from
+  // `registry.sparqlFiles` by `SUBJECT_SPECIFIC_DIRS` rather than counted as
+  // an implementation, which is what stops this list from quietly becoming
+  // false the moment a `.rq` appears upstream.
+  'TQL-004', 'TQL-005',
 ];
 
 describe('registry coverage', () => {
@@ -85,7 +93,21 @@ describe('registry coverage', () => {
     for (const id of CLI_ONLY) {
       const check = registry.checksById.get(id);
       expect(check, `${id} is listed as CLI-only but is not in the registry at all`).toBeDefined();
-      expect(['reasoning', 'conformance']).toContain(check?.category);
+      expect(['reasoning', 'conformance', 'tarql']).toContain(check?.category);
+    }
+  });
+
+  it('does not count a query it cannot run as an implementation', () => {
+    // The failure this guards is subtle: a `.rq` file appearing upstream is
+    // normally proof a check runs here, and for every directory but these it
+    // is. Counting one that reads a graph this extension never builds would
+    // make the CLI_ONLY list above assert something false while still
+    // passing.
+    const subjectSpecific = registry.subjectSpecificSparqlFiles.map((f) => path.basename(f, '.rq'));
+    expect(subjectSpecific.sort()).toEqual(['TQL-004', 'TQL-005']);
+    for (const id of subjectSpecific) {
+      expect(CLI_ONLY, `${id} is held back from the runner but not declared CLI-only`).toContain(id);
+      expect(registry.sparqlFiles.some((f) => f.endsWith(`${id}.rq`))).toBe(false);
     }
   });
 });

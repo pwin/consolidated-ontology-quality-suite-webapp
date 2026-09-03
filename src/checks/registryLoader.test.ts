@@ -5,8 +5,8 @@ import { loadRegistry, localName } from './registryLoader';
 describe('loadRegistry against the copied-in resources/checks-registry', () => {
   const registry = loadRegistry(path.resolve(__dirname, '../../resources/checks-registry'));
 
-  it('loads all 59 registry.json checks', () => {
-    expect(registry.checksById.size).toBe(59);
+  it('loads all 61 registry.json checks', () => {
+    expect(registry.checksById.size).toBe(61);
     expect(registry.checksById.get('STR-001')?.category).toBe('structural');
     // TQL-001..003 are native (checks/../triplify/bindAnalysis.ts) and have no
     // sparql/shapes file of their own, but they are registry entries like any
@@ -21,6 +21,16 @@ describe('loadRegistry against the copied-in resources/checks-registry', () => {
   it('finds sparql/**/*.rq and shapes/*.ttl files', () => {
     expect(registry.sparqlFiles.length).toBeGreaterThan(30);
     expect(registry.shaclFiles).toHaveLength(6);
+  });
+
+  it('keeps queries over a graph this extension does not build out of the runner', () => {
+    // sparql/tarql/ reads the Python suite's BIND facts graph. Loading it into
+    // `sparqlFiles` would run it against every ontology document, where it
+    // matches nothing -- and would count it as an implementation this
+    // extension does not have.
+    expect(registry.subjectSpecificSparqlFiles.map((f) => path.basename(f)).sort())
+      .toEqual(['TQL-004.rq', 'TQL-005.rq']);
+    expect(registry.sparqlFiles.some((f) => f.includes('TQL-00'))).toBe(false);
   });
 });
 

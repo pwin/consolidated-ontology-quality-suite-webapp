@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.13.4 (unreleased)
+
+### A query the extension cannot run is no longer counted as one it can
+
+The shared registry grew a `sparql/tarql/` directory upstream: checks over the
+Python suite's *BIND facts* graph, one node per `BIND` statement carrying its
+target, expression, skeleton, file and line. Nothing here builds that graph —
+*Run Local Checks* reads an ontology document — so those queries would parse,
+run against the document, and match nothing.
+
+That is worse than it sounds, and it is why this needed a change rather than
+being left alone. `registryCoverage.test.ts` treats the existence of a `.rq`
+file as proof a check runs here, which is true for every other directory. It
+would have counted `TQL-004` and `TQL-005` as implemented while they could
+never fire, making the CLI-only list assert something false *and still pass* —
+the precise failure that test was written to prevent.
+
+`registryLoader` now splits `subjectSpecificSparqlFiles` out of `sparqlFiles`
+by directory (`SUBJECT_SPECIFIC_DIRS`), so those queries are neither run nor
+counted, and a new test asserts the two lists agree: anything held back from
+the runner has to be declared CLI-only, and vice versa. Excluded by name
+rather than left to match nothing anyway — a check that runs everywhere and is
+silent everywhere is indistinguishable from one that has quietly stopped
+working.
+
+The registry copy is in step at 61 checks, and `registryParity.test.ts`
+confirms it against the Python checkout.
+
 ## 0.13.3
 
 ### The TARQL testing guide uses examples a reader can run
