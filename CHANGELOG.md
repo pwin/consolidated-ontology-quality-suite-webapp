@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.13.4 (unreleased)
+## 0.13.4
 
 ### A query the extension cannot run is no longer counted as one it can
 
