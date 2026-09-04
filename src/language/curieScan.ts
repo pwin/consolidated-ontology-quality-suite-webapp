@@ -39,12 +39,17 @@ const CURIE_TOKEN = /(^|[\s(),;.[\]{}])((?:[A-Za-z][\w-]*)?):([A-Za-z_][\w-]*)/g
  * `<http://example.org/ns#Term>` and the second by skipping a line of a
  * multi-line literal that happens to begin with `#`.
  *
- * String literals are *not* blanked, deliberately, and this differs from the
- * upstream repair's rule. A CURIE written inside a literal here is almost
- * always a real term reference -- `sh:message "ex:Dog must ..."`, a SPARQL
- * query held as a string -- and losing those would make find-references
- * quietly incomplete, which is worse than the occasional false positive it
- * saves.
+ * String literals are *not* blanked, deliberately, and the upstream repair
+ * reaches the same rule from the other end: a CURIE written inside a literal
+ * here is almost always a real term reference -- `sh:message "ex:Dog must
+ * ..."`, a SPARQL query held as a string -- and losing those would make
+ * find-references quietly incomplete; there, a TARQL IRI template is built out
+ * of literals, so a rename usually *must* reach inside them. Different
+ * reasons, one behaviour, and worth knowing they agree before anyone
+ * "restores parity" by changing working code.
+ *
+ * `stripCommentsParity.test.ts` pins that agreement against a fixture both
+ * repos carry.
  */
 export function scanCuries(
   text: string,

@@ -1,5 +1,47 @@
 # Changelog
 
+## 0.13.6
+
+### The comment masker is checked against the Python suite's port of it
+
+`stripComments` is not private plumbing: it decides which text rename,
+find-references and go-to-definition are allowed to touch, and the Python
+suite's `strip_comments` decides the same for `--apply-repairs`. Both shipped
+the same defect for the same reason, and both were fixed in the same week,
+independently, in two languages — which is the clearest possible evidence that
+nothing was comparing them.
+
+`registryParity.test.ts` could never have caught it. That test compares the
+registry, the shapes, the queries and the repair templates — shared **data**,
+character for character. Two hand-written ports of one algorithm are shared
+**behaviour**, and the property that matters is the one nothing checked: given
+the same text, both must blank the same characters, or a rename that is safe
+through one tool is unsafe through the other.
+
+So there is now a fixture of 16 cases that both repos carry, each side running
+its own port against its own copy — so the suite still works on a machine with
+only one checkout — plus a last test that compares the two copies for whoever
+has both, which is precisely who makes them disagree. The awkward cases are
+named in an assertion of their own, because the cheapest way to make a suite
+green is to delete one.
+
+Every `expected` is the same length as its `input`, and that is asserted
+separately from the equality. A comment is blanked to spaces rather than
+removed so that every offset in the mask still indexes the real document,
+which is what lets the scanner report a column the editor can select. A port
+that removed comments instead would pass the equality cases and misplace every
+range after the first comment — so the two failures need to read differently.
+
+### Correction to the 0.13.5 notes
+
+Those notes said keeping CURIEs inside string literals scannable was a rule
+that *differs* from the upstream repair's. It does not. Upstream reaches the
+same behaviour from the other end: a TARQL IRI template is built out of string
+literals, so a rename there usually **must** reach inside them. Different
+reasons, one behaviour — worth recording accurately, because the two projects
+now check each other, and "restoring parity" against a misremembered
+difference would have meant changing working code.
+
 ## 0.13.5
 
 Two defects of a kind the Python suite fixed upstream this week, found by

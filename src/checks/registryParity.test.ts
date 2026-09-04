@@ -21,6 +21,12 @@ import { describe, expect, it } from 'vitest';
  * checks *this* tier can produce. This one pins that the declaration itself is
  * the same document on both sides.
  *
+ * Both of those are about shared *data*. Where the two repos share an
+ * *algorithm* -- hand-written twice, once per language -- a file comparison is
+ * blind to it, and `stripCommentsParity.test.ts` is the pattern for that case:
+ * one fixture of inputs and expected outputs, carried by both repos, run
+ * against each side's own port.
+ *
  * Skipped when the Python checkout is not on this machine, which makes it a
  * test for whoever has both -- which is exactly who breaks it. Line endings
  * are excluded and only line endings: neither repo has a `.gitattributes`, so
