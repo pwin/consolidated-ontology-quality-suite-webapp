@@ -61,7 +61,7 @@ export async function resolveImports(
 
   return {
     mergedQuads: merged,
-    report: { resolved, unresolved: excluded, excluded: [], networkAllowed: false },
+    report: { resolved, unresolved: excluded, excluded: [], networkAllowed: false, searchDir, candidateCount: candidates.length },
     resolvedFilePaths,
   };
 }

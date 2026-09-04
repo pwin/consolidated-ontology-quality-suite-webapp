@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { scanCuries } from './curieScan';
 import { parseSparqlPrefixes, readOntologyDocument } from '../rdf/parseDocument';
 import { buildOntologyModel, TermInfo } from '../rdf/ontologyModel';
 import { findStatementLineRange } from './statementRange';
@@ -70,7 +71,6 @@ const YIELD_EVERY_MS = 40;
 function hasCurieSyntax(uri: vscode.Uri): boolean {
   return !uri.fsPath.toLowerCase().endsWith('.rdf');
 }
-const CURIE_TOKEN = /(^|[\s(),;.[\]{}])((?:[A-Za-z][\w-]*)?):([A-Za-z_][\w-]*)/g;
 
 /** One file's contribution to the index, reusable until the file itself changes. */
 interface IndexedFile {
@@ -384,43 +384,12 @@ async function readText(uri: vscode.Uri): Promise<string | undefined> {
   }
 }
 
+/** The pure scan in curieScan.ts, with the document identity attached. */
 function scanFileForCuries(
   uri: vscode.Uri,
   text: string,
   prefixes: Record<string, string>,
   declarationSubjectIris: Set<string>,
 ): TermOccurrence[] {
-  const occurrences: TermOccurrence[] = [];
-  const lines = text.split(/\r?\n/);
-  for (let lineNo = 0; lineNo < lines.length; lineNo++) {
-    const line = lines[lineNo];
-    if (line.trimStart().startsWith('#')) continue;
-    // Hoisted out of the match loop: it was recomputed per match to answer the same
-    // question every time -- whether the match is the first thing on the line.
-    const firstNonSpace = line.search(/\S/);
-    CURIE_TOKEN.lastIndex = 0;
-    let m: RegExpExecArray | null;
-    while ((m = CURIE_TOKEN.exec(line))) {
-      const leading = m[1];
-      const prefix = m[2];
-      const local = m[3];
-      // `expand` inlined. The regex has already separated prefix from local name, so
-      // joining them into a CURIE only for expand() to split it apart again allocated a
-      // string per match -- and there is one match per term occurrence in the whole
-      // workspace. `expand` alone was 65% of one unresponsive-host profile.
-      const namespace = prefixes[prefix];
-      if (!namespace) continue;
-      const iri = namespace + local;
-      const startCol = m.index + leading.length;
-      occurrences.push({
-        uri,
-        line: lineNo,
-        startCol,
-        endCol: startCol + prefix.length + 1 + local.length,
-        iri,
-        isDeclaration: startCol === firstNonSpace && declarationSubjectIris.has(iri),
-      });
-    }
-  }
-  return occurrences;
+  return scanCuries(text, prefixes, declarationSubjectIris).map((occ) => ({ ...occ, uri }));
 }

@@ -2,6 +2,8 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { parseN3Family } from '../rdf/formats/n3Family';
 import { resolveImports } from '../ontology/resolveImports';
+import { unresolvedImportMessage } from '../ontology/importDiagnostics';
+import { stripComments } from '../triplify/bindAnalysis';
 import { expand } from '../rdf/vocab';
 
 const CURIE_TOKEN = /(^|[\s(),;.[\]{}])([A-Za-z][\w-]*):([A-Za-z_][\w-]*)/g;
@@ -74,11 +76,7 @@ export class LiveDiagnosticsProvider implements vscode.Disposable {
         const line = findImportLine(text, unresolved);
         const range = new vscode.Range(line, 0, line, document.lineAt(line).text.length);
         diagnostics.push(
-          new vscode.Diagnostic(
-            range,
-            `owl:imports <${unresolved}> could not be resolved locally (no workspace file declares this identity or owl:versionIRI).`,
-            vscode.DiagnosticSeverity.Warning,
-          ),
+          new vscode.Diagnostic(range, unresolvedImportMessage(unresolved, report), vscode.DiagnosticSeverity.Warning),
         );
       }
     }
@@ -97,11 +95,16 @@ function findImportLine(text: string, iri: string): number {
 
 function findUndeclaredPrefixUsages(document: vscode.TextDocument, text: string, prefixes: Record<string, string>): vscode.Diagnostic[] {
   const diagnostics: vscode.Diagnostic[] = [];
-  const lines = text.split(/\r?\n/);
+  // Comments blanked, not dropped, so every column below still indexes the real
+  // document. Skipping only lines that *begin* with `#` left a trailing comment
+  // fully scanned, so `ex:Dog a owl:Class .  # TODO: use foo:Bar` reported an
+  // undeclared prefix `foo:` against a remark -- a warning about text that is
+  // not code. Same scanner, same reason, as language/curieScan.ts.
+  const lines = stripComments(text).split(/\r?\n/);
   const reported = new Set<string>();
   for (let lineNo = 0; lineNo < lines.length; lineNo++) {
     const line = lines[lineNo];
-    if (line.trimStart().startsWith('@prefix') || line.trimStart().startsWith('#')) continue;
+    if (line.trimStart().startsWith('@prefix')) continue;
     CURIE_TOKEN.lastIndex = 0;
     let m: RegExpExecArray | null;
     while ((m = CURIE_TOKEN.exec(line))) {

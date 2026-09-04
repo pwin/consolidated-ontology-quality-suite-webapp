@@ -1,5 +1,91 @@
 # Changelog
 
+## 0.13.5
+
+Two defects of a kind the Python suite fixed upstream this week, found by
+asking the same questions of this codebase rather than by porting anything.
+
+### Renaming a term no longer rewrites the comment explaining the rename
+
+The CURIE scanner behind rename, find-references and go-to-definition skipped
+a line whose *first* non-space character was `#`. A trailing comment was
+therefore scanned in full, so:
+
+```turtle
+ex:Dog a owl:Class .  # was ex:Dgo, renamed 2026-09-04
+```
+
+recorded an occurrence of `ex:Dgo` inside the remark. Renaming `ex:Dgo`
+rewrote the note that explained the rename — turning a true remark into a
+false one — find-references counted the mention as a use of the term, and the
+reference count was inflated by every time anyone had written a term name in
+prose. `--apply-repairs` in the Python suite had the identical defect for the
+identical reason, and is fixed with the identical scanner.
+
+That scanner is `stripComments` from the TARQL BIND analysis, which blanks a
+comment with spaces of equal length rather than removing it, so every reported
+column still indexes the real document. It also knows two things a
+line-oriented scan cannot: `#` is the fragment separator in almost every RDF
+namespace, so `<http://example.org/ns#Term>` must survive intact; and a `#`
+inside a string literal is not a comment. The old scan got the second one
+wrong in the other direction too — a line of a multi-line literal beginning
+with `#` was silently dropped.
+
+CURIEs inside string literals are still scanned, deliberately, and this is
+where the rule differs from the upstream repair's: a term named in an
+`sh:message` or an embedded query is a real reference, and dropping those
+would make find-references quietly incomplete — worse than the occasional
+false positive it saves.
+
+The undeclared-prefix warning had the same blind spot from the same line of
+code, and reported `Prefix 'foo:' is not declared` against
+`# TODO: use foo:Bar`. Also fixed.
+
+The scan is now `language/curieScan.ts`, free of `vscode` so it can be tested
+directly, in the same shape as `completionContext.ts` and `statementRange.ts`.
+
+### An unresolved import says where it actually looked
+
+The warning read:
+
+> `owl:imports <…>` could not be resolved locally (no workspace file declares
+> this identity or owl:versionIRI).
+
+Only the first three words were wrong, and they were the ones a reader acts
+on. Import resolution walks the **document's own directory tree**, never the
+workspace — so an ontology sitting in a sibling folder produced a warning
+asserting, as fact, that no file in the workspace declared it, sending the
+reader to look for a file that was present all along in a folder the resolver
+never opened.
+
+It now names the directory it searched and how many ontology files it found
+there, because between them those two facts separate the two causes an IRI
+alone cannot:
+
+- **No ontology files under that directory** — nothing was matched *against*,
+  so the location is the thing to check. Saying "none of them declares it"
+  there would be true and useless.
+- **Candidates, none matching** — the message names the `a owl:Ontology`
+  subject and `owl:versionIRI` requirement, because the remaining cause is the
+  one where the path was right all along: a file holding the entire vocabulary
+  but carrying no ontology header can never satisfy an import.
+
+The Python suite reached this from the opposite end — its `--import-dir`
+resolved nothing at all when the directory did not exist, `glob` returning an
+empty list rather than raising, so a mistyped path was indistinguishable from
+genuinely missing imports.
+
+### Reviewed and not changed
+
+Of the eight defects fixed upstream in `0.13.1`–`0.14.1`, four have no
+counterpart here and are recorded so the next reviewer need not re-derive it:
+the `sketch` CONSTRUCT-termination and `--queries` path bugs are in a stage
+this extension does not have; `docgen --ref`'s hardcoded Turtle parse has no
+analogue, since imports already go through the format-aware reader; and the
+non-deterministic multilingual-label pick cannot arise, as nothing here
+chooses among language-tagged literals. `TQL-004`/`TQL-005` were already
+handled in 0.13.4.
+
 ## 0.13.4
 
 ### A query the extension cannot run is no longer counted as one it can

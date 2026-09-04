@@ -23,6 +23,18 @@ export interface ImportResolution {
   unresolved: string[];
   excluded: string[];
   networkAllowed: boolean;
+  /**
+   * The directory the local search actually walked, and how many ontology
+   * files it found there.
+   *
+   * Reported because an unresolved import has two quite different causes that
+   * look identical in a list of IRIs: the file is not there, or it is there
+   * and does not declare the identity being imported. `candidateCount` tells
+   * those apart at a glance -- zero means nothing was found to match against,
+   * so the search location is the thing to check.
+   */
+  searchDir: string;
+  candidateCount: number;
 }
 
 export interface PrefixMap {
