@@ -451,6 +451,7 @@
     "compile": "node esbuild.js",
     "watch": "node esbuild.js --watch",
     "package": "node esbuild.js --production",
+    "vsix": "node package-vsix.mjs",
     "vscode:prepublish": "npm run package",
     "typecheck": "tsc --noEmit -p .",
     "lint": "eslint src",
