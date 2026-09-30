@@ -13,9 +13,9 @@ vitest.config.mts
 *.tsbuildinfo
 
 # node_modules IS shipped (intentionally -- see esbuild.js's `packages: 'external'`
-# comment): oxigraph, eyereasoner/swipl-wasm, shacl-wasm-node and @viz-js/viz all
-# load WASM/native assets from paths relative to their own package directory,
-# which bundling would break. Only trim obvious dev-only bloat within it.
+# comment): holos-wasm-node, shacl-wasm-node, oxigraph, eyereasoner/swipl-wasm and
+# @viz-js/viz all load WASM/native assets from paths relative to their own package
+# directory, which bundling would break. Only trim obvious dev-only bloat within it.
 #
 # Dependency LICENSE files are deliberately NOT stripped. The vsix redistributes
 # those packages, and MIT and Apache-2.0 -- which is what nearly all of them are,
