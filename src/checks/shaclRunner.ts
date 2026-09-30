@@ -153,7 +153,10 @@ function toResultRows(results: WasmResult[], registry: Registry, compiled: Compi
       focusNode: result.focusNode,
       path,
       value,
-      message: fillMessageTemplate(result.message, result.focusNode, path, value)
+      focusIsBlank: result.focusNode.startsWith('_:'),
+      message: fillMessageTemplate(
+        result.message, result.focusNode, path, value, result.focusNode.startsWith('_:')
+      )
         || (check ? `Violates ${checkId}.` : 'SHACL validation failed.'),
       remediation: check?.remediation ?? null,
       sources: ['shacl'],
@@ -176,15 +179,47 @@ function toResultRows(results: WasmResult[], registry: Registry, compiled: Compi
  * (`{$maxCount}` and friends) is left as written rather than replaced with
  * something wrong or with the word "undefined": the parameter values are not in
  * the result, and a visible placeholder at least says so.
+ *
+ * `focusIsBlank` keeps an internal identifier out of the prose. A blank node's
+ * label names nothing a reader can look up, differs between runs, and differs
+ * between engines -- measured here as `"A label on _:1_b4 has no language tag."`
+ * The portable `.rq` twins solved it in the query, with
+ * `IF(isBlank(?e), "[a blank node]", STR(?e))`; a shape cannot, because
+ * `{$this}` is SHACL's own substitution, so it is caught here for every shape
+ * at once. Same text as the queries and as the Python suite's
+ * `merge.ANONYMOUS_FOCUS`, so the two arms of one check say the same thing and
+ * merge instead of showing a reader two sentences about one finding.
  */
-function fillMessageTemplate(message: string, focusNode: string, path: string | null, value: string | null): string {
-  if (!message.includes('{')) return message;
+const ANONYMOUS_FOCUS = '[a blank node]';
+
+function fillMessageTemplate(
+  message: string,
+  focusNode: string,
+  path: string | null,
+  value: string | null,
+  focusIsBlank = false,
+): string {
+  let out = message;
+  if (focusIsBlank) {
+    // Both spellings, and the prefix normalised off first: prefixing an
+    // already-prefixed label gives `_:_:1_b4`, which matches nothing. `_:`
+    // cannot begin a word so the prefixed form is replaced at any length,
+    // while a bare label is only hunted for when it is long enough to be an
+    // opaque token rather than prose.
+    const bare = focusNode.startsWith('_:') ? focusNode.slice(2) : focusNode;
+    if (bare) {
+      out = out.split(`_:${bare}`).join(ANONYMOUS_FOCUS);
+      if (bare.length >= 8) out = out.split(bare).join(ANONYMOUS_FOCUS);
+    }
+    if (value !== null && value === focusNode) value = ANONYMOUS_FOCUS;
+    focusNode = ANONYMOUS_FOCUS;
+  }
+  if (!out.includes('{')) return out;
   const substitutions: [RegExp, string | null][] = [
     [/\{[$?]this\}/g, focusNode],
     [/\{[$?]path\}/g, path],
     [/\{[$?]value\}/g, value],
   ];
-  let out = message;
   for (const [pattern, replacement] of substitutions) {
     if (replacement !== null) out = out.replace(pattern, () => replacement);
   }

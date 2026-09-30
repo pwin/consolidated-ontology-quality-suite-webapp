@@ -161,6 +161,9 @@ function extractRows(quads: OxiQuad[], registry: Registry, source: string): Resu
       message: message?.value ?? subject,
       remediation: check?.remediation ?? null,
       sources: [source],
+      // From the term, not the string: this arm reports n3's bare label while
+      // the SHACL arm reports `_:`-prefixed, so the spelling cannot be the test.
+      focusIsBlank: focus.termType === 'BlankNode',
     });
   }
   return results;

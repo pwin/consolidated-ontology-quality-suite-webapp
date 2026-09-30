@@ -16,6 +16,19 @@ export interface ResultRow {
   message: string;
   remediation: string | null;
   sources: string[];
+  /**
+   * Whether `focusNode` is a blank node label rather than an IRI. Set from the
+   * term at construction, never guessed from the string: the two arms spell it
+   * differently -- shacl-wasm gives `_:1_b4`, the SPARQL arm gives n3's bare
+   * `n3-0` for the same node -- and neither is distinguishable from a relative
+   * IRI by inspection.
+   *
+   * Two things need it. `merge.ts` cannot key its dedup on a label the two
+   * engines disagree about, and `shaclRunner.fillMessageTemplate` must not put
+   * one in a message. Mirrors `focus_is_blank` in the Python suite's
+   * checks/merge.py.
+   */
+  focusIsBlank?: boolean;
 }
 
 export interface ImportResolution {
