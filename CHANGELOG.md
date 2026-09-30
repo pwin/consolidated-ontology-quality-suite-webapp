@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.13.9
+
+### STY-003 kept its message when the focus node is a blank node
+
+The check built its `sh:resultMessage` with `STR(?e)`. SPARQL 1.1 §17.4.2.5
+defines `STR()` for literals and IRIs, so `STR()` of a blank node is a type
+error: `CONCAT` errors, `BIND` leaves `?msg` unbound, and the `CONSTRUCT`
+template drops the message. This extension runs the checks through oxigraph,
+which implements that faithfully, so the message has been missing for every
+finding whose focus node is an anonymous restriction or axiom carrying an
+`rdfs:label` — which on a real ontology is most of them. Measured on the
+bundled oxigraph against a fixture with one blank-node label and one IRI
+label: **1** `sh:resultMessage` for 2 findings before, **2** after.
+
+It could not be seen from the Python suite. rdflib does not raise on `STR()`
+of a blank node — it returns the internal blank node identifier — so there the
+message was present but named something meaningless and unstable between runs.
+Two implementations, one masking what the other dropped, and the shared
+registry meant both carried the same query.
+
+What found it is new in the Python repo: `tests/test_sparql_engine_parity.py`
+runs all 44 portable checks under rdflib *and* pyoxigraph and fails on any
+unexplained divergence, per predicate. `registryParity.test.ts` could not have
+caught this — it compares the shared files character for character, and both
+copies were identically wrong.
+
+The same `STR(?focus)`-inside-`CONCAT` shape is in 29 of the 44 checks. Only
+STY-003 is exposed by the current fixtures, because only its focus nodes are
+blank there; the rest would start diverging the moment a fixture gives them
+one, and now something would say so.
+
 ## 0.13.6
 
 ### The comment masker is checked against the Python suite's port of it
