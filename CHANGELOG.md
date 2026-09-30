@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.13.10
+
+### The portable checks run on holosdb
+
+`sparqlRunner.ts` evaluates the 44 registry checks through `holos-wasm-node` instead of
+oxigraph. Both engines are conformant and they agree on these checks — the whole 330-test
+suite passes unchanged — so this is not a bet on different answers. It makes both of this
+extension's engines the ones this project maintains: the SHACL tier already ran on
+`shacl-wasm-node`, and this is the other half, so a defect found here can be fixed here. The
+Python suite made the same move for the same reason.
+
+oxigraph is still a dependency. The Query Workbench preview, the repair engine and the
+competency-question runner use it for SELECT results and for serialising a CONSTRUCT straight
+to Turtle, neither of which the holosdb binding offers yet.
+
+### An anonymous finding is reported once, and never by its internal label
+
+Both defects were live, and both were found by measuring what the two tiers actually produce
+for one anonymous restriction with an untagged label: two findings came out as **three rows**,
+and the surviving message read `A label on _:1_b4 has no language tag.`
+
+Blank node labels are not comparable between engines — a document's labels are
+document-scoped and an engine may rename them — so shacl-wasm reported `_:1_b4` where the
+SPARQL tier reported n3's `n3-0`, and a dedup key holding the label never matched.
+`merge.anonymousKey` now matches anonymous findings positionally within
+`(checkId, path, value)`: counts stay exact, cross-arm duplicates collapse, and nothing
+within one tier ever merges. Dropping the focus node from the key instead would have merged
+two distinct unlabelled restrictions sharing a label text, and a reader would fix one and
+believe they were done.
+
+The message half is separate and outlived the 0.13.9 fix, because that fix went into the
+query while the *shape* interpolated the label independently — `sh:message` is a template and
+`{$this}` is SHACL's own substitution. `shaclRunner.fillMessageTemplate` now guards it for
+every shape at once, in the same words the queries use, so the two tiers say the same thing
+and merge. The prefix is normalised off before matching: prefixing an already-prefixed label
+gave `_:_:1_b4`, which matched nothing, and the 7-character remainder then fell under a
+length floor meant to protect prose.
+
 ## 0.13.9
 
 ### STY-003 kept its message when the focus node is a blank node

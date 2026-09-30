@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { Quad } from 'n3';
+import { Parser, Quad, Writer } from 'n3';
 import { localName, Registry } from './registryLoader';
 import { renderPathExpression } from './pathExpression';
 import type { ResultRow, Severity } from '../types';
@@ -20,22 +20,47 @@ const SEVERITY_LABEL: Record<string, Severity> = {
 };
 
 /**
- * Runs every registry.json-listed sparql/**\/*.rq CONSTRUCT check against
- * the combined ontology(+data) graph via Oxigraph, in-process. Each query
- * constructs sh:ValidationResult individuals (portable across engines);
- * this walks the constructed graph back into ResultRow, mirroring
+ * Runs every registry.json-listed sparql/**\/*.rq CONSTRUCT check against the
+ * combined ontology(+data) graph via **holosdb**, in-process. Each query
+ * constructs sh:ValidationResult individuals (portable across engines); this
+ * walks the constructed graph back into ResultRow, mirroring
  * consolidated_ontology_suite's checks/merge.py::_extract_rows.
  *
  * `disabled` holds check ids from `ontologySuite.disabledChecks`. Their queries
  * are skipped rather than run and filtered, since each is a full pass over the
  * merged graph.
+ *
+ * # Why holosdb and not oxigraph
+ *
+ * Both are conformant, and on these checks they agree -- which is the point:
+ * the swap is not a bet on different answers. It makes both of the extension's
+ * engines the ones this project maintains, so a defect found here can be fixed
+ * here. The SHACL tier already runs on `shacl-wasm-node`; this is the other
+ * half. The Python suite made the same move for the same reason -- see its
+ * docs/ARCHITECTURE.md, "Which engine does the work".
+ *
+ * # What crossing the boundary costs
+ *
+ * holosdb's wasm binding takes RDF as *text* and returns CONSTRUCT results as
+ * N-Triples strings, so this serialises the merged graph once per run and
+ * parses each check's results back. oxigraph took n3 quads term by term.
+ *
+ * The visible consequence is blank node labels. Adding a term programmatically
+ * preserves its label, which is why this arm used to report n3's own `n3-0`;
+ * parsing text does not, because a document's labels are document-scoped and an
+ * engine may rename them. So an anonymous focus node now carries holosdb's
+ * label rather than n3's, which is why `merge.anonymousKey` cannot key on it
+ * and matches anonymous findings positionally instead. Nothing that was
+ * reproducible has stopped being so: the label was already arbitrary.
  */
 export function runSparqlChecks(quads: Quad[], registry: Registry, disabled: ReadonlySet<string> = new Set()): ResultRow[] {
-  // Imported lazily: oxigraph's WASM module is only needed when checks run.
-   
-  const oxigraph = require('oxigraph') as typeof import('oxigraph');
-  const store = new oxigraph.Store();
-  loadQuadsIntoStore(store, oxigraph, quads);
+  // Imported lazily, and left as a real runtime `require` by esbuild's
+  // `packages: 'external'` -- its wasm-bindgen shim reads the .wasm from its own
+  // package directory, which bundling would break. Same arrangement as
+  // shacl-wasm-node, eyereasoner and @viz-js/viz.
+  const holos = require('holos-wasm-node') as HolosModule;
+  const store = new holos.Store();
+  loadQuadsIntoStore(store, quads);
 
   const rows: ResultRow[] = [];
   for (const file of registry.sparqlFiles) {
@@ -47,33 +72,50 @@ export function runSparqlChecks(quads: Quad[], registry: Registry, disabled: Rea
     } catch {
       continue;
     }
-    let resultQuads: unknown[];
+    let resultQuads: Quad[];
     try {
-      resultQuads = store.query(queryText) as unknown[];
+      resultQuads = parseConstructed(store.query(queryText, undefined));
     } catch (err) {
       // A malformed check query shouldn't take down the whole run.
-       
       console.error(`[ontologySuite] sparql check ${file} failed:`, err);
       continue;
     }
-    if (!Array.isArray(resultQuads) || resultQuads.length === 0) continue;
-    for (const r of extractRows(resultQuads as OxiQuad[], registry, 'sparql')) rows.push(r);
+    if (resultQuads.length === 0) continue;
+    for (const r of extractRows(resultQuads, registry, 'sparql')) rows.push(r);
   }
   // Same reasoning as previewEvaluator: release the WASM store rather than waiting
   // on finalization. Less pressing here (once per checks run, not per keystroke) but
   // the store holds the whole merged graph, so it is the larger single allocation.
-  (store as unknown as { free?: () => void }).free?.();
+  store.free?.();
   return rows;
 }
 
-interface OxiTerm {
+/** As much of holos-wasm-node as this file uses. */
+interface HolosStore {
+  load(text: string, format: string, base?: string): number;
+  /** A boolean for ASK, N-Triples strings for CONSTRUCT, row objects for SELECT. */
+  query(query: string, base?: string): unknown;
+  free?: () => void;
+}
+interface HolosModule {
+  Store: new () => HolosStore;
+}
+
+/**
+ * A term as this file reads one.
+ *
+ * n3's terms carry `termType` and `value` exactly as oxigraph's did, which is what let the
+ * engine change without `extractRows` changing: it was already written against this shape
+ * rather than against either library.
+ */
+interface RdfTerm {
   termType: string;
   value: string;
 }
-interface OxiQuad {
-  subject: OxiTerm;
-  predicate: OxiTerm;
-  object: OxiTerm;
+interface RdfQuad {
+  subject: RdfTerm;
+  predicate: RdfTerm;
+  object: RdfTerm;
 }
 
 /**
@@ -86,32 +128,59 @@ function joined(values: string[]): string | null {
   return [...new Set(values)].sort().join(', ');
 }
 
-function loadQuadsIntoStore(store: InstanceType<typeof import('oxigraph').Store>, oxi: typeof import('oxigraph'), quads: Quad[]): void {
-  for (const q of quads) {
-    store.add(
-      oxi.quad(toOxiTerm(oxi, q.subject) as never, toOxiTerm(oxi, q.predicate) as never, toOxiTerm(oxi, q.object) as never),
-    );
-  }
+/**
+ * Serialises the merged graph into the store, as N-Quads.
+ *
+ * The binding loads from a string, so the graph crosses as text rather than term by term.
+ * N-Quads because it carries a graph name, streams a line at a time, and is the one
+ * serialisation both sides agree on exactly -- and because n3's writer produces it without
+ * needing prefixes to round-trip.
+ *
+ * A write error is thrown rather than swallowed: a graph that only partly arrived would make
+ * every check quietly under-report, which looks like the checks going quiet rather than like
+ * a bug.
+ */
+function loadQuadsIntoStore(store: HolosStore, quads: Quad[]): void {
+  if (quads.length === 0) return;
+  const writer = new Writer({ format: 'N-Quads' });
+  for (const q of quads) writer.addQuad(q);
+  let text = '';
+  let failure: Error | undefined;
+  // n3's Writer.end is callback-style but synchronous for an in-memory sink, so the result is
+  // available by the time it returns.
+  writer.end((err: Error | null, result: string) => {
+    if (err) failure = err;
+    else text = result;
+  });
+  if (failure) throw failure;
+  store.load(text, 'nquads', undefined);
 }
 
-function toOxiTerm(oxi: typeof import('oxigraph'), term: Quad['subject'] | Quad['predicate'] | Quad['object']) {
-  switch (term.termType) {
-    case 'NamedNode':
-      return oxi.namedNode(term.value);
-    case 'BlankNode':
-      return oxi.blankNode(term.value);
-    case 'Literal': {
-      const lit = term as import('n3').Literal;
-      if (lit.language) return oxi.literal(lit.value, lit.language);
-      return oxi.literal(lit.value, oxi.namedNode(lit.datatype.value));
-    }
-    default:
-      return oxi.namedNode(term.value);
+/**
+ * Parses what `query` returned for a CONSTRUCT back into quads.
+ *
+ * The binding hands back one N-Triples string per triple with no trailing separator, so the
+ * separator is added here before parsing. A non-array means the query was not a CONSTRUCT --
+ * an ASK returns a boolean and a SELECT returns row objects -- which is a caller error rather
+ * than an empty result, so it is reported as one.
+ */
+function parseConstructed(result: unknown): Quad[] {
+  if (typeof result === 'boolean') {
+    throw new Error('a check must be a CONSTRUCT, not an ASK');
   }
+  if (!Array.isArray(result)) {
+    throw new Error(`a check must be a CONSTRUCT; got ${typeof result}`);
+  }
+  if (result.length === 0) return [];
+  if (typeof result[0] !== 'string') {
+    throw new Error('a check must be a CONSTRUCT, not a SELECT');
+  }
+  const nt = (result as string[]).map((line) => `${line} .`).join('\n');
+  return new Parser({ format: 'N-Triples' }).parse(nt);
 }
 
-function extractRows(quads: OxiQuad[], registry: Registry, source: string): ResultRow[] {
-  const bySubject = new Map<string, OxiQuad[]>();
+function extractRows(quads: RdfQuad[], registry: Registry, source: string): ResultRow[] {
+  const bySubject = new Map<string, RdfQuad[]>();
   for (const q of quads) {
     const key = q.subject.value;
     if (!bySubject.has(key)) bySubject.set(key, []);
@@ -125,8 +194,8 @@ function extractRows(quads: OxiQuad[], registry: Registry, source: string): Resu
     );
     if (!isValidationResult) continue;
 
-    const get = (pred: string): OxiTerm | undefined => subjectQuads.find((q) => q.predicate.value === pred)?.object;
-    const all = (pred: string): OxiTerm[] => subjectQuads.filter((q) => q.predicate.value === pred).map((q) => q.object);
+    const get = (pred: string): RdfTerm | undefined => subjectQuads.find((q) => q.predicate.value === pred)?.object;
+    const all = (pred: string): RdfTerm[] => subjectQuads.filter((q) => q.predicate.value === pred).map((q) => q.object);
     const severity = get(SH_RESULT_SEVERITY);
     const focus = get(SH_FOCUS_NODE);
     const message = get(SH_RESULT_MESSAGE);
