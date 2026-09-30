@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { Parser, Quad, Writer } from 'n3';
+import { Quad } from 'n3';
+import { constructedQuads, RdfQuad, RdfTerm, storeWithQuads } from '../rdf/holosStore';
 import { localName, Registry } from './registryLoader';
 import { renderPathExpression } from './pathExpression';
 import type { ResultRow, Severity } from '../types';
@@ -54,13 +55,9 @@ const SEVERITY_LABEL: Record<string, Severity> = {
  * reproducible has stopped being so: the label was already arbitrary.
  */
 export function runSparqlChecks(quads: Quad[], registry: Registry, disabled: ReadonlySet<string> = new Set()): ResultRow[] {
-  // Imported lazily, and left as a real runtime `require` by esbuild's
-  // `packages: 'external'` -- its wasm-bindgen shim reads the .wasm from its own
-  // package directory, which bundling would break. Same arrangement as
-  // shacl-wasm-node, eyereasoner and @viz-js/viz.
-  const holos = require('holos-wasm-node') as HolosModule;
-  const store = new holos.Store();
-  loadQuadsIntoStore(store, quads);
+  // See rdf/holosStore.ts for the boundary this crosses, and for why the module is
+  // `require`d lazily and left unbundled.
+  const store = storeWithQuads(quads);
 
   const rows: ResultRow[] = [];
   for (const file of registry.sparqlFiles) {
@@ -74,7 +71,7 @@ export function runSparqlChecks(quads: Quad[], registry: Registry, disabled: Rea
     }
     let resultQuads: Quad[];
     try {
-      resultQuads = parseConstructed(store.query(queryText, undefined));
+      resultQuads = constructedQuads(store.query(queryText, undefined));
     } catch (err) {
       // A malformed check query shouldn't take down the whole run.
       console.error(`[ontologySuite] sparql check ${file} failed:`, err);
@@ -90,34 +87,6 @@ export function runSparqlChecks(quads: Quad[], registry: Registry, disabled: Rea
   return rows;
 }
 
-/** As much of holos-wasm-node as this file uses. */
-interface HolosStore {
-  load(text: string, format: string, base?: string): number;
-  /** A boolean for ASK, N-Triples strings for CONSTRUCT, row objects for SELECT. */
-  query(query: string, base?: string): unknown;
-  free?: () => void;
-}
-interface HolosModule {
-  Store: new () => HolosStore;
-}
-
-/**
- * A term as this file reads one.
- *
- * n3's terms carry `termType` and `value` exactly as oxigraph's did, which is what let the
- * engine change without `extractRows` changing: it was already written against this shape
- * rather than against either library.
- */
-interface RdfTerm {
-  termType: string;
-  value: string;
-}
-interface RdfQuad {
-  subject: RdfTerm;
-  predicate: RdfTerm;
-  object: RdfTerm;
-}
-
 /**
  * One display string for a result property that may legitimately carry several
  * values, ordered so the same finding always renders identically -- see the
@@ -126,57 +95,6 @@ interface RdfQuad {
 function joined(values: string[]): string | null {
   if (values.length === 0) return null;
   return [...new Set(values)].sort().join(', ');
-}
-
-/**
- * Serialises the merged graph into the store, as N-Quads.
- *
- * The binding loads from a string, so the graph crosses as text rather than term by term.
- * N-Quads because it carries a graph name, streams a line at a time, and is the one
- * serialisation both sides agree on exactly -- and because n3's writer produces it without
- * needing prefixes to round-trip.
- *
- * A write error is thrown rather than swallowed: a graph that only partly arrived would make
- * every check quietly under-report, which looks like the checks going quiet rather than like
- * a bug.
- */
-function loadQuadsIntoStore(store: HolosStore, quads: Quad[]): void {
-  if (quads.length === 0) return;
-  const writer = new Writer({ format: 'N-Quads' });
-  for (const q of quads) writer.addQuad(q);
-  let text = '';
-  let failure: Error | undefined;
-  // n3's Writer.end is callback-style but synchronous for an in-memory sink, so the result is
-  // available by the time it returns.
-  writer.end((err: Error | null, result: string) => {
-    if (err) failure = err;
-    else text = result;
-  });
-  if (failure) throw failure;
-  store.load(text, 'nquads', undefined);
-}
-
-/**
- * Parses what `query` returned for a CONSTRUCT back into quads.
- *
- * The binding hands back one N-Triples string per triple with no trailing separator, so the
- * separator is added here before parsing. A non-array means the query was not a CONSTRUCT --
- * an ASK returns a boolean and a SELECT returns row objects -- which is a caller error rather
- * than an empty result, so it is reported as one.
- */
-function parseConstructed(result: unknown): Quad[] {
-  if (typeof result === 'boolean') {
-    throw new Error('a check must be a CONSTRUCT, not an ASK');
-  }
-  if (!Array.isArray(result)) {
-    throw new Error(`a check must be a CONSTRUCT; got ${typeof result}`);
-  }
-  if (result.length === 0) return [];
-  if (typeof result[0] !== 'string') {
-    throw new Error('a check must be a CONSTRUCT, not a SELECT');
-  }
-  const nt = (result as string[]).map((line) => `${line} .`).join('\n');
-  return new Parser({ format: 'N-Triples' }).parse(nt);
 }
 
 function extractRows(quads: RdfQuad[], registry: Registry, source: string): ResultRow[] {

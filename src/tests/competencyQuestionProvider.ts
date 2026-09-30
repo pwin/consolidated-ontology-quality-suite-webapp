@@ -1,6 +1,7 @@
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { readOntologyDocument } from '../rdf/parseDocument';
+import { emptyStore, HolosStore } from '../rdf/holosStore';
 import { resolveImports } from '../ontology/resolveImports';
 
 interface CqDirectives {
@@ -12,7 +13,7 @@ interface CqDirectives {
 /**
  * Competency questions as VS Code tests: a `.cq.rq` file is a SPARQL
  * ASK/SELECT query with expected-result directives in a leading comment
- * block, run through the native Test Explorer via Oxigraph -- red/green,
+ * block, run through the native Test Explorer via holosdb -- red/green,
  * CI-friendly ontology/data correctness testing instead of a one-shot
  * batch report (see the plan's "Differentiators").
  *
@@ -68,7 +69,7 @@ export class CompetencyQuestionProvider implements vscode.Disposable {
     // the whole graph and a re-parse of that -- once per test. Sharing them across the
     // run makes N questions cost one load. Keyed on the resolved target paths, so a
     // question with its own `@against` still gets its own graph.
-    const stores = new Map<string, OxiStore>();
+    const stores = new Map<string, HolosStore>();
     try {
       for (const item of items) {
         if (token.isCancellationRequested) break;
@@ -85,14 +86,14 @@ export class CompetencyQuestionProvider implements vscode.Disposable {
     } finally {
       // WASM linear memory never shrinks and wasm-bindgen frees lazily, so an unfreed
       // store is heap the editor keeps until it exits (see 0.12.1).
-      for (const store of stores.values()) (store as unknown as { free?: () => void }).free?.();
+      for (const store of stores.values()) store.free?.();
       run.end();
     }
   }
 
   private async evaluate(
     uri: vscode.Uri,
-    stores: Map<string, OxiStore>,
+    stores: Map<string, HolosStore>,
   ): Promise<{ passed: boolean; message: string; durationMs: number }> {
     const start = Date.now();
     const text = new TextDecoder('utf-8').decode(await vscode.workspace.fs.readFile(uri));
@@ -103,9 +104,8 @@ export class CompetencyQuestionProvider implements vscode.Disposable {
     let store = stores.get(key);
     if (!store) {
        
-      const oxigraph = require('oxigraph') as typeof import('oxigraph');
-      store = new oxigraph.Store();
-      store.load(serializeQuadsAsNTriples(await loadQuads(targetPaths)), { format: 'application/n-triples' });
+      store = emptyStore();
+      store.load(serializeQuadsAsNTriples(await loadQuads(targetPaths)), 'ntriples', undefined);
       stores.set(key, store);
     }
 
@@ -143,7 +143,6 @@ export class CompetencyQuestionProvider implements vscode.Disposable {
   }
 }
 
-type OxiStore = InstanceType<typeof import('oxigraph').Store>;
 
 async function loadQuads(targetPaths: string[]): Promise<import('n3').Quad[]> {
   const allQuads: import('n3').Quad[] = [];

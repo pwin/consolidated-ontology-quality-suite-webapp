@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { DataFactory, Quad } from 'n3';
+import { Quad } from 'n3';
+import { deskolemise, skolemise, storeQuads, storeWithQuads } from '../rdf/holosStore';
 import type { ResultRow } from '../types';
 import { localName } from './registryLoader';
 import { resolveStandardsIris, ProjectStandards } from './projectStandardsCore';
@@ -160,95 +161,68 @@ export function computeRepair(
   const updateText = buildRepairUpdate(templateText, row, standards, resolvedStandardsIris);
 
 
-  const oxigraph = require('oxigraph') as typeof import('oxigraph');
-  const store = new oxigraph.Store();
-  for (const q of documentQuads) store.add(toOxiQuad(oxigraph, q));
-
-  const beforeKeys = new Set(quadKeys(store.match(null, null, null, null) as OxiQuadLike[]));
+  // Skolemised across the boundary, and this is the reason the helper exists.
+  //
+  // holosdb takes RDF as text, and blank node labels are document-scoped: a parser may rename
+  // them, and both holosdb and n3 do -- n3 even renames per Parser instance, so reading the
+  // store twice gave the *same* blank node two labels and its quads looked added. That is
+  // survivable where results are only reported. It is fatal here, because this function
+  // diffs before against after and applyRepair writes the result back over the user's file:
+  // without stable labels, every blank node in a real ontology is renamed on every repair,
+  // a large spurious diff that no repair template or fixture would have caught.
+  //
+  // With blank nodes as IRIs the labels round-trip exactly, so the diff is plain term
+  // equality and the file keeps what it had. It changes what the data means -- a skolemised
+  // node answers isBlank() with false -- which is safe only because no repair template asks;
+  // repairEngine.test.ts asserts that stays true.
+  // Everything below this line works in skolemised space, where a blank node is an IRI and so
+  // compares by value. `skolemised[i]` is `documentQuads[i]`, because skolemise maps one to
+  // one in order.
+  const skolemised = skolemise(documentQuads);
+  const store = storeWithQuads(skolemised);
+  const beforeKeys = new Set(storeQuads(store).map(quadKey));
   store.update(updateText);
-  const afterOxiQuads = store.match(null, null, null, null) as OxiQuadLike[];
-  const afterKeys = new Set(quadKeys(afterOxiQuads));
+  const after = storeQuads(store);
+  const afterKeys = new Set(after.map(quadKey));
 
-  const resultQuads = afterOxiQuads.map(fromOxiQuad);
-  const addedQuads = resultQuads.filter((_, i) => !beforeKeys.has(quadKey(afterOxiQuads[i])));
-  const beforeBySignature = new Map<string, Quad>();
-  for (const q of documentQuads) beforeBySignature.set(`${q.subject.value}|${q.predicate.value}|${termKeyN3(q.object)}`, q);
-  const removedQuads = [...beforeKeys]
-    .filter((k) => !afterKeys.has(k))
-    .map((k) => beforeBySignature.get(k))
-    .filter((q): q is Quad => q !== undefined);
+  // New quads are the store's, so they are the one thing that has to come back out of
+  // skolemised space -- an added blank node is genuinely new and gets a fresh label.
+  const addedQuads = deskolemise(after.filter((q) => !beforeKeys.has(quadKey(q))));
 
-  // Placed after the last read of afterOxiQuads, not next to the last use of `store`:
-  // those quads are the store's own objects, so freeing earlier would pull them out from
-  // under the addedQuads filter. Freeing at all matters because WASM linear memory never
-  // shrinks -- an unfreed store is heap the editor holds until it exits, once per Quick
-  // Fix applied (see 0.12.1 for the same fault in the preview path).
-  (store as unknown as { free?: () => void }).free?.();
+  // Removed quads are reported as the *document* wrote them, matched by position rather than
+  // by re-serialising, so a caller showing "what this repair deletes" shows the user's own
+  // terms.
+  const removedQuads = documentQuads.filter((_, i) => !afterKeys.has(quadKey(skolemised[i])));
+
+  // The document, minus what the update deleted, plus what it added -- rather than whatever
+  // the store now holds, so untouched triples keep their original terms and their original
+  // order and a repair's diff shows the repair.
+  const removed = new Set(removedQuads);
+  const resultQuads = documentQuads.filter((q) => !removed.has(q)).concat(addedQuads);
+
+  // WASM linear memory never shrinks, so an unfreed store is heap the editor holds until it
+  // exits -- once per Quick Fix applied (see 0.12.1 for the same fault in the preview path).
+  // Safe to free here: every quad above is an n3 object parsed out of a document, not a
+  // handle into the store.
+  store.free?.();
   return { checkId: row.checkId, kind: resolved.kind, title: resolved.title, addedQuads, removedQuads, resultQuads };
 }
 
-interface OxiTermLike {
-  termType: string;
-  value: string;
-  language?: string;
-  datatype?: { value: string };
-}
-interface OxiQuadLike {
-  subject: OxiTermLike;
-  predicate: OxiTermLike;
-  object: OxiTermLike;
+/**
+ * One quad as a comparable string.
+ *
+ * Both sides of the diff are quads parsed out of the *same* store dump, so a blank node's
+ * label is consistent between them even though it is not the document's label. Literals
+ * carry language and datatype, because `"1"` and `"1"^^xsd:integer` are different triples.
+ */
+function quadKey(q: Quad): string {
+  return `${q.subject.value}|${q.predicate.value}|${termKeyN3(q.object)}`;
 }
 
-function quadKey(q: OxiQuadLike): string {
-  return `${q.subject.value}|${q.predicate.value}|${termKeyOxi(q.object)}`;
-}
-function quadKeys(quads: OxiQuadLike[]): string[] {
-  return quads.map(quadKey);
-}
-function termKeyOxi(t: OxiTermLike): string {
-  if (t.termType === 'Literal') return `"${t.value}"@${t.language ?? ''}^^${t.datatype?.value ?? ''}`;
-  return t.value;
-}
 function termKeyN3(t: Quad['object']): string {
   if (t.termType === 'Literal') {
     const lit = t as import('n3').Literal;
     return `"${lit.value}"@${lit.language ?? ''}^^${lit.datatype?.value ?? ''}`;
   }
   return t.value;
-}
-
-function toOxiQuad(oxi: typeof import('oxigraph'), q: Quad) {
-  const toTerm = (term: Quad['subject'] | Quad['predicate'] | Quad['object']) => {
-    switch (term.termType) {
-      case 'NamedNode':
-        return oxi.namedNode(term.value);
-      case 'BlankNode':
-        return oxi.blankNode(term.value);
-      case 'Literal': {
-        const lit = term as import('n3').Literal;
-        return lit.language ? oxi.literal(lit.value, lit.language) : oxi.literal(lit.value, oxi.namedNode(lit.datatype.value));
-      }
-      default:
-        return oxi.namedNode(term.value);
-    }
-  };
-  return oxi.quad(toTerm(q.subject) as never, toTerm(q.predicate) as never, toTerm(q.object) as never);
-}
-
-function fromOxiQuad(q: OxiQuadLike): Quad {
-  const toTerm = (t: OxiTermLike) => {
-    switch (t.termType) {
-      case 'NamedNode':
-        return DataFactory.namedNode(t.value);
-      case 'BlankNode':
-        return DataFactory.blankNode(t.value);
-      case 'Literal':
-        return t.language
-          ? DataFactory.literal(t.value, t.language)
-          : DataFactory.literal(t.value, t.datatype ? DataFactory.namedNode(t.datatype.value) : undefined);
-      default:
-        return DataFactory.namedNode(t.value);
-    }
-  };
-  return DataFactory.quad(toTerm(q.subject) as never, toTerm(q.predicate) as never, toTerm(q.object) as never);
 }

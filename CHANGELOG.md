@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.13.11
+
+### oxigraph is gone: every engine in this extension is now one we maintain
+
+0.13.10 moved the 44 portable checks to holosdb. This moves the three places oxigraph was
+still doing the work — the Query Workbench preview, the repair engine, and the
+competency-question runner — so the extension now runs on `holos-wasm-node` for SPARQL and
+`shacl-wasm-node` for SHACL and nothing else. All 332 tests pass; none needed changing for
+the engine, and two were added for what did.
+
+`holos-wasm-node` 0.17.0 exists for this: `queryRdf` serialises a CONSTRUCT to Turtle where
+the preview asked oxigraph for `results_format`, `update` and `dump` cover what the repair
+engine did with `store.update` and `match(null,null,null,null)`, and SELECT now returns
+rdf-js terms. The competency-question runner needed nothing new — it only asks whether a
+result is a boolean and how many rows it has.
+
+The wasm boundary is now one module, `rdf/holosStore.ts`, rather than a copy in each caller.
+`sparqlRunner`, `repairEngine` and `previewEvaluator` all lost their own term-mapping code to
+it; `repairEngine` alone lost `toOxiQuad`, `fromOxiQuad` and two interfaces.
+
+### A repair no longer risks renaming every blank node in the file
+
+Found while moving the repair engine, and it would have been invisible. `computeRepair` diffs
+the store before and after the update, and `applyRepair` serialises the result straight back
+over the user's file. Blank node labels are document-scoped — a parser may rename them, and
+holosdb and n3 both do, n3 even per `Parser` instance — so reading the store twice gave one
+blank node two labels, and taking the result from the store would have renamed every
+anonymous restriction in a real ontology on every repair.
+
+Blank nodes now cross the boundary as IRIs and come back as blank nodes, so labels round-trip
+exactly, the diff is plain term equality, and the file keeps what it had. The cost is that a
+skolemised node answers `isBlank()` with false, which is safe only while no repair template
+asks — and a test now asserts none does, rather than leaving it in a comment. No template or
+fixture involved a blank node before, which is precisely why nothing would have caught this.
+
 ## 0.13.10
 
 ### The portable checks run on holosdb

@@ -1,3 +1,4 @@
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { DataFactory } from 'n3';
 import { describe, expect, it } from 'vitest';
@@ -34,6 +35,25 @@ describe('hasRepairTemplate', () => {
   });
 });
 
+describe('the assumption skolemising rests on', () => {
+  // computeRepair replaces blank nodes with IRIs before the graph crosses into holosdb, so
+  // their labels survive the round trip and a diff can be plain term equality. The cost is
+  // that a skolemised node answers isBlank() with false and cannot be matched by a
+  // blank-node pattern -- harmless only while no template asks. This is that "only while",
+  // stated as a test rather than left in a comment.
+  it('no repair template depends on blank-node semantics', () => {
+    const dir = path.resolve(__dirname, '../../resources/checks-registry/repairs');
+    const templates = fs.readdirSync(dir).filter((f) => f.endsWith('.ru'));
+    expect(templates.length).toBeGreaterThan(0);
+    for (const file of templates) {
+      const text = fs.readFileSync(path.join(dir, file), 'utf8');
+      expect(text, `${file} calls isBlank()`).not.toMatch(/isBlank/i);
+      expect(text, `${file} matches a blank node label`).not.toMatch(/_:/);
+      expect(text, `${file} uses [] for a blank node`).not.toMatch(/\[\s*\]/);
+    }
+  });
+});
+
 describe('computeRepair', () => {
   it('STR-001: declares an undeclared class referenced via rdf:type (insert-only)', () => {
     const quads = [quad(namedNode('http://ex/Rex'), namedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#type'), namedNode('http://ex/Dog'))];
@@ -44,6 +64,44 @@ describe('computeRepair', () => {
     expect(outcome?.addedQuads[0].subject.value).toBe('http://ex/Dog');
     expect(outcome?.addedQuads[0].predicate.value).toBe('http://www.w3.org/1999/02/22-rdf-syntax-ns#type');
     expect(outcome?.addedQuads[0].object.value).toBe('http://www.w3.org/2002/07/owl#Class');
+  });
+
+  // The assertion that was missing when the engine moved from oxigraph to holosdb, and the
+  // reason the diff is computed inside the store while the result is rebuilt from the
+  // document.
+  //
+  // holosdb takes RDF as text, and a document's blank node labels are document-scoped -- a
+  // parser may rename them, and holosdb does. applyRepair serialises resultQuads straight
+  // back over the user's file, so taking the result from the store would rename every blank
+  // node in the document on every repair. Nothing else here would have noticed: no repair
+  // template involves a blank node, and until this test no fixture did either.
+  it('leaves the document blank node labels alone, so a repair does not rewrite the file', () => {
+    const restriction = DataFactory.blankNode('b0');
+    const quads = [
+      quad(namedNode('http://ex/Rex'), namedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#type'), namedNode('http://ex/Dog')),
+      // An anonymous restriction, which is what a real ontology is full of and what the
+      // repair is not about.
+      quad(namedNode('http://ex/Dog'), namedNode('http://www.w3.org/2000/01/rdf-schema#subClassOf'), restriction),
+      quad(restriction, namedNode('http://www.w3.org/1999/02/22-rdf-syntax-ns#type'), namedNode('http://www.w3.org/2002/07/owl#Restriction')),
+    ];
+    const row = { checkId: 'STR-001', focusNode: 'http://ex/Rex', path: null, value: 'http://ex/Dog' };
+    const outcome = computeRepair(repairsRoot, row, quads, {}, standards);
+
+    // The repair itself still happens.
+    expect(outcome?.addedQuads).toHaveLength(1);
+    expect(outcome?.removedQuads).toHaveLength(0);
+
+    // And the two blank-node triples come back under the label the document used, not one
+    // the engine invented.
+    const labels = outcome!.resultQuads
+      .flatMap((q) => [q.subject, q.object])
+      .filter((t) => t.termType === 'BlankNode')
+      .map((t) => t.value);
+    expect(labels.length).toBe(2);
+    expect(new Set(labels)).toEqual(new Set(['b0']));
+
+    // Every input triple survives, so the serialised file is the document plus the repair.
+    expect(outcome!.resultQuads).toHaveLength(quads.length + 1);
   });
 
   it('QUA-001: adds a label derived from the local name, tagged with the project language', () => {

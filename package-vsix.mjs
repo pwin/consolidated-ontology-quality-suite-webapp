@@ -5,7 +5,7 @@
 // The flags matter and are easy to get wrong. `vsce package --no-dependencies`
 // produces an archive that packages without error, installs without error, and
 // is missing every engine the extension runs: esbuild is configured with
-// `packages: 'external'`, so holos-wasm-node, shacl-wasm-node, oxigraph,
+// `packages: 'external'`, so holos-wasm-node, shacl-wasm-node,
 // eyereasoner/swipl-wasm and @viz-js/viz are never bundled into
 // dist/extension.js -- they are `require`d at runtime from node_modules, which
 // .vscodeignore therefore ships on purpose. Without them Run Local Checks logs
@@ -29,7 +29,6 @@ import { readFileSync, readdirSync, unlinkSync } from 'node:fs';
 const REQUIRED = [
   'node_modules/holos-wasm-node/holos_wasm_bg.wasm',
   'node_modules/shacl-wasm-node/shacl_wasm_bg.wasm',
-  'node_modules/oxigraph/node_bg.wasm',
   'node_modules/swipl-wasm/dist/swipl/swipl-web.wasm',
 ];
 
