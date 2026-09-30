@@ -5,11 +5,17 @@
 // The flags matter and are easy to get wrong. `vsce package --no-dependencies`
 // produces an archive that packages without error, installs without error, and
 // is missing every engine the extension runs: esbuild is configured with
-// `packages: 'external'`, so oxigraph, eyereasoner/swipl-wasm, shacl-wasm-node
-// and @viz-js/viz are never bundled into dist/extension.js -- they are
-// `require`d at runtime from node_modules, which .vscodeignore therefore ships
-// on purpose. Without them Run Local Checks logs "could not load
-// shacl-wasm-node" and silently offers fewer checks.
+// `packages: 'external'`, so holos-wasm-node, shacl-wasm-node, oxigraph,
+// eyereasoner/swipl-wasm and @viz-js/viz are never bundled into
+// dist/extension.js -- they are `require`d at runtime from node_modules, which
+// .vscodeignore therefore ships on purpose. Without them Run Local Checks logs
+// "could not load shacl-wasm-node" and silently offers fewer checks.
+//
+// Every engine has to be in the list below, and adding one is the step easy to
+// forget: holos-wasm-node shipped correctly in 0.13.10 while this check would
+// have passed without it, because the list was written before that engine
+// existed. A missing engine is not a packaging error -- it is a feature that
+// quietly stops working.
 //
 // A 590 KB vsix is the symptom; a correct one is around 19 MB. Rather than
 // rely on noticing that, this asserts the specific files are present.
@@ -21,6 +27,7 @@ import { readFileSync, readdirSync, unlinkSync } from 'node:fs';
 // rather than a package name: the point is that the asset is there, not that
 // a directory with the right name is.
 const REQUIRED = [
+  'node_modules/holos-wasm-node/holos_wasm_bg.wasm',
   'node_modules/shacl-wasm-node/shacl_wasm_bg.wasm',
   'node_modules/oxigraph/node_bg.wasm',
   'node_modules/swipl-wasm/dist/swipl/swipl-web.wasm',
