@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
-import { Quad } from 'n3';
-import { shrink } from '../rdf/vocab';
+
 import { serializeRdf, RdfFormat } from '../rdf/serialization';
+import { renderAddedQuadsTurtle } from './repairTurtle';
 import type { RepairOutcome } from './repairEngine';
 
 /**
@@ -35,42 +35,4 @@ export async function applyRepair(
     edit.replace(document.uri, fullRange, text);
   }
   await vscode.workspace.applyEdit(edit);
-}
-
-function renderAddedQuadsTurtle(quads: Quad[], prefixes: Record<string, string>): string {
-  if (quads.length === 0) return '';
-  const bySubject = new Map<string, Quad[]>();
-  for (const q of quads) {
-    const key = q.subject.value;
-    if (!bySubject.has(key)) bySubject.set(key, []);
-    bySubject.get(key)!.push(q);
-  }
-  const lines: string[] = [''];
-  for (const [subject, subjectQuads] of bySubject) {
-    lines.push(shrinkTerm(subject, prefixes));
-    subjectQuads.forEach((q, i) => {
-      const suffix = i === subjectQuads.length - 1 ? '.' : ';';
-      lines.push(`  ${shrinkTerm(q.predicate.value, prefixes)} ${renderObject(q.object, prefixes)} ${suffix}`);
-    });
-    lines.push('');
-  }
-  return lines.join('\n');
-}
-
-function shrinkTerm(iri: string, prefixes: Record<string, string>): string {
-  if (iri === 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type') return 'a';
-  const curie = shrink(iri, prefixes);
-  return curie === iri ? `<${iri}>` : curie;
-}
-
-function renderObject(term: Quad['object'], prefixes: Record<string, string>): string {
-  if (term.termType === 'Literal') {
-    const lit = term as import('n3').Literal;
-    const escaped = lit.value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-    if (lit.language) return `"${escaped}"@${lit.language}`;
-    if (lit.datatype.value === 'http://www.w3.org/2001/XMLSchema#string') return `"${escaped}"`;
-    return `"${escaped}"^^${shrinkTerm(lit.datatype.value, prefixes)}`;
-  }
-  if (term.termType === 'BlankNode') return `_:${term.value}`;
-  return shrinkTerm(term.value, prefixes);
 }
