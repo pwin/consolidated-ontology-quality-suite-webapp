@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.13.12
+
+### A Quick Fix keeps a literal's base direction
+
+Inserting a fix wrote `"x"@ar--rtl` back as `"x"@ar`, dropping the direction and changing the
+datatype from `rdf:dirLangString` to `rdf:langString` in the user's own file. Only the insert
+path was affected — the replace path serialises with n3's Writer, which keeps `--rtl` — and that
+is the path QUA-001 takes when it adds a label in the project language, so an Arabic or Hebrew
+ontology is where it would have shown. The serialiser moved to `repairTurtle.ts` so that it
+could be tested outside the extension host, and seven tests now cover it.
+
+### `holos-wasm-node` 0.21.0
+
+`^0.17.0` could never have reached it: below 1.0 a caret admits patch releases only. Nothing in
+the extension changes with it — the checks run CONSTRUCTs and parse what comes back, and the
+competency-question runner only counts rows — so 0.20.0's change to how a triple term arrives in
+a SELECT row does not touch it. The engine under it now uses a FILTER's constants to look rows
+up, takes a GROUP BY's input from its index join, and answers `SELECT DISTINCT ?p` from the
+store's predicate list. All 339 tests pass on it, as they did on 0.17.0.
+
 ## 0.13.11
 
 ### oxigraph is gone: every engine in this extension is now one we maintain
