@@ -2,6 +2,7 @@ import { DataFactory, Quad, Literal } from 'n3';
 import { shrink, WELL_KNOWN_PREFIXES } from '../rdf/vocab';
 import { serializeRdf } from '../rdf/serialization';
 import { ClassExpr, classExprToRdf } from '../rdf/formats/classExpression';
+import { blankNodesApartFrom } from '../rdf/blankNodeLabels';
 
 /**
  * Pure Turtle-fragment rendering for the Ontology Outline's scaffold
@@ -70,8 +71,16 @@ export interface AddClassWithParentsOptions {
  * extension already relies on for correctness, then strips the writer's own
  * `@prefix` lines before returning -- those prefixes already exist earlier
  * in the target file; only the new statements should be appended.
+ *
+ * `documentText` is the file the statements will be appended to: the
+ * restriction's blank nodes get labels it doesn't already use (see
+ * blankNodesApartFrom).
  */
-export async function renderAddClassWithParentsTurtle(opts: AddClassWithParentsOptions, documentPrefixes: Record<string, string>): Promise<string> {
+export async function renderAddClassWithParentsTurtle(
+  opts: AddClassWithParentsOptions,
+  documentPrefixes: Record<string, string>,
+  documentText: string,
+): Promise<string> {
   // See renderAddSubPropertyTurtle's comment: falls back to rdf:/rdfs:/owl:/xsd: even if the
   // target file never explicitly declares them.
   const prefixes = { ...WELL_KNOWN_PREFIXES, ...documentPrefixes };
@@ -91,7 +100,7 @@ export async function renderAddClassWithParentsTurtle(opts: AddClassWithParentsO
     quads.push(quad(subject, namedNode(RDFS_SUBCLASS_OF), restrictionNode));
   }
 
-  const turtle = await serializeRdf(quads, 'turtle', prefixes);
+  const turtle = await serializeRdf(blankNodesApartFrom(quads, documentText), 'turtle', prefixes);
   return `\n${stripPrefixLines(turtle)}\n`;
 }
 

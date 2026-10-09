@@ -420,6 +420,35 @@ This is the same `REA-DISJOINT` mechanism as [Part 4](#part-4-validate-with-the-
 (`Labrador`, `Dog`, `Cat`, `disjointWith`) came from the loop-generating
 script, not from typing Turtle by hand.
 
+### An ontology header in the script
+
+`defontology()` writes the ontology's own header, so a script can produce
+a complete file and you can regenerate it with **Replace whole file**
+without losing the version or imports:
+
+```typescript
+import { ontology, defontology, defclass } from 'ontology-suite/dsl';
+
+ontology('http://example.org/pets#', 'pets', { dcterms: 'http://purl.org/dc/terms/' });
+
+defontology('http://example.org/pets', {
+  versionIRI: 'http://example.org/pets/1.0.0',
+  versionInfo: '1.0.0',
+  imports: ['https://w3id.org/semanticarts/ontology/gistCore'],
+  label: 'Pets',
+  annotations: { 'dcterms:creator': 'The pets team' },
+});
+```
+
+The header comes first in the output wherever the call is. `annotations`
+takes any property, with a plain string, `{ value, language }`,
+`{ value, datatype }` or `{ iri }` as the value. A CURIE needs its prefix
+declared in `ontology()`'s third argument, as `dcterms` is here; the
+script stops with an error rather than guess. An `owl:imports` target
+resolves to a local file by that file's ontology IRI or its
+`owl:versionIRI`, so Run Local Checks finds the imported ontology either
+way.
+
 ## Where to go next
 
 - `README.md` — full command/settings reference, architecture diagram,

@@ -24,6 +24,7 @@ export const OWL_ONTOLOGY = `${OWL}Ontology`;
 export const OWL_IMPORTS = `${OWL}imports`;
 export const OWL_VERSION_IRI = `${OWL}versionIRI`;
 export const OWL_VERSION_INFO = `${OWL}versionInfo`;
+export const OWL_PRIOR_VERSION = `${OWL}priorVersion`;
 export const OWL_EQUIVALENT_CLASS = `${OWL}equivalentClass`;
 export const OWL_DISJOINT_WITH = `${OWL}disjointWith`;
 export const OWL_INVERSE_OF = `${OWL}inverseOf`;

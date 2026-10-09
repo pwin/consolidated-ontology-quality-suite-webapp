@@ -6,6 +6,7 @@ import * as vscode from 'vscode';
 import { DataFactory, Quad } from 'n3';
 import * as esbuild from 'esbuild';
 import { serializeRdf } from '../rdf/serialization';
+import { blankNodesApartFrom } from '../rdf/blankNodeLabels';
 
 const { namedNode, blankNode, literal, quad } = DataFactory;
 
@@ -146,7 +147,7 @@ async function applyScriptResult(scriptUri: vscode.Uri, quads: Quad[], prefixes:
   const editor = await vscode.window.showTextDocument(doc);
 
   if (choice.label === 'Append') {
-    const fragment = await serializeRdf(quads, 'turtle', prefixes);
+    const fragment = await serializeRdf(blankNodesApartFrom(quads, editor.document.getText()), 'turtle', prefixes);
     const withoutPrefixLines = fragment
       .split('\n')
       .filter((line) => !line.trimStart().startsWith('@prefix'))

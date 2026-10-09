@@ -40,6 +40,7 @@ describe('renderAddClassWithParentsTurtle', () => {
     const turtle = await renderAddClassWithParentsTurtle(
       { className: 'Dog', label: 'Dog', prefix: 'ex', parentIris: ['http://example.org/clinic#Mammal'] },
       prefixes,
+      '',
     );
     expect(turtle).toContain('ex:Dog');
     expect(turtle).toContain('a owl:Class');
@@ -51,6 +52,7 @@ describe('renderAddClassWithParentsTurtle', () => {
     const turtle = await renderAddClassWithParentsTurtle(
       { className: 'Cat', label: 'Cat', prefix: 'ex', parentIris: ['http://example.org/clinic#Mammal', 'http://example.org/clinic#Pet'] },
       prefixes,
+      '',
     );
     expect(turtle).toContain('rdfs:subClassOf');
     expect(turtle).toMatch(/ex:Mammal/);
@@ -58,7 +60,7 @@ describe('renderAddClassWithParentsTurtle', () => {
   });
 
   it('renders no rdfs:subClassOf at all when parentIris is empty (top-level sibling of a root class)', async () => {
-    const turtle = await renderAddClassWithParentsTurtle({ className: 'Widget', label: 'Widget', prefix: 'ex', parentIris: [] }, prefixes);
+    const turtle = await renderAddClassWithParentsTurtle({ className: 'Widget', label: 'Widget', prefix: 'ex', parentIris: [] }, prefixes, '');
     expect(turtle).not.toContain('rdfs:subClassOf');
   });
 
@@ -68,6 +70,7 @@ describe('renderAddClassWithParentsTurtle', () => {
     const turtle = await renderAddClassWithParentsTurtle(
       { className: 'Parent', label: 'Parent', prefix: 'ex', parentIris: ['http://example.org/clinic#Person'], restrictionExpr: expr },
       prefixes,
+      '',
     );
     // Two independent rdfs:subClassOf assertions: the atomic named parent (keeps the Outline's
     // hierarchy working, since only named-node subClassOf targets are indexed) and the
@@ -77,6 +80,19 @@ describe('renderAddClassWithParentsTurtle', () => {
     expect(turtle).toContain('owl:Restriction');
     expect(turtle).toContain('owl:onProperty ex:hasChild');
     expect(turtle).toContain('owl:someValuesFrom ex:Person');
+  });
+
+  it("labels the restriction's blank nodes apart from those already in the document", async () => {
+    // n3's blank-node counter restarts with every VS Code session, so a restriction added today
+    // would otherwise share `_:n3-0` with one added in an earlier session, and merge with it.
+    const documentText = 'ex:Earlier rdfs:subClassOf _:b0.\n_:b0 a owl:Restriction.\n';
+    const turtle = await renderAddClassWithParentsTurtle(
+      { className: 'Parent', label: 'Parent', prefix: 'ex', parentIris: [], restrictionExpr: parseClassExpression('ex:hasChild some ex:Person') },
+      prefixes,
+      documentText,
+    );
+    expect(turtle).not.toContain('_:b0');
+    expect(turtle).toContain('_:b1');
   });
 });
 

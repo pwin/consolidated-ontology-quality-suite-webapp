@@ -310,6 +310,7 @@ export function activate(context: vscode.ExtensionContext): void {
       const turtle = await renderAddClassWithParentsTurtle(
         { className: names.className, label: names.label, prefix: localPrefix, parentIris: [node.term.iri], restrictionExpr },
         prefixes,
+        editor.document.getText(),
       );
       const edit = new vscode.WorkspaceEdit();
       edit.insert(uri, new vscode.Position(editor.document.lineCount, 0), turtle);
@@ -338,6 +339,7 @@ export function activate(context: vscode.ExtensionContext): void {
       const turtle = await renderAddClassWithParentsTurtle(
         { className: names.className, label: names.label, prefix: localPrefix, parentIris: node.term.subClassOf, restrictionExpr },
         prefixes,
+        editor.document.getText(),
       );
       const edit = new vscode.WorkspaceEdit();
       edit.insert(uri, new vscode.Position(editor.document.lineCount, 0), turtle);

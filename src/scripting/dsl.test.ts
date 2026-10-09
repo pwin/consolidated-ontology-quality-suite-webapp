@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
-import { ontology, defclass, defobjectproperty, defdatatypeproperty, some, only, and, or, not, minCardinality, hasValue, build } from './dsl';
+import type { Literal, Quad } from 'n3';
+import { ontology, defontology, defclass, defobjectproperty, defdatatypeproperty, some, only, and, or, not, minCardinality, hasValue, build } from './dsl';
 
 const RDF_TYPE = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type';
 const OWL_CLASS = 'http://www.w3.org/2002/07/owl#Class';
@@ -99,5 +100,67 @@ describe('ontology-suite/dsl', () => {
     vi.resetModules();
     const fresh = await import('./dsl.js');
     expect(() => fresh.defclass('X')).toThrow(/Call ontology\(/);
+  });
+});
+
+describe('defontology', () => {
+  const OWL = 'http://www.w3.org/2002/07/owl#';
+  const DCTERMS = 'http://purl.org/dc/terms/';
+  const objectsOf = (quads: Quad[], predicate: string) => quads.filter((q) => q.predicate.value === predicate).map((q) => q.object);
+
+  beforeEach(() => {
+    ontology('http://example.org/zoo#', 'zoo', { dcterms: DCTERMS });
+  });
+
+  it('writes the header first, whenever it is called', () => {
+    defclass('Animal');
+    defontology('http://example.org/zoo', { versionIRI: 'http://example.org/zoo/1.2.0', versionInfo: '1.2.0', priorVersion: 'http://example.org/zoo/1.1.0' });
+    const { quads } = build();
+    expect(quads.slice(0, 4).map((q) => [q.subject.value, q.predicate.value, q.object.value])).toEqual([
+      ['http://example.org/zoo', RDF_TYPE, `${OWL}Ontology`],
+      ['http://example.org/zoo', `${OWL}versionIRI`, 'http://example.org/zoo/1.2.0'],
+      ['http://example.org/zoo', `${OWL}versionInfo`, '1.2.0'],
+      ['http://example.org/zoo', `${OWL}priorVersion`, 'http://example.org/zoo/1.1.0'],
+    ]);
+    expect(quads[4].subject.value).toBe('http://example.org/zoo#Animal');
+  });
+
+  it('writes one owl:imports per import, taking full IRIs and CURIEs', () => {
+    defontology('http://example.org/zoo', { imports: ['https://w3id.org/semanticarts/ontology/gistCore', 'urn:example:shared', 'gist:'] });
+    expect(objectsOf(build().quads, `${OWL}imports`).map((o) => o.value)).toEqual([
+      'https://w3id.org/semanticarts/ontology/gistCore',
+      'urn:example:shared',
+      'https://w3id.org/semanticarts/ns/ontology/gist/',
+    ]);
+  });
+
+  it('writes annotations as plain, language-tagged, typed or IRI values, several to a property', () => {
+    defontology('http://example.org/zoo', {
+      label: 'Zoo ontology',
+      annotations: {
+        'dcterms:title': [{ value: 'Zoo', language: 'en' }, { value: 'Zoo', language: 'de' }],
+        'dcterms:created': { value: '2026-10-09', datatype: 'xsd:date' },
+        'dcterms:license': { iri: 'https://creativecommons.org/licenses/by/4.0/' },
+        [`${DCTERMS}creator`]: 'Pedro',
+      },
+    });
+    const { quads } = build();
+    expect(objectsOf(quads, `${DCTERMS}title`).map((o) => [o.value, (o as Literal).language])).toEqual([
+      ['Zoo', 'en'],
+      ['Zoo', 'de'],
+    ]);
+    expect((objectsOf(quads, `${DCTERMS}created`)[0] as Literal).datatype.value).toBe('http://www.w3.org/2001/XMLSchema#date');
+    expect(objectsOf(quads, `${DCTERMS}license`)[0].termType).toBe('NamedNode');
+    expect(objectsOf(quads, `${DCTERMS}creator`)[0].value).toBe('Pedro');
+    expect(objectsOf(quads, RDFS_LABEL)[0].value).toBe('Zoo ontology');
+  });
+
+  it('refuses a CURIE whose prefix it does not know, rather than writing it as an IRI', () => {
+    expect(() => defontology('http://example.org/zoo', { annotations: { 'foaf:maker': 'Pedro' } })).toThrow(/"foaf:maker".*ontology\(\)'s third argument/);
+  });
+
+  it('refuses a second header', () => {
+    defontology('http://example.org/zoo');
+    expect(() => defontology('http://example.org/zoo')).toThrow(/already called/);
   });
 });

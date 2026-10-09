@@ -1,4 +1,4 @@
-import { DataFactory, Quad } from 'n3';
+import { DataFactory, Quad, Quad_Object } from 'n3';
 import {
   RDF_TYPE,
   RDFS_LABEL,
@@ -12,8 +12,14 @@ import {
   OWL_DATATYPE_PROPERTY,
   OWL_EQUIVALENT_CLASS,
   OWL_DISJOINT_WITH,
+  OWL_ONTOLOGY,
+  OWL_VERSION_IRI,
+  OWL_VERSION_INFO,
+  OWL_PRIOR_VERSION,
+  OWL_IMPORTS,
   XSD,
   WELL_KNOWN_PREFIXES,
+  expand,
 } from '../rdf/vocab';
 import { ClassExpr, classExprToRdf } from '../rdf/formats/classExpression';
 
@@ -58,6 +64,8 @@ export type Ref = ClassRef | PropertyRef;
 interface OntologyBuilder {
   baseIri: string;
   prefix: string;
+  /** defontology()'s triples, kept apart so that build() can put them first. */
+  header: Quad[];
   quads: Quad[];
   prefixes: Record<string, string>;
 }
@@ -66,12 +74,65 @@ let current: OntologyBuilder | undefined;
 
 /** Must be called once, before any defclass/defobjectproperty/defdatatypeproperty call. */
 export function ontology(baseIri: string, prefix: string, extraPrefixes: Record<string, string> = {}): void {
-  current = { baseIri, prefix, quads: [], prefixes: { ...WELL_KNOWN_PREFIXES, [prefix]: baseIri, ...extraPrefixes } };
+  current = { baseIri, prefix, header: [], quads: [], prefixes: { ...WELL_KNOWN_PREFIXES, [prefix]: baseIri, ...extraPrefixes } };
 }
 
 function requireCurrent(): OntologyBuilder {
   if (!current) throw new Error("Call ontology(baseIri, prefix) before defining any classes/properties.");
   return current;
+}
+
+/** An annotation's value. A plain string is an xsd:string literal. */
+export type AnnotationValue = string | { iri: string } | { value: string; language: string } | { value: string; datatype: string };
+
+export interface DefOntologyOptions {
+  versionIRI?: string;
+  versionInfo?: string;
+  /** owl:priorVersion -- the IRI of the version this one replaces. */
+  priorVersion?: string;
+  /** One owl:imports per IRI. The extension resolves an import to a local file by the file's ontology IRI or its owl:versionIRI. */
+  imports?: string[];
+  label?: string;
+  comment?: string;
+  /** Any other annotation on the ontology, keyed by property (`'dcterms:creator'`, or a full IRI). A list gives the property several values. */
+  annotations?: Record<string, AnnotationValue | AnnotationValue[]>;
+}
+
+/**
+ * The ontology's own header: `<iri> a owl:Ontology`, with its version, imports and annotations.
+ * At most once per script, after ontology(); the header comes first in the output wherever the
+ * call is. IRIs can be full (`http://...`, `urn:...`) or CURIEs over ontology()'s prefixes.
+ */
+export function defontology(iri: string, opts: DefOntologyOptions = {}): void {
+  const b = requireCurrent();
+  if (b.header.length > 0) throw new Error('defontology() was already called: an ontology has one header.');
+  const subject = namedNode(resolveIri(b, iri));
+  const add = (predicate: string, object: Quad_Object) => b.header.push(quad(subject, namedNode(predicate), object));
+  add(RDF_TYPE, namedNode(OWL_ONTOLOGY));
+  if (opts.versionIRI) add(OWL_VERSION_IRI, namedNode(resolveIri(b, opts.versionIRI)));
+  if (opts.versionInfo) add(OWL_VERSION_INFO, literal(opts.versionInfo, namedNode(XSD_STRING)));
+  if (opts.priorVersion) add(OWL_PRIOR_VERSION, namedNode(resolveIri(b, opts.priorVersion)));
+  for (const imported of opts.imports ?? []) add(OWL_IMPORTS, namedNode(resolveIri(b, imported)));
+  if (opts.label) add(RDFS_LABEL, literal(opts.label, namedNode(XSD_STRING)));
+  if (opts.comment) add(RDFS_COMMENT, literal(opts.comment, namedNode(XSD_STRING)));
+  for (const [property, values] of Object.entries(opts.annotations ?? {})) {
+    for (const value of Array.isArray(values) ? values : [values]) add(resolveIri(b, property), annotationObject(b, value));
+  }
+}
+
+function annotationObject(b: OntologyBuilder, value: AnnotationValue): Quad_Object {
+  if (typeof value === 'string') return literal(value, namedNode(XSD_STRING));
+  if ('iri' in value) return namedNode(resolveIri(b, value.iri));
+  if ('language' in value) return literal(value.value, value.language);
+  return literal(value.value, namedNode(resolveIri(b, value.datatype)));
+}
+
+/** A full IRI as given, or a CURIE expanded over the ontology's prefixes. */
+function resolveIri(b: OntologyBuilder, ref: string): string {
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(ref) || /^urn:/i.test(ref)) return ref;
+  const expanded = expand(ref, b.prefixes);
+  if (expanded) return expanded;
+  throw new Error(`"${ref}" is neither a full IRI nor a CURIE with a known prefix. Add the prefix to ontology()'s third argument.`);
 }
 
 function toClassExprNode(b: OntologyBuilder, x: ClassRef | ClassExpr) {
@@ -206,5 +267,5 @@ export function not(operand: ClassRef | ClassExpr): ClassExpr {
 /** Called once, at the end of the script, to hand the built model back to the runner (see scriptRunnerEntry.ts). */
 export function build(): { quads: Quad[]; prefixes: Record<string, string> } {
   const b = requireCurrent();
-  return { quads: b.quads, prefixes: b.prefixes };
+  return { quads: [...b.header, ...b.quads], prefixes: b.prefixes };
 }

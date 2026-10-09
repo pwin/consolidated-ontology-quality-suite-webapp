@@ -1,5 +1,50 @@
 # Changelog
 
+## 0.13.14
+
+### A script can write the ontology's header
+
+`defontology(iri, options)` writes `<iri> a owl:Ontology` with `versionIRI`, `versionInfo`,
+`priorVersion`, `imports`, `label`, `comment`, and any other annotation on the ontology:
+`annotations` takes a property CURIE or IRI, with a plain string, `{ value, language }`,
+`{ value, datatype }` or `{ iri }` as the value, or a list of them. Until now `ontology()` only set
+the base IRI and prefixes, so a scripted ontology had no header, and regenerating it with
+**Replace whole file** deleted any header written by hand. The header comes first in the output
+wherever the call is. A CURIE with an undeclared prefix stops the script with an error instead of
+being written out as an IRI, and a second `defontology()` call is refused.
+
+### A qualified exact cardinality is written as `owl:qualifiedCardinality`
+
+`exactly n C` was written as `owl:cardinality` plus `owl:onClass`, which is not OWL 2: other tools
+read it as an unqualified cardinality, or reject it. `min` and `max` were right. The slip was in the
+shared class-expression engine, so it affected `.omn` files, the Outline's Add Subclass
+restriction, and the DSL's `exactCardinality`. The round-trip tests could not see it, because the
+reader also accepts the wrong form; a new test checks the property each restriction is written
+with. Files written by earlier versions keep the old pair until edited. To find them:
+
+```sparql
+PREFIX owl: <http://www.w3.org/2002/07/owl#>
+SELECT ?restriction WHERE { ?restriction owl:cardinality ?n ; owl:onClass ?class }
+```
+
+### Appending no longer merges a new restriction into an old one
+
+Run Ontology Script's **Append**, and the Outline's **Add Subclass** and **Add Sibling Class** with a
+restriction, write the new restriction's blank nodes into an existing file. Their labels come from
+a counter that restarts, at `_:n3-0`, with every script run and every VS Code session, and a
+Turtle file treats equal labels as one node. A restriction appended later could therefore merge
+with one already in the file into a single malformed node, with both classes pointing at it.
+Measured: two Appends of `livesIn some Aquarium` and `isPartOf some Enclosure` left one node with
+both `owl:onProperty` values. New blank nodes now take labels the file doesn't already use. To
+check a file for a merge that already happened:
+
+```sparql
+PREFIX owl: <http://www.w3.org/2002/07/owl#>
+SELECT DISTINCT ?restriction WHERE { ?restriction owl:onProperty ?a, ?b . FILTER (?a != ?b) }
+```
+
+All 361 tests pass, 16 of them new.
+
 ## 0.13.13
 
 ### A `.ontology.ts` script gets its types in the editor

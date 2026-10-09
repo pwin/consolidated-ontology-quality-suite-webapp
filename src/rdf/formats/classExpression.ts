@@ -347,9 +347,14 @@ export function classExprToRdf(expr: ClassExpr, prefixes: Record<string, string>
         case 'exactly': {
           const card = String(expr.cardinality ?? 0);
           const qualified = Boolean(expr.filler);
-          const predBase = expr.type === 'min' ? 'minCardinality' : expr.type === 'max' ? 'maxCardinality' : 'cardinality';
-          const pred = qualified ? `${OWL}${predBase.replace('Cardinality', 'QualifiedCardinality')}` : `${OWL}${predBase}`;
-          out.push(quad(bnode, namedNode(pred), literal(card, namedNode(`${XSD}nonNegativeInteger`))));
+          // Spelled out, not derived: deriving them by replacing 'Cardinality' missed the exact
+          // case, whose base name is lower-case, and wrote owl:cardinality + owl:onClass.
+          const pred = {
+            min: qualified ? 'minQualifiedCardinality' : 'minCardinality',
+            max: qualified ? 'maxQualifiedCardinality' : 'maxCardinality',
+            exactly: qualified ? 'qualifiedCardinality' : 'cardinality',
+          }[expr.type];
+          out.push(quad(bnode, namedNode(`${OWL}${pred}`), literal(card, namedNode(`${XSD}nonNegativeInteger`))));
           if (qualified) out.push(quad(bnode, namedNode(`${OWL}onClass`), classExprToRdf(expr.filler!, prefixes, out)));
           break;
         }

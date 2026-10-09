@@ -68,6 +68,25 @@ describe('a real ontology with OWL2 restrictions round-trips through Manchester 
   });
 });
 
+describe('each cardinality restriction is written with its own OWL 2 property', () => {
+  // The round trips above can't see this: the reader also takes owl:cardinality + owl:onClass as
+  // a qualified exact cardinality, so writing that pair for `exactly n C` read back the same.
+  it.each([
+    ['ex:hasOwner min 2 ex:Person', 'minQualifiedCardinality'],
+    ['ex:hasOwner max 2 ex:Person', 'maxQualifiedCardinality'],
+    ['ex:hasOwner exactly 2 ex:Person', 'qualifiedCardinality'],
+    ['ex:hasOwner min 2', 'minCardinality'],
+    ['ex:hasOwner max 2', 'maxCardinality'],
+    ['ex:hasOwner exactly 2', 'cardinality'],
+  ])('%s -> owl:%s', (text, property) => {
+    const owl = 'http://www.w3.org/2002/07/owl#';
+    const out: Quad[] = [];
+    classExprToRdf(parseClassExpression(text)!, prefixes, out);
+    const cardinalities = out.map((q) => q.predicate.value).filter((p) => p.startsWith(owl) && p.endsWith('ardinality'));
+    expect(cardinalities).toEqual([`${owl}${property}`]);
+  });
+});
+
 /**
  * A class expression that walks back into itself is malformed OWL and perfectly
  * well-formed RDF -- two triples are enough. Before `rdfToClassExpr` tracked the

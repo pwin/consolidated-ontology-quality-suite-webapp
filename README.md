@@ -116,10 +116,11 @@ Validation" and "Full Triplify" commands, degrading gracefully if absent.
 **Scripting: build an ontology as code**
 - *Run Ontology Script*: author a `.ontology.ts` file — a plain TypeScript
   file (full IntelliSense/type-checking, not a custom language) using a
-  small DSL (`ontology-suite/dsl`: `defclass` (`subClassOf`,
-  `equivalentClass`, `disjointWith`), `defobjectproperty`,
-  `defdatatypeproperty`, and restriction-builders `some`/`only`/`and`/`or`/
-  `not`/cardinality) — and run it to generate real Turtle. Inspired by
+  small DSL (`ontology-suite/dsl`: `defontology` (the header: version IRI,
+  imports, annotations), `defclass` (`subClassOf`, `equivalentClass`,
+  `disjointWith`), `defobjectproperty`, `defdatatypeproperty`, and
+  restriction-builders `some`/`only`/`and`/`or`/`not`/cardinality) — and
+  run it to generate real Turtle. Inspired by
   [Tawny-OWL](https://github.com/phillord/tawny-owl)'s idea of using a real
   programming language's abstraction facilities (functions, loops) for
   ontology patterns instead of clicking through a GUI once per term.
