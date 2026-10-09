@@ -32,6 +32,17 @@ const REQUIRED = [
   'node_modules/swipl-wasm/dist/swipl/swipl-web.wasm',
 ];
 
+// What types a user's `.ontology.ts` script in the editor: the package VS Code's TypeScript
+// server loads the plugin by, the plugin, and the declarations it resolves `ontology-suite/dsl`
+// to. The build writes all three (see ts-plugin-build.js). The first is not a dependency, so an
+// `npm install` after the build can remove it, and nothing else would notice: the script still
+// runs, and the editor goes back to "Cannot find module 'ontology-suite/dsl'".
+const EDITOR_TYPES = [
+  'node_modules/ontology-suite-ts-plugin/index.js',
+  'dist/tsPlugin.js',
+  'dist/dsl-types/scripting/dsl.d.ts',
+];
+
 for (const f of readdirSync('.').filter((n) => n.endsWith('.vsix'))) {
   unlinkSync(f);
 }
@@ -51,7 +62,9 @@ if (!vsix) {
 // in the central directory, so searching the raw bytes is enough to answer
 // "is this file in the archive" without unpacking it or taking a dependency.
 const bytes = readFileSync(vsix);
-const missing = REQUIRED.filter((p) => !bytes.includes(`extension/${p}`));
+const inVsix = (p) => bytes.includes(`extension/${p}`);
+const missing = REQUIRED.filter((p) => !inVsix(p));
+const missingTypes = EDITOR_TYPES.filter((p) => !inVsix(p));
 
 const mb = (bytes.length / 1048576).toFixed(1);
 if (missing.length) {
@@ -59,8 +72,14 @@ if (missing.length) {
   for (const m of missing) console.error(`  ${m}`);
   console.error('\nThis is what `--no-dependencies` produces. The extension');
   console.error('loads these from node_modules at runtime; see .vscodeignore.');
-  process.exit(1);
 }
+if (missingTypes.length) {
+  console.error(`\n${vsix} is missing what types .ontology.ts scripts in the editor:`);
+  for (const m of missingTypes) console.error(`  ${m}`);
+  console.error('\n`node esbuild.js` writes these; see ts-plugin-build.js.');
+}
+if (missing.length || missingTypes.length) process.exit(1);
 
 console.log(`\n${vsix} — ${mb} MB, all runtime assets present:`);
 for (const p of REQUIRED) console.log(`  ${p.split('/').slice(1, -1).join('/')}`);
+console.log('  and the TypeScript plugin that types .ontology.ts scripts');

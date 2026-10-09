@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.13.13
+
+### A `.ontology.ts` script gets its types in the editor
+
+Every script showed "Cannot find module 'ontology-suite/dsl'", the two in `examples/scripting/`
+included, so the DSL was typed as `any` and the IntelliSense that the README and TUTORIAL Part 11
+describe never appeared. Run Ontology Script supplies that module itself when it runs a script,
+and nothing told the editor's TypeScript service where to find it. Running a script was never
+affected: esbuild doesn't type-check.
+
+The extension now registers a TypeScript server plugin (`typescriptServerPlugins`), and the build
+generates declarations for the DSL into `dist/dsl-types/`. When TypeScript can't resolve
+`ontology-suite/dsl`, the plugin resolves it to them. Any other import, and an
+`ontology-suite/dsl` that a project's own tsconfig `paths` already resolves, is left as it was.
+n3's types go with the declarations as a module file rather than as the ambient `declare module
+'n3'` the extension uses internally, so they don't leak into a user's project. Nothing is written
+into the workspace, and with a workspace TypeScript older than 5.0 the plugin does nothing.
+
+VS Code loads a plugin by package name from the extension's `node_modules`, so the build writes a
+small package there that loads `dist/tsPlugin.js`. That package is not a dependency, so
+`package-vsix.mjs` now checks that it, the plugin and the declarations all reach the archive. A
+new test drives a real `tsserver` the way VS Code does, against a folder with no tsconfig; with the
+plugin not loaded, four of its six tests fail.
+
+### Run Ontology Script runs the script as it is in the editor
+
+It read the file from disk, so unsaved edits were ignored, and a script created but not yet saved
+ran as an empty file and reported that it produced no classes or properties. All 345 tests pass.
+
 ## 0.13.12
 
 ### A Quick Fix keeps a literal's base direction

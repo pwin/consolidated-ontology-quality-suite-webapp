@@ -46,7 +46,9 @@ function fromPlainQuad(q: PlainQuad): Quad {
  * built-in TypeScript tooling still owns the file.
  */
 export async function runOntologyScript(scriptUri: vscode.Uri, extensionPath: string): Promise<void> {
-  const scriptText = new TextDecoder('utf-8').decode(await vscode.workspace.fs.readFile(scriptUri));
+  // The editor's text, saved or not: the command runs on the script in front of you. Reading the
+  // file instead ran whatever was last saved, which for a new script can be an empty file.
+  const scriptText = (await vscode.workspace.openTextDocument(scriptUri)).getText();
 
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ontology-suite-script-'));
   const transpiledPath = path.join(tempDir, 'script.cjs');

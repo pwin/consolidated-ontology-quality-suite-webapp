@@ -8,6 +8,7 @@ eslint.config.js
 esbuild.js
 esbuild.test.js
 package-vsix.mjs
+ts-plugin-build.js
 tsconfig.json
 vitest.config.mts
 *.tsbuildinfo
