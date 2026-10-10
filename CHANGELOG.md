@@ -1,5 +1,51 @@
 # Changelog
 
+## 0.15.0
+
+### Individuals, property axioms, datatypes and references in the DSL
+
+After Owlready2 and Tawny-OWL. `examples/scripting/zoo.ontology.ts` uses all of it.
+
+- **`defindividual`** declares an `owl:NamedIndividual` with its `types` (classes or class
+  expressions), `facts`, `sameAs` and `differentFrom`. A fact pairs an object property with an
+  individual, or a datatype property with a literal: a string, a number (`xsd:integer` or
+  `xsd:decimal`), a boolean, `{ value, language }` or `{ value, datatype }`. The editor marks a fact
+  of the wrong kind before the script runs. **`allDifferent`** writes `owl:differentFrom` for every
+  pair, the form the reasoner's rules read.
+- **Object properties** take `characteristics` (`functional`, `inverseFunctional`, `transitive`,
+  `symmetric`, `asymmetric`, `reflexive`, `irreflexive`), `inverseOf`, and a property `chain`. A
+  named inverse draws Local Checks' MDL-001 hint, after gist's convention.
+- **Datatype properties** take a `range` from `datatype('xsd:integer', { minInclusive: 0 })`, with
+  any of OWL 2's facets, and can be `functional`. A datatype property's range is now a datatype
+  rather than a class.
+- **`classRef`, `objectPropertyRef`, `datatypePropertyRef`, `individualRef`** name a term declared
+  elsewhere, such as `classRef('gist:Person')`, or later in the script. They write nothing.
+
+`hasValue` and `` mx`...` `` take individuals and literals of every kind.
+
+The zoo example's output was checked outside this project too: loaded into Owlready2 and reasoned
+over with HermiT, it gives the inferences its axioms imply, and each of five deliberately broken
+variants (an age outside the facet, two enclosures for a functional property, a thing both Fish
+and Plant, two individuals both the same and different, an empty name) is inconsistent.
+
+### The DSL on npm
+
+The DSL is published on npm as [`ontology-suite`](https://www.npmjs.com/package/ontology-suite), so
+`import ... from 'ontology-suite/dsl'` resolves after `npm install --save-dev ontology-suite`:
+for type-checking scripts in CI or another editor, or running one under Node, where `build()`
+returns RDF/JS quads. It has no dependencies, and its code is 44 KB. Inside VS Code the extension
+needs no package; if one is installed, the editor uses its types and the extension still runs the
+script with its own DSL, so keep the two at the same version.
+
+### Two fixes in the class-expression parser
+
+- An integer after `value`, as in `hasAge value 5`, is an `xsd:integer` literal. It was read as an
+  individual named "5", which `.omn` files then wrote out as a relative IRI.
+- A literal's datatype stops where its name does. In `(hasAge value "5"^^xsd:int)` the datatype was
+  read as `xsd:int)`, and the closing bracket lost.
+
+All 437 tests pass, 30 of them new.
+
 ## 0.14.0
 
 ### Manchester Syntax in a script, checked as you type
