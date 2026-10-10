@@ -44,6 +44,27 @@ describe('parseClassExpressionStrict', () => {
   });
 });
 
+describe('an integer after value', () => {
+  it('is an xsd:integer literal, in both parsers, not an individual named by the number', () => {
+    const expected = { kind: 'restriction', property: 'ex:hasAge', type: 'value', literalValue: { value: '5', datatype: 'http://www.w3.org/2001/XMLSchema#integer' } };
+    expect(parseClassExpressionStrict('ex:hasAge value 5')).toEqual(expected);
+    expect(parseClassExpression('ex:hasAge value 5')).toEqual(expected);
+  });
+});
+
+describe("a literal's datatype", () => {
+  it('is a full IRI in angle brackets or a prefixed name, and stops before a closing bracket', () => {
+    // Read as `\S+`, the datatype here was `xsd:int)` and the `)` was lost.
+    expect(parseClassExpressionStrict('(ex:p value "5"^^xsd:int)')).toEqual({ kind: 'restriction', property: 'ex:p', type: 'value', literalValue: { value: '5', datatype: 'xsd:int' } });
+    expect(parseClassExpressionStrict('ex:p value "5"^^<http://www.w3.org/2001/XMLSchema#int>')).toEqual({
+      kind: 'restriction',
+      property: 'ex:p',
+      type: 'value',
+      literalValue: { value: '5', datatype: 'http://www.w3.org/2001/XMLSchema#int' },
+    });
+  });
+});
+
 describe('mapClassExprNames', () => {
   it('maps every name by its kind, wherever it is in the expression', () => {
     const expr = parseClassExpressionStrict('A and not (p some {i, j}) and q value k and r value "5"^^xsd:int and s min 2 (B or C)');
@@ -55,7 +76,7 @@ describe('mapClassExprNames', () => {
     });
     expect(mapped).toEqual(
       parseClassExpressionStrict(
-        '<class:A> and not (<property:p> some {<individual:i>, <individual:j>}) and <property:q> value <individual:k> and <property:r> value "5"^^datatype:xsd:int and <property:s> min 2 (<class:B> or <class:C>)',
+        '<class:A> and not (<property:p> some {<individual:i>, <individual:j>}) and <property:q> value <individual:k> and <property:r> value "5"^^<datatype:xsd:int> and <property:s> min 2 (<class:B> or <class:C>)',
       ),
     );
   });

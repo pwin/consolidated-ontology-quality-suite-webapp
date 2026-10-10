@@ -146,9 +146,11 @@ export function tokenizeExpression(text: string, strict = false): Token[] {
       let datatype: string | undefined;
       let language: string | undefined;
       if (text.slice(j, j + 2) === '^^') {
-        const m = /^\^\^(\S+)/.exec(text.slice(j));
+        // A datatype is a full IRI in angle brackets or a (prefixed) name. Read as `\S+` it kept the
+        // brackets, and took a closing `)` or `,` as part of the name.
+        const m = /^\^\^(?:<([^>]*)>|([A-Za-z_][\w-]*(?::[\w-]*)?))/.exec(text.slice(j));
         if (m) {
-          datatype = m[1];
+          datatype = m[1] ?? m[2];
           j += m[0].length;
         }
       } else if (text[j] === '@') {
@@ -334,6 +336,10 @@ function parseRestrictionTail(s: TokenStream, propertyRef: string, restrictionWo
     if (t.type === 'literal') {
       const parsed = JSON.parse(t.value) as { value: string; datatype?: string; language?: string };
       return { kind: 'restriction', property: propertyRef, type: 'value', literalValue: parsed };
+    }
+    // Manchester Syntax's integer literal: `hasAge value 5`. Read before as an individual named "5".
+    if (t.type === 'int') {
+      return { kind: 'restriction', property: propertyRef, type: 'value', literalValue: { value: t.value, datatype: 'http://www.w3.org/2001/XMLSchema#integer' } };
     }
     if (s.strict && t.type !== 'curie' && t.type !== 'iri') s.fail("Expected an individual or a literal after 'value'.", t);
     return { kind: 'restriction', property: propertyRef, type: 'value', individual: t.value };

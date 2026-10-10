@@ -95,7 +95,8 @@ export function classExprToRdf(expr: ClassExpr, prefixes: Record<string, string>
   }
 }
 
-function rdfList(items: (NamedNode | BlankNode)[], out: Quad[]): NamedNode | BlankNode {
+/** An RDF list of `items`, its triples pushed to `out`; returns its head (rdf:nil when empty). */
+export function rdfList(items: (NamedNode | BlankNode)[], out: Quad[]): NamedNode | BlankNode {
   if (items.length === 0) return namedNode(`${RDF}nil`);
   let tail: NamedNode | BlankNode = namedNode(`${RDF}nil`);
   const nodes = items.map(() => blankNode());

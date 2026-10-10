@@ -115,9 +115,25 @@ describe('TypeScript plugin for ontology-suite/dsl', () => {
     expect(manifest.contributes.typescriptServerPlugins.map((p: { name: string }) => p.name)).toEqual([pluginBuild.PLUGIN_NAME]);
   });
 
-  it("types the tutorial's advanced example with no errors", async () => {
-    const example = fs.readFileSync(path.join(root, 'examples', 'scripting', 'pets-advanced.ontology.ts'), 'utf8');
-    expect(await errors('pets-advanced.ontology.ts', example)).toEqual([]);
+  const exampleDir = path.join(root, 'examples', 'scripting');
+  it.each(fs.readdirSync(exampleDir).filter((f) => f.endsWith('.ontology.ts')))('types the example %s with no errors', async (script) => {
+    expect(await errors(script, fs.readFileSync(path.join(exampleDir, script), 'utf8'))).toEqual([]);
+  });
+
+  it("catches a fact of the wrong kind, and a datatype property in a chain, before the script runs", async () => {
+    const script = [
+      "import { defobjectproperty, defdatatypeproperty, defindividual } from 'ontology-suite/dsl';",
+      "const hasOwner = defobjectproperty('hasOwner');",
+      "const age = defdatatypeproperty('age');",
+      "defindividual('rex', { facts: [[hasOwner, 3], [age, 'three']] });",
+      "defobjectproperty('q', { chain: [hasOwner, age] });",
+    ].join('\n');
+    const found = await errors('wrong-kinds.ontology.ts', script);
+    // [age, 'three'] is fine: a string is a literal. [hasOwner, 3] and the chain are not.
+    expect(found.map((d) => [d.code, d.start.line])).toEqual([
+      [2322, 4],
+      [2322, 5],
+    ]);
   });
 
   it('catches a misspelt option', async () => {

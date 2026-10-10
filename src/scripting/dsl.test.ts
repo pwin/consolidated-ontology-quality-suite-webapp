@@ -1,6 +1,30 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import type { Literal, Quad } from 'n3';
-import { ontology, defontology, defclass, defobjectproperty, defdatatypeproperty, some, only, and, or, not, minCardinality, hasValue, mx, someOnly, asSubclasses, build } from './dsl';
+import {
+  ontology,
+  defontology,
+  defclass,
+  defobjectproperty,
+  defdatatypeproperty,
+  defindividual,
+  allDifferent,
+  datatype,
+  classRef,
+  objectPropertyRef,
+  datatypePropertyRef,
+  individualRef,
+  some,
+  only,
+  and,
+  or,
+  not,
+  minCardinality,
+  hasValue,
+  mx,
+  someOnly,
+  asSubclasses,
+  build,
+} from './dsl';
 
 const RDF_TYPE = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type';
 const OWL_CLASS = 'http://www.w3.org/2002/07/owl#Class';
@@ -310,6 +334,231 @@ describe('mx', () => {
   it('refuses an unknown prefix, and a cardinality that is not a whole number', () => {
     const p = defobjectproperty('p');
     expect(() => mx`foaf:knows some Person`).toThrow(/"foaf:knows" is neither a full IRI nor a CURIE/);
-    expect(() => mx`${p} min ${1.5}`).toThrow('mx: 1.5 is not a cardinality');
+    expect(() => mx`${p} min ${1.5}`).toThrow("mx: Expected a whole number after 'min'.");
+  });
+});
+
+describe('0.15: individuals, property axioms, datatypes and references', () => {
+  const ZOO = 'http://example.org/zoo#';
+  const OWL = 'http://www.w3.org/2002/07/owl#';
+  const XSD = 'http://www.w3.org/2001/XMLSchema#';
+  const RDF = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#';
+  const RDFS = 'http://www.w3.org/2000/01/rdf-schema#';
+  const short = (iri: string) => iri.replace(ZOO, 'zoo:').replace(OWL, 'owl:').replace(XSD, 'xsd:').replace(RDFS, 'rdfs:').replace(RDF, 'rdf:');
+  /** `subject`'s statements as [predicate, object] pairs; a literal as "value"^^datatype or "value"@lang, a blank node as _. */
+  const about = (quads: Quad[], subject: string) =>
+    quads
+      .filter((q) => q.subject.value === `${ZOO}${subject}`)
+      .map((q) => {
+        const o = q.object;
+        const object =
+          o.termType === 'Literal' ? (o.language ? `"${o.value}"@${o.language}` : `"${o.value}"^^${short(o.datatype.value)}`) : o.termType === 'BlankNode' ? '_' : short(o.value);
+        return [short(q.predicate.value), object];
+      });
+  /** The members of the RDF list starting at `head`. */
+  const list = (quads: Quad[], head: Quad['object']): Quad['object'][] => {
+    const items: Quad['object'][] = [];
+    for (let node = head; node.value !== `${RDF}nil`; ) {
+      items.push(quads.find((q) => q.subject.equals(node) && q.predicate.value === `${RDF}first`)!.object);
+      node = quads.find((q) => q.subject.equals(node) && q.predicate.value === `${RDF}rest`)!.object;
+    }
+    return items;
+  };
+
+  beforeEach(() => {
+    ontology(ZOO, 'zoo');
+  });
+
+  describe('defindividual', () => {
+    it('declares a named individual with its types, facts, annotations and identities', () => {
+      const Dog = defclass('Dog');
+      const hasOwner = defobjectproperty('hasOwner');
+      const name = defdatatypeproperty('name');
+      const age = defdatatypeproperty('age');
+      const weight = defdatatypeproperty('weight');
+      const vaccinated = defdatatypeproperty('vaccinated');
+      const born = defdatatypeproperty('born');
+      const alice = defindividual('alice');
+      const rex = defindividual('rex', {
+        label: { value: 'Rex', language: 'en' },
+        types: [Dog, some(hasOwner, classRef('Person'))],
+        facts: [
+          [hasOwner, alice],
+          [name, 'Rex'],
+          [age, 3],
+          [weight, 31.5],
+          [vaccinated, true],
+          [born, { value: '2023-04-01', datatype: 'xsd:date' }],
+        ],
+        sameAs: [individualRef('rexTheDog')],
+        differentFrom: [alice],
+      });
+      expect(rex).toEqual({ kind: 'individual', iri: `${ZOO}rex`, localName: 'rex' });
+      expect(about(build().quads, 'rex')).toEqual([
+        ['rdf:type', 'owl:NamedIndividual'],
+        ['rdfs:label', '"Rex"@en'],
+        ['rdf:type', 'zoo:Dog'],
+        ['rdf:type', '_'],
+        ['zoo:hasOwner', 'zoo:alice'],
+        ['zoo:name', '"Rex"^^xsd:string'],
+        ['zoo:age', '"3"^^xsd:integer'],
+        ['zoo:weight', '"31.5"^^xsd:decimal'],
+        ['zoo:vaccinated', '"true"^^xsd:boolean'],
+        ['zoo:born', '"2023-04-01"^^xsd:date'],
+        ['owl:sameAs', 'zoo:rexTheDog'],
+        ['owl:differentFrom', 'zoo:alice'],
+      ]);
+    });
+
+    it('refuses a fact whose value is the wrong kind for its property, for scripts the type checker missed', () => {
+      const hasOwner = defobjectproperty('hasOwner');
+      const age = defdatatypeproperty('age');
+      const alice = defindividual('alice');
+      expect(() => defindividual('rex', { facts: [[hasOwner, 3] as any] })).toThrow('rex: hasOwner is an object property, so its value must be an individual.');
+      expect(() => defindividual('rex', { facts: [[age, alice] as any] })).toThrow('rex: age is a datatype property, so its value must be a literal.');
+      expect(() => defindividual('rex', { facts: [[age, 1e21]] })).toThrow('1e+21 has no xsd:integer or xsd:decimal form');
+      expect(() => defindividual('rex', { facts: [[age, Number.NaN]] })).toThrow('NaN has no xsd:integer or xsd:decimal form');
+    });
+
+    it('allDifferent writes owl:differentFrom for every pair', () => {
+      const [a, b, c] = ['a', 'b', 'c'].map((n) => defindividual(n));
+      allDifferent(a, b, c);
+      const different = build()
+        .quads.filter((q) => q.predicate.value === `${OWL}differentFrom`)
+        .map((q) => [short(q.subject.value), short(q.object.value)]);
+      expect(different).toEqual([
+        ['zoo:a', 'zoo:b'],
+        ['zoo:a', 'zoo:c'],
+        ['zoo:b', 'zoo:c'],
+      ]);
+    });
+  });
+
+  describe('property axioms', () => {
+    it('writes characteristics, an inverse and a chain on an object property', () => {
+      const hasParent = defobjectproperty('hasParent');
+      const hasChild = defobjectproperty('hasChild', { inverseOf: hasParent, characteristics: ['irreflexive', 'asymmetric'] });
+      defobjectproperty('hasGrandparent', { chain: [hasParent, hasParent] });
+      defobjectproperty('partOf', { characteristics: ['transitive', 'functional', 'inverseFunctional', 'symmetric', 'reflexive'] });
+      const { quads } = build();
+      expect(about(quads, 'hasChild')).toEqual([
+        ['rdf:type', 'owl:ObjectProperty'],
+        ['rdf:type', 'owl:IrreflexiveProperty'],
+        ['rdf:type', 'owl:AsymmetricProperty'],
+        ['owl:inverseOf', 'zoo:hasParent'],
+      ]);
+      expect(hasChild.kind).toBe('objectProperty');
+      const chain = quads.find((q) => q.predicate.value === `${OWL}propertyChainAxiom`)!;
+      expect(short(chain.subject.value)).toBe('zoo:hasGrandparent');
+      expect(list(quads, chain.object).map((t) => short(t.value))).toEqual(['zoo:hasParent', 'zoo:hasParent']);
+      expect(about(quads, 'partOf').map(([, o]) => o)).toEqual([
+        'owl:ObjectProperty',
+        'owl:TransitiveProperty',
+        'owl:FunctionalProperty',
+        'owl:InverseFunctionalProperty',
+        'owl:SymmetricProperty',
+        'owl:ReflexiveProperty',
+      ]);
+    });
+
+    it('lets a datatype property be functional, and nothing else', () => {
+      defdatatypeproperty('age', { characteristics: ['functional'] });
+      expect(about(build().quads, 'age')).toEqual([
+        ['rdf:type', 'owl:DatatypeProperty'],
+        ['rdf:type', 'owl:FunctionalProperty'],
+      ]);
+      expect(() => defdatatypeproperty('weight', { characteristics: ['transitive' as any] })).toThrow('weight: a datatype property can only be functional, not transitive.');
+    });
+
+    it('refuses what OWL does not allow, for scripts the type checker missed', () => {
+      const p = defobjectproperty('p');
+      const age = defdatatypeproperty('age');
+      expect(() => defobjectproperty('q', { chain: [p] })).toThrow('q: a property chain needs at least two properties.');
+      expect(() => defobjectproperty('q', { chain: [p, age as any] })).toThrow('age is not an object property; chain takes object properties.');
+      expect(() => defobjectproperty('q', { inverseOf: age as any })).toThrow('age is not an object property; inverseOf takes object properties.');
+      expect(() => defobjectproperty('q', { characteristics: ['sticky' as any] })).toThrow('"sticky" is not a property characteristic.');
+    });
+  });
+
+  describe('datatype', () => {
+    it('is a plain range without facets', () => {
+      defdatatypeproperty('name', { range: datatype('xsd:string') });
+      expect(about(build().quads, 'name')).toContainEqual(['rdfs:range', 'xsd:string']);
+    });
+
+    it('is a restricted rdfs:Datatype with facets, each value typed as OWL 2 expects', () => {
+      defdatatypeproperty('age', { range: datatype('xsd:integer', { minInclusive: 0, maxExclusive: 150 }) });
+      defdatatypeproperty('code', { range: datatype('xsd:string', { minLength: 2, maxLength: 8, pattern: '^[A-Z]+$' }) });
+      const { quads } = build();
+      const facetsOf = (property: string) => {
+        const range = quads.find((q) => q.subject.value === `${ZOO}${property}` && q.predicate.value === `${RDFS}range`)!.object;
+        expect(range.termType).toBe('BlankNode');
+        const on = (p: string) => quads.filter((q) => q.subject.equals(range) && q.predicate.value === p).map((q) => short(q.object.value));
+        expect(on(`${RDF}type`)).toEqual(['rdfs:Datatype']);
+        const restrictions = quads.find((q) => q.subject.equals(range) && q.predicate.value === `${OWL}withRestrictions`)!.object;
+        return [
+          on(`${OWL}onDatatype`)[0],
+          ...list(quads, restrictions).map((node) => {
+            const facet = quads.find((q) => q.subject.equals(node))!;
+            return `${short(facet.predicate.value)} "${facet.object.value}"^^${short((facet.object as Literal).datatype.value)}`;
+          }),
+        ];
+      };
+      expect(facetsOf('age')).toEqual(['xsd:integer', 'xsd:minInclusive "0"^^xsd:integer', 'xsd:maxExclusive "150"^^xsd:integer']);
+      expect(facetsOf('code')).toEqual([
+        'xsd:string',
+        'xsd:minLength "2"^^xsd:nonNegativeInteger',
+        'xsd:maxLength "8"^^xsd:nonNegativeInteger',
+        'xsd:pattern "^[A-Z]+$"^^xsd:string',
+      ]);
+    });
+
+    it('refuses an unknown facet, or a facet value of the wrong kind', () => {
+      expect(() => datatype('xsd:integer', { minimum: 0 } as any)).toThrow('datatype: "minimum" is not a facet.');
+      expect(() => datatype('xsd:string', { maxLength: -1 })).toThrow('datatype: maxLength takes a whole number, 0 or more.');
+      expect(() => datatype('xsd:integer', { minInclusive: Number.POSITIVE_INFINITY })).toThrow('datatype: minInclusive takes a number or a string.');
+      expect(() => datatype('integer')).toThrow('"integer" is neither a full IRI nor a CURIE');
+    });
+  });
+
+  describe('references', () => {
+    it('name a term elsewhere, by bare name, CURIE or IRI, and write nothing', () => {
+      expect(classRef('Keeper')).toEqual({ kind: 'class', iri: `${ZOO}Keeper`, localName: 'Keeper' });
+      expect(classRef('gist:Person')).toEqual({ kind: 'class', iri: 'https://w3id.org/semanticarts/ns/ontology/gist/Person', localName: 'Person' });
+      expect(objectPropertyRef('https://example.org/other#hasPart')).toEqual({ kind: 'objectProperty', iri: 'https://example.org/other#hasPart', localName: 'hasPart' });
+      expect(datatypePropertyRef('urn:example:age')).toEqual({ kind: 'datatypeProperty', iri: 'urn:example:age', localName: 'age' });
+      expect(individualRef('rex').kind).toBe('individual');
+      expect(build().quads).toEqual([]);
+    });
+
+    it('can name a class before it is declared', () => {
+      defclass('Dog', { subClassOf: [classRef('Animal')] });
+      defclass('Animal');
+      expect(about(build().quads, 'Dog')).toContainEqual(['rdfs:subClassOf', 'zoo:Animal']);
+    });
+  });
+
+  describe('values in restrictions', () => {
+    it('hasValue takes an individual, or a literal of any kind', () => {
+      const hasOwner = defobjectproperty('hasOwner');
+      const age = defdatatypeproperty('age');
+      const alice = defindividual('alice');
+      expect(hasValue(hasOwner, alice)).toEqual({ kind: 'restriction', property: `${ZOO}hasOwner`, type: 'value', individual: `${ZOO}alice` });
+      expect(hasValue(age, 3)).toMatchObject({ literalValue: { value: '3', datatype: `${XSD}integer` } });
+      expect(hasValue(age, true)).toMatchObject({ literalValue: { value: 'true', datatype: `${XSD}boolean` } });
+    });
+
+    it('mx takes interpolated individuals and literals, and refuses an individual used as a class or property', () => {
+      const age = defdatatypeproperty('age');
+      const weight = defdatatypeproperty('weight');
+      const rex = defindividual('rex');
+      const fido = defindividual('fido');
+      expect(mx`{${rex}, ${fido}}`).toEqual({ kind: 'oneOf', individuals: [rex.iri, fido.iri] });
+      expect(mx`${age} value ${5}`).toEqual(hasValue(age, 5));
+      expect(mx`${weight} value ${31.5}`).toEqual(hasValue(weight, 31.5));
+      expect(mx`${age} value ${-1}`).toEqual(hasValue(age, -1));
+      expect(() => mx`${rex} and Dog`).toThrow('mx: rex is an individual, used here as a class.');
+      expect(() => mx`${rex} some Dog`).toThrow('mx: rex is an individual, used here as a property.');
+    });
   });
 });
