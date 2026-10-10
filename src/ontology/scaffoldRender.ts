@@ -1,7 +1,7 @@
 import { DataFactory, Quad, Literal } from 'n3';
-import { shrink, WELL_KNOWN_PREFIXES } from '../rdf/vocab';
+import { resolveTermName, shrink, WELL_KNOWN_PREFIXES } from '../rdf/vocab';
 import { serializeRdf } from '../rdf/serialization';
-import { ClassExpr, classExprToRdf } from '../rdf/formats/classExpression';
+import { ClassExpr, classExprToRdf, mapClassExprNames } from '../rdf/formats/classExpression';
 import { blankNodesApartFrom } from '../rdf/blankNodeLabels';
 
 /**
@@ -102,6 +102,28 @@ export async function renderAddClassWithParentsTurtle(
 
   const turtle = await serializeRdf(blankNodesApartFrom(quads, documentText), 'turtle', prefixes);
   return `\n${stripPrefixLines(turtle)}\n`;
+}
+
+/**
+ * The names in a restriction typed into the Outline, as IRIs: a bare name (`hasChild`) in the
+ * namespace of `localPrefix`, where the new class itself goes, and a CURIE over the document's
+ * prefixes. classExprToRdf would otherwise write a bare name out as a relative IRI, `<hasChild>`,
+ * and a CURIE with an undeclared prefix as an IRI with that prefix for a scheme, `<foo:Bar>`.
+ * Throws a message for the user instead.
+ */
+export function resolveRestrictionNames(expr: ClassExpr, documentPrefixes: Record<string, string>, localPrefix: string): ClassExpr {
+  // The same prefixes renderAddClassWithParentsTurtle writes with.
+  const prefixes = { ...WELL_KNOWN_PREFIXES, ...documentPrefixes };
+  const name = (ref: string): string => {
+    const iri = resolveTermName(ref, prefixes, prefixes[localPrefix]);
+    if (iri) return iri;
+    throw new Error(
+      ref.includes(':')
+        ? `"${ref}" uses a prefix this file doesn't declare.`
+        : `"${ref}" has no prefix, and this file has no namespace for new terms to go in.`,
+    );
+  };
+  return mapClassExprNames(expr, { class: (ref) => ({ kind: 'class', iri: name(ref) }), property: name, individual: name, datatype: name });
 }
 
 export interface AddSubPropertyOptions {

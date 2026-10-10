@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { parseClassExpression } from '../rdf/formats/classExpression';
+import { parseClassExpression, parseClassExpressionStrict } from '../rdf/formats/classExpression';
 import {
   renderAddClassTurtle,
   renderAddPropertyTurtle,
   renderAddClassWithParentsTurtle,
   renderAddSubPropertyTurtle,
+  resolveRestrictionNames,
   humanize,
 } from './scaffoldRender';
 
@@ -133,5 +134,38 @@ describe('renderAddSubPropertyTurtle', () => {
 describe('humanize', () => {
   it('splits camelCase and capitalizes the first letter', () => {
     expect(humanize('hasOwner')).toBe('Has Owner');
+  });
+});
+
+describe('resolveRestrictionNames', () => {
+  const EX = 'http://example.org/clinic#';
+  const render = (expr: ReturnType<typeof parseClassExpressionStrict>) =>
+    renderAddClassWithParentsTurtle({ className: 'Parent', label: 'Parent', prefix: 'ex', parentIris: [], restrictionExpr: expr }, prefixes, '');
+
+  it("puts a bare name where the new class goes, which unresolved was written as a relative IRI", async () => {
+    // The Outline's own prompt suggests "hasChild some Person".
+    const typed = parseClassExpressionStrict('hasChild some Person');
+    expect(await render(typed)).toContain('<hasChild>');
+
+    const resolved = resolveRestrictionNames(typed, prefixes, 'ex');
+    expect(resolved).toEqual({ kind: 'restriction', property: `${EX}hasChild`, type: 'some', filler: { kind: 'class', iri: `${EX}Person` } });
+    const turtle = await render(resolved);
+    expect(turtle).toContain('owl:onProperty ex:hasChild');
+    expect(turtle).toContain('owl:someValuesFrom ex:Person');
+    expect(turtle).not.toMatch(/<(hasChild|Person)>/);
+  });
+
+  it('expands CURIEs, keeps full IRIs, and resolves every kind of name', () => {
+    const expr = parseClassExpressionStrict('owl:Thing and ex:p value alice and <https://example.org/other#q> some {bob}');
+    expect(resolveRestrictionNames(expr, prefixes, 'ex')).toEqual(
+      parseClassExpressionStrict(`<http://www.w3.org/2002/07/owl#Thing> and <${EX}p> value <${EX}alice> and <https://example.org/other#q> some {<${EX}bob>}`),
+    );
+  });
+
+  it('refuses, with a message for the user, what it cannot resolve', () => {
+    expect(() => resolveRestrictionNames(parseClassExpressionStrict('foo:p some Person'), prefixes, 'ex')).toThrow(`"foo:p" uses a prefix this file doesn't declare.`);
+    expect(() => resolveRestrictionNames(parseClassExpressionStrict('hasChild some Person'), prefixes, 'nope')).toThrow(
+      '"hasChild" has no prefix, and this file has no namespace for new terms to go in.',
+    );
   });
 });

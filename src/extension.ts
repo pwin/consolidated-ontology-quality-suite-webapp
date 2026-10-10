@@ -16,6 +16,7 @@ import {
   promptClassNameAndLabel,
   promptClassRestriction,
   renderAddClassWithParentsTurtle,
+  resolveRestrictionNames,
   promptAddSubProperty,
   renderAddSubPropertyTurtle,
 } from './ontology/scaffold';
@@ -304,9 +305,9 @@ export function activate(context: vscode.ExtensionContext): void {
 
       const names = await promptClassNameAndLabel(`subclass of ${parentLabel}`);
       if (!names) return;
-      const restrictionExpr = await promptClassRestriction();
-
       const localPrefix = choosePrimaryPrefix(prefixes);
+      const restrictionExpr = await promptClassRestriction((expr) => resolveRestrictionNames(expr, prefixes, localPrefix));
+
       const turtle = await renderAddClassWithParentsTurtle(
         { className: names.className, label: names.label, prefix: localPrefix, parentIris: [node.term.iri], restrictionExpr },
         prefixes,
@@ -332,9 +333,9 @@ export function activate(context: vscode.ExtensionContext): void {
 
       const names = await promptClassNameAndLabel(`sibling of ${siblingLabel}`);
       if (!names) return;
-      const restrictionExpr = await promptClassRestriction();
-
       const localPrefix = choosePrimaryPrefix(prefixes);
+      const restrictionExpr = await promptClassRestriction((expr) => resolveRestrictionNames(expr, prefixes, localPrefix));
+
       // Same named parent(s) the sibling itself has (possibly none, if the sibling is a root class).
       const turtle = await renderAddClassWithParentsTurtle(
         { className: names.className, label: names.label, prefix: localPrefix, parentIris: node.term.subClassOf, restrictionExpr },

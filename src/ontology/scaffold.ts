@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { GIST } from '../rdf/vocab';
-import { ClassExpr, parseClassExpression } from '../rdf/formats/classExpression';
+import { ClassExpr, ClassExpressionSyntaxError, parseClassExpressionStrict } from '../rdf/formats/classExpression';
 import { AddClassOptions, AddPropertyOptions, humanize } from './scaffoldRender';
 
 export * from './scaffoldRender';
@@ -163,11 +163,13 @@ export async function promptClassNameAndLabel(promptContext: string): Promise<{ 
 
 /**
  * Optional Manchester class-expression restriction, e.g. `hasChild some Person`
- * or `Person and (hasChild some Person)`. Retries on a parse error rather than
- * silently dropping what the user typed; Esc/empty at any point skips it
- * (the class is still created, just without the extra restriction).
+ * or `Person and (hasChild some Person)`. Read strictly, so a stray word is an
+ * error rather than dropped, and its names resolved by `resolveNames` (see
+ * resolveRestrictionNames). Retries on either error rather than silently
+ * dropping what the user typed; Esc/empty at any point skips it (the class is
+ * still created, just without the extra restriction).
  */
-export async function promptClassRestriction(): Promise<ClassExpr | undefined> {
+export async function promptClassRestriction(resolveNames: (expr: ClassExpr) => ClassExpr): Promise<ClassExpr | undefined> {
   const choice = await vscode.window.showQuickPick(
     [
       { label: 'No', description: 'just a plain subclass' },
@@ -184,13 +186,11 @@ export async function promptClassRestriction(): Promise<ClassExpr | undefined> {
     });
     if (!text) return undefined; // cancelled -- create the class without a restriction
     try {
-      const expr = parseClassExpression(text);
-      if (expr) return expr;
-      const retry = await vscode.window.showErrorMessage(`Could not parse "${text}" as a class expression.`, 'Try again', 'Skip');
-      if (retry !== 'Try again') return undefined;
+      return resolveNames(parseClassExpressionStrict(text));
     } catch (err) {
+      const where = err instanceof ClassExpressionSyntaxError ? ` (at character ${err.offset + 1})` : '';
       const retry = await vscode.window.showErrorMessage(
-        `Parse error: ${err instanceof Error ? err.message : String(err)}`,
+        `Could not use "${text}": ${err instanceof Error ? err.message : String(err)}${where}`,
         'Try again',
         'Skip',
       );
