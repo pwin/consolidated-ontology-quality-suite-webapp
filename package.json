@@ -458,6 +458,7 @@
     "watch": "node esbuild.js --watch",
     "package": "node esbuild.js --production",
     "vsix": "node package-vsix.mjs",
+    "npm-package": "node npm-package.js",
     "vscode:prepublish": "npm run package",
     "typecheck": "tsc --noEmit -p .",
     "lint": "eslint src",

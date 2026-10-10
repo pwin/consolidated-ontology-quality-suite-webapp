@@ -9,6 +9,9 @@ esbuild.js
 esbuild.test.js
 package-vsix.mjs
 ts-plugin-build.js
+npm-package.js
+dist-npm/**
+resources/npm/**
 tsconfig.json
 vitest.config.mts
 *.tsbuildinfo

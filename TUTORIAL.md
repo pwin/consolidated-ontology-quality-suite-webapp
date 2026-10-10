@@ -493,6 +493,50 @@ defclass('FeedingTime', { equivalentClass: mx`{morning, evening}` });
   The editor marks a syntax error inside the template as you type, and
   using a class where a property belongs stops the script with an error.
 
+### Individuals, property axioms and datatypes
+
+Open **`examples/scripting/zoo.ontology.ts`**, which uses the whole
+language. Its newer parts, from 0.15.0, follow Owlready2 and Tawny-OWL:
+
+```typescript
+const livesIn = defobjectproperty('livesIn', { domain: Animal, range: Enclosure, characteristics: ['functional'] });
+const partOf = defobjectproperty('partOf', { domain: Place, range: Place, characteristics: ['transitive'] });
+// An animal is located in whatever its enclosure is part of.
+defobjectproperty('locatedIn', { chain: [livesIn, partOf] });
+const age = defdatatypeproperty('age', { domain: Animal, range: datatype('xsd:integer', { minInclusive: 0, maxInclusive: 150 }), characteristics: ['functional'] });
+
+const pool = defindividual('penguinPool', { types: [Enclosure], facts: [[partOf, coast], [name, 'Penguin pool']] });
+const pingu = defindividual('pingu', { types: [Penguin], facts: [[livesIn, pool], [name, 'Pingu'], [age, 7]] });
+allDifferent(coast, pool, pingu, sam);
+```
+
+- **`defindividual`** declares an `owl:NamedIndividual` with its `types`
+  (classes or class expressions), `facts`, `sameAs` and `differentFrom`.
+  A fact pairs an object property with an individual, or a datatype
+  property with a literal: a string, number, boolean, `{ value, language }`
+  or `{ value, datatype }`. The editor marks a fact of the wrong kind
+  before the script runs. **`allDifferent`** writes `owl:differentFrom`
+  for every pair, the form the reasoner reads.
+- **Object properties** take `characteristics` (`functional`,
+  `inverseFunctional`, `transitive`, `symmetric`, `asymmetric`,
+  `reflexive`, `irreflexive`), `inverseOf` and a property `chain`. A named
+  inverse draws Local Checks' MDL-001 hint, after gist's convention.
+- **Datatype properties** take a `range` from `datatype('xsd:integer',
+  { minInclusive: 0 })`, with any of OWL 2's facets, and can be
+  `functional`.
+- **`classRef`, `objectPropertyRef`, `datatypePropertyRef` and
+  `individualRef`** name a term declared elsewhere, such as
+  `classRef('gist:Person')`, or later in the script. They write nothing.
+
+### Outside VS Code: the npm package
+
+The DSL is also published on npm as `ontology-suite`, so a script
+type-checks anywhere after `npm install --save-dev ontology-suite`: in CI,
+or another editor. `build()` returns the ontology as RDF/JS quads. Inside
+VS Code the extension needs no package; if one is installed, the editor
+uses its types and the extension still runs the script with its own DSL,
+so keep the two at the same version.
+
 ## Where to go next
 
 - `README.md` — full command/settings reference, architecture diagram,

@@ -118,11 +118,15 @@ Validation" and "Full Triplify" commands, degrading gracefully if absent.
   file (full IntelliSense/type-checking, not a custom language) using a
   small DSL (`ontology-suite/dsl`: `defontology` (the header: version IRI,
   imports, annotations), `defclass` (`subClassOf`, `equivalentClass`,
-  `disjointWith`), `defobjectproperty`, `defdatatypeproperty`, labels and
-  annotations in any language, restriction-builders
-  `some`/`only`/`and`/`or`/`not`/cardinality, Manchester Syntax through
-  `` mx`...` `` (checked as you type), and Tawny-OWL's `someOnly` and
-  `asSubclasses` patterns) — and run it to generate real Turtle. Inspired by
+  `disjointWith`), `defobjectproperty` (characteristics, inverse, chain),
+  `defdatatypeproperty` (datatype ranges with facets), `defindividual`
+  (types and facts), labels and annotations in any language,
+  restriction-builders `some`/`only`/`and`/`or`/`not`/cardinality,
+  Manchester Syntax through `` mx`...` `` (checked as you type), and
+  Tawny-OWL's `someOnly` and `asSubclasses` patterns) — and run it to
+  generate real Turtle. The DSL is also on npm as
+  [`ontology-suite`](https://www.npmjs.com/package/ontology-suite), for
+  type-checking scripts outside VS Code. Inspired by
   [Tawny-OWL](https://github.com/phillord/tawny-owl)'s idea of using a real
   programming language's abstraction facilities (functions, loops) for
   ontology patterns instead of clicking through a GUI once per term.
