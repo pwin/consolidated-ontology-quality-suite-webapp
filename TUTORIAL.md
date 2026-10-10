@@ -449,6 +449,50 @@ resolves to a local file by that file's ontology IRI or its
 `owl:versionIRI`, so Run Local Checks finds the imported ontology either
 way.
 
+### Manchester Syntax, annotations and patterns
+
+Three more parts of the language, in one script:
+
+```typescript
+import { ontology, defclass, defobjectproperty, mx, someOnly, asSubclasses } from 'ontology-suite/dsl';
+
+ontology('http://example.org/zoo#', 'zoo');
+
+const Animal = defclass('Animal', { label: [{ value: 'animal', language: 'en' }, { value: 'Tier', language: 'de' }] });
+const Food = defclass('Food', { label: 'food' });
+const eats = defobjectproperty('eats', {
+  label: 'eats',
+  annotations: { 'skos:definition': { value: 'What an animal is fed.', language: 'en' } },
+});
+
+// Three kinds of food: disjoint, and between them covering Food.
+const [Fish, Insect, Plant] = asSubclasses(Food, [defclass('Fish'), defclass('Insect'), defclass('Plant')], { disjoint: true, cover: true });
+
+// A puffin eats fish and insects, and nothing else.
+defclass('Puffin', { subClassOf: [Animal, ...someOnly(eats, Fish, Insect)] });
+
+// Manchester Syntax where text is quicker: a defined class, and an enumeration.
+defclass('Herbivore', { equivalentClass: mx`Animal and ${eats} only ${Plant}` });
+defclass('FeedingTime', { equivalentClass: mx`{morning, evening}` });
+```
+
+- **Labels, comments and annotations.** Any class or property takes a
+  label or comment as a plain string, `{ value, language }`, or a list of
+  them, and `annotations` as `defontology()` does.
+- **`asSubclasses(parent, children, { disjoint, cover })`**, after
+  Tawny-OWL's `as-subclasses`. `disjoint` writes `owl:disjointWith` for
+  every pair, the form the reasoner's `REA-DISJOINT` check reads; `cover`
+  makes the parent a subclass of the children's union.
+- **`someOnly(property, ...fillers)`**, after Tawny-OWL's `some-only`: a
+  `some` restriction for each filler and an `only` over their union.
+  Spread it into `subClassOf`.
+- **`` mx`...` ``** takes a class expression in Manchester Syntax, including
+  the enumerations (`{a, b}`) and `Self` that the builders lack. A bare name
+  is a term of this ontology and a CURIE uses `ontology()`'s prefixes;
+  `${...}` takes a class, property, class expression, number or string.
+  The editor marks a syntax error inside the template as you type, and
+  using a class where a property belongs stops the script with an error.
+
 ## Where to go next
 
 - `README.md` — full command/settings reference, architecture diagram,

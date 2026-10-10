@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { shrink } from './vocab';
+import { resolveTermName, shrink } from './vocab';
 
 const DEMO = 'http://example.org/demo#';
 
@@ -31,5 +31,21 @@ describe('shrink', () => {
 
   it('ignores a prefix bound to an empty namespace', () => {
     expect(shrink(`${DEMO}Thing`, { bad: '', ex: DEMO })).toBe('ex:Thing');
+  });
+});
+
+describe('resolveTermName', () => {
+  const prefixes = { ex: DEMO };
+
+  it('keeps a full IRI, expands a CURIE, and puts a bare name in the default namespace', () => {
+    expect(resolveTermName('https://example.org/x#A', prefixes)).toBe('https://example.org/x#A');
+    expect(resolveTermName('urn:example:a', prefixes)).toBe('urn:example:a');
+    expect(resolveTermName('ex:A', prefixes)).toBe(`${DEMO}A`);
+    expect(resolveTermName('A', prefixes, DEMO)).toBe(`${DEMO}A`);
+  });
+
+  it('gives up, rather than guess, on an unknown prefix or a bare name with nowhere to go', () => {
+    expect(resolveTermName('foo:A', prefixes, DEMO)).toBeUndefined();
+    expect(resolveTermName('A', prefixes)).toBeUndefined();
   });
 });

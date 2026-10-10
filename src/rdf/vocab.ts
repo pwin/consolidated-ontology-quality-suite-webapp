@@ -97,3 +97,15 @@ export function expand(curie: string, prefixes: Record<string, string>): string 
   const ns = prefixes[prefix];
   return ns ? ns + local : null;
 }
+
+/**
+ * A term's IRI from how it was written: a full IRI as it is, a CURIE expanded over `prefixes`,
+ * and a bare name (no `:`) in `defaultNamespace`, as Manchester Syntax reads one. Undefined for a
+ * CURIE whose prefix `prefixes` lacks, or a bare name with no default namespace -- never a guess
+ * that would be written out as the wrong IRI.
+ */
+export function resolveTermName(ref: string, prefixes: Record<string, string>, defaultNamespace?: string): string | undefined {
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(ref) || /^urn:/i.test(ref)) return ref;
+  if (!ref.includes(':')) return defaultNamespace === undefined ? undefined : `${defaultNamespace}${ref}`;
+  return expand(ref, prefixes) ?? undefined;
+}

@@ -1,4 +1,4 @@
-import { DataFactory, Quad, Quad_Object } from 'n3';
+import { DataFactory, NamedNode, Quad, Quad_Object } from 'n3';
 import {
   RDF_TYPE,
   RDFS_LABEL,
@@ -19,9 +19,10 @@ import {
   OWL_IMPORTS,
   XSD,
   WELL_KNOWN_PREFIXES,
-  expand,
+  resolveTermName,
 } from '../rdf/vocab';
-import { ClassExpr, classExprToRdf } from '../rdf/formats/classExpression';
+import { classExprToRdf } from '../rdf/formats/classExpression';
+import { ClassExpr, ClassExpressionSyntaxError, mapClassExprNames, parseClassExpressionStrict } from '../rdf/formats/classExpressionParser';
 
 /**
  * Tawny-OWL-inspired scripting DSL: build an ontology as real TypeScript
@@ -85,17 +86,25 @@ function requireCurrent(): OntologyBuilder {
 /** An annotation's value. A plain string is an xsd:string literal. */
 export type AnnotationValue = string | { iri: string } | { value: string; language: string } | { value: string; datatype: string };
 
-export interface DefOntologyOptions {
+/** A label's or comment's text: plain, or tagged with its language. */
+export type TextValue = string | { value: string; language: string };
+
+/** What the ontology and every class and property can carry. */
+export interface Annotated {
+  /** One label, or several -- one per language, say. */
+  label?: TextValue | TextValue[];
+  comment?: TextValue | TextValue[];
+  /** Any other annotation, keyed by property (`'skos:definition'`, or a full IRI). A list gives the property several values. */
+  annotations?: Record<string, AnnotationValue | AnnotationValue[]>;
+}
+
+export interface DefOntologyOptions extends Annotated {
   versionIRI?: string;
   versionInfo?: string;
   /** owl:priorVersion -- the IRI of the version this one replaces. */
   priorVersion?: string;
   /** One owl:imports per IRI. The extension resolves an import to a local file by the file's ontology IRI or its owl:versionIRI. */
   imports?: string[];
-  label?: string;
-  comment?: string;
-  /** Any other annotation on the ontology, keyed by property (`'dcterms:creator'`, or a full IRI). A list gives the property several values. */
-  annotations?: Record<string, AnnotationValue | AnnotationValue[]>;
 }
 
 /**
@@ -113,11 +122,24 @@ export function defontology(iri: string, opts: DefOntologyOptions = {}): void {
   if (opts.versionInfo) add(OWL_VERSION_INFO, literal(opts.versionInfo, namedNode(XSD_STRING)));
   if (opts.priorVersion) add(OWL_PRIOR_VERSION, namedNode(resolveIri(b, opts.priorVersion)));
   for (const imported of opts.imports ?? []) add(OWL_IMPORTS, namedNode(resolveIri(b, imported)));
-  if (opts.label) add(RDFS_LABEL, literal(opts.label, namedNode(XSD_STRING)));
-  if (opts.comment) add(RDFS_COMMENT, literal(opts.comment, namedNode(XSD_STRING)));
-  for (const [property, values] of Object.entries(opts.annotations ?? {})) {
-    for (const value of Array.isArray(values) ? values : [values]) add(resolveIri(b, property), annotationObject(b, value));
-  }
+  b.header.push(...annotations(b, subject, opts));
+}
+
+/** `opts`'s labels, comments and other annotations, as triples about `subject`. An empty label or comment is left out. */
+function annotations(b: OntologyBuilder, subject: NamedNode, opts: Annotated): Quad[] {
+  const listOf = <T>(x: T | T[] | undefined): T[] => (x === undefined ? [] : Array.isArray(x) ? x : [x]);
+  const texts = (predicate: string, values: TextValue | TextValue[] | undefined) =>
+    listOf(values)
+      .map((t) => (typeof t === 'string' ? { value: t, language: undefined } : t))
+      .filter((t) => t.value !== '')
+      .map((t) => quad(subject, namedNode(predicate), t.language ? literal(t.value, t.language) : literal(t.value, namedNode(XSD_STRING))));
+  return [
+    ...texts(RDFS_LABEL, opts.label),
+    ...texts(RDFS_COMMENT, opts.comment),
+    ...Object.entries(opts.annotations ?? {}).flatMap(([property, values]) =>
+      listOf(values).map((value) => quad(subject, namedNode(resolveIri(b, property)), annotationObject(b, value))),
+    ),
+  ];
 }
 
 function annotationObject(b: OntologyBuilder, value: AnnotationValue): Quad_Object {
@@ -129,10 +151,14 @@ function annotationObject(b: OntologyBuilder, value: AnnotationValue): Quad_Obje
 
 /** A full IRI as given, or a CURIE expanded over the ontology's prefixes. */
 function resolveIri(b: OntologyBuilder, ref: string): string {
-  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(ref) || /^urn:/i.test(ref)) return ref;
-  const expanded = expand(ref, b.prefixes);
-  if (expanded) return expanded;
+  const iri = resolveTermName(ref, b.prefixes);
+  if (iri) return iri;
   throw new Error(`"${ref}" is neither a full IRI nor a CURIE with a known prefix. Add the prefix to ontology()'s third argument.`);
+}
+
+/** As resolveIri, and a bare name (no `:`) is a term in this ontology, as in Manchester Syntax. */
+function resolveName(b: OntologyBuilder, ref: string): string {
+  return ref.includes(':') ? resolveIri(b, ref) : resolveTermName(ref, b.prefixes, b.baseIri)!;
 }
 
 function toClassExprNode(b: OntologyBuilder, x: ClassRef | ClassExpr) {
@@ -140,9 +166,7 @@ function toClassExprNode(b: OntologyBuilder, x: ClassRef | ClassExpr) {
   return classExprToRdf(expr, b.prefixes, b.quads);
 }
 
-export interface DefClassOptions {
-  label?: string;
-  comment?: string;
+export interface DefClassOptions extends Annotated {
   /** Named parents and/or restriction expressions (e.g. `some(hasChild, Person)`) -- each becomes its own rdfs:subClassOf triple, exactly like the Outline's "Add Subclass" + optional Manchester restriction. */
   subClassOf?: (ClassRef | ClassExpr)[];
   /** Full definition (necessary+sufficient conditions) -- see gist's own convention (MDL-002): reserve this for genuinely defined classes, not a casual alias between two named classes. */
@@ -156,8 +180,7 @@ export function defclass(name: string, opts: DefClassOptions = {}): ClassRef {
   const iri = `${b.baseIri}${name}`;
   const subject = namedNode(iri);
   b.quads.push(quad(subject, namedNode(RDF_TYPE), namedNode(OWL_CLASS)));
-  if (opts.label) b.quads.push(quad(subject, namedNode(RDFS_LABEL), literal(opts.label, namedNode(XSD_STRING))));
-  if (opts.comment) b.quads.push(quad(subject, namedNode(RDFS_COMMENT), literal(opts.comment, namedNode(XSD_STRING))));
+  b.quads.push(...annotations(b, subject, opts));
   for (const parent of opts.subClassOf ?? []) {
     b.quads.push(quad(subject, namedNode(RDFS_SUBCLASS_OF), toClassExprNode(b, parent)));
   }
@@ -170,9 +193,7 @@ export function defclass(name: string, opts: DefClassOptions = {}): ClassRef {
   return { kind: 'class', iri, localName: name };
 }
 
-export interface DefPropertyOptions {
-  label?: string;
-  comment?: string;
+export interface DefPropertyOptions extends Annotated {
   domain?: ClassRef;
   range?: ClassRef;
   subPropertyOf?: PropertyRef;
@@ -184,8 +205,7 @@ function defproperty(kind: 'objectProperty' | 'datatypeProperty', name: string, 
   const subject = namedNode(iri);
   const owlType = kind === 'objectProperty' ? OWL_OBJECT_PROPERTY : OWL_DATATYPE_PROPERTY;
   b.quads.push(quad(subject, namedNode(RDF_TYPE), namedNode(owlType)));
-  if (opts.label) b.quads.push(quad(subject, namedNode(RDFS_LABEL), literal(opts.label, namedNode(XSD_STRING))));
-  if (opts.comment) b.quads.push(quad(subject, namedNode(RDFS_COMMENT), literal(opts.comment, namedNode(XSD_STRING))));
+  b.quads.push(...annotations(b, subject, opts));
   if (opts.domain) b.quads.push(quad(subject, namedNode(RDFS_DOMAIN), namedNode(opts.domain.iri)));
   if (opts.range) b.quads.push(quad(subject, namedNode(RDFS_RANGE), namedNode(opts.range.iri)));
   if (opts.subPropertyOf) b.quads.push(quad(subject, namedNode(RDFS_SUBPROPERTY_OF), namedNode(opts.subPropertyOf.iri)));
@@ -264,8 +284,141 @@ export function not(operand: ClassRef | ClassExpr): ClassExpr {
   return { kind: 'not', operand: exprOf(operand) };
 }
 
-/** Called once, at the end of the script, to hand the built model back to the runner (see scriptRunnerEntry.ts). */
+// ---------------------------------------------------------------------------
+// Manchester Syntax, as a tagged template
+// ---------------------------------------------------------------------------
+
+/** What a `${...}` inside mx can hold. */
+export type MxValue = Ref | ClassExpr | string | number;
+
+const MX_NESTED = 'urn:x-ontology-suite-mx:';
+
+/**
+ * A class expression written in Manchester Syntax, usable wherever a builder's result is:
+ *
+ *   defclass('OwnedAnimal', { subClassOf: [Animal, mx`${hasOwner} some ${Person}`] });
+ *
+ * Interpolate this script's classes and properties (`${Person}`) to keep their type checks and
+ * renames. A name written in the text is resolved when the script runs: a bare name against the
+ * base IRI, a CURIE over ontology()'s prefixes. An interpolated string is a literal, a number a
+ * cardinality, and a class expression stands where a class would. The text must be exactly one
+ * expression; the editor marks a syntax error in it as you type.
+ */
+export function mx(strings: TemplateStringsArray, ...values: MxValue[]): ClassExpr {
+  const b = requireCurrent();
+  const nested: ClassExpr[] = [];
+  const refs = new Map<string, Ref>();
+  let text = strings[0];
+  values.forEach((value, i) => {
+    text += mxToken(value, nested, refs) + strings[i + 1];
+  });
+  let expr: ClassExpr;
+  try {
+    expr = parseClassExpressionStrict(text);
+  } catch (err) {
+    if (err instanceof ClassExpressionSyntaxError) throw new Error(`mx: ${err.message}\n  ${text}\n  ${' '.repeat(err.offset)}^`);
+    throw err;
+  }
+  return resolveMx(b, expr, nested, refs);
+}
+
+/** The Manchester text an interpolated value stands for. */
+function mxToken(value: MxValue, nested: ClassExpr[], refs: Map<string, Ref>): string {
+  if (typeof value === 'number') {
+    if (!Number.isInteger(value) || value < 0) throw new Error(`mx: ${value} is not a cardinality (a whole number, 0 or more).`);
+    return String(value);
+  }
+  if (typeof value === 'string') return `"${value.replace(/["\\]/g, '\\$&')}"`;
+  if ('localName' in value) {
+    refs.set(value.iri, value);
+    return `<${value.iri}>`;
+  }
+  nested.push(value);
+  return `<${MX_NESTED}${nested.length - 1}>`;
+}
+
+/** Resolves every name in a parsed mx expression, and checks each interpolated class or property is used as one. */
+function resolveMx(b: OntologyBuilder, expr: ClassExpr, nested: ClassExpr[], refs: Map<string, Ref>): ClassExpr {
+  const isNested = (iri: string) => iri.startsWith(MX_NESTED);
+  return mapClassExprNames(expr, {
+    class: (iri) => {
+      if (isNested(iri)) return nested[Number(iri.slice(MX_NESTED.length))];
+      const ref = refs.get(iri);
+      if (ref && ref.kind !== 'class') throw new Error(`mx: ${ref.localName} is a property, used here as a class.`);
+      return { kind: 'class', iri: resolveName(b, iri) };
+    },
+    property: (iri) => {
+      if (isNested(iri)) throw new Error('mx: a class expression is used here as a property.');
+      const ref = refs.get(iri);
+      if (ref && ref.kind === 'class') throw new Error(`mx: ${ref.localName} is a class, used here as a property.`);
+      return resolveName(b, iri);
+    },
+    individual: (iri) => {
+      if (isNested(iri)) throw new Error('mx: a class expression is used here as an individual.');
+      return resolveName(b, iri);
+    },
+    datatype: (iri) => resolveName(b, iri),
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Patterns, after Tawny-OWL's
+// ---------------------------------------------------------------------------
+
+/**
+ * Tawny-OWL's some-only, a closure axiom: `property some` each filler, and `property only` their
+ * union -- at least one of each, and nothing else. Spread it into subClassOf:
+ *
+ *   defclass('MargheritaPizza', { subClassOf: [Pizza, ...someOnly(hasTopping, Mozzarella, Tomato)] });
+ */
+export function someOnly(property: PropertyRef, ...fillers: (ClassRef | ClassExpr)[]): ClassExpr[] {
+  if (fillers.length === 0) throw new Error('someOnly() needs at least one filler.');
+  return [...fillers.map((filler) => some(property, filler)), only(property, fillers.length === 1 ? fillers[0] : or(...fillers))];
+}
+
+export interface AsSubclassesOptions {
+  /** Every child owl:disjointWith every other. Written pairwise, the form the extension's reasoner checks (REA-DISJOINT), not as owl:AllDisjointClasses. */
+  disjoint?: boolean;
+  /** The covering axiom: the parent is a subclass of the children's union, so each of its members is in one of them. */
+  cover?: boolean;
+}
+
+/**
+ * Tawny-OWL's as-subclasses: makes each child a subclass of `parent`, and optionally the children
+ * pairwise disjoint and covering it. Returns the children, so it can wrap their declarations:
+ *
+ *   const [Mammal, Bird] = asSubclasses(Animal, [defclass('Mammal'), defclass('Bird')], { disjoint: true, cover: true });
+ */
+export function asSubclasses(parent: ClassRef, children: ClassRef[], opts: AsSubclassesOptions = {}): ClassRef[] {
+  const b = requireCurrent();
+  for (const child of children) b.quads.push(quad(namedNode(child.iri), namedNode(RDFS_SUBCLASS_OF), namedNode(parent.iri)));
+  if (opts.disjoint) {
+    children.forEach((child, i) => {
+      for (const other of children.slice(i + 1)) b.quads.push(quad(namedNode(child.iri), namedNode(OWL_DISJOINT_WITH), namedNode(other.iri)));
+    });
+  }
+  if (opts.cover && children.length > 0) {
+    b.quads.push(quad(namedNode(parent.iri), namedNode(RDFS_SUBCLASS_OF), toClassExprNode(b, children.length === 1 ? children[0] : or(...children))));
+  }
+  return children;
+}
+
+/**
+ * Called once, at the end of the script, to hand the built model back to the runner (see
+ * scriptRunnerEntry.ts). A triple stated twice -- a child given its parent both by defclass and
+ * by asSubclasses, say -- is written once; one with a blank node is always kept, since two
+ * restrictions alike are still two nodes.
+ */
 export function build(): { quads: Quad[]; prefixes: Record<string, string> } {
   const b = requireCurrent();
-  return { quads: [...b.header, ...b.quads], prefixes: b.prefixes };
+  const seen = new Set<string>();
+  const quads = [...b.header, ...b.quads].filter((q) => {
+    if (q.subject.termType === 'BlankNode' || q.object.termType === 'BlankNode') return true;
+    const o = q.object;
+    const key = JSON.stringify([q.subject.value, q.predicate.value, o.termType, o.value, o.termType === 'Literal' ? [o.language, o.datatype.value] : null]);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  return { quads, prefixes: b.prefixes };
 }

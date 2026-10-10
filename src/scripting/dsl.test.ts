@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import type { Literal, Quad } from 'n3';
-import { ontology, defontology, defclass, defobjectproperty, defdatatypeproperty, some, only, and, or, not, minCardinality, hasValue, build } from './dsl';
+import { ontology, defontology, defclass, defobjectproperty, defdatatypeproperty, some, only, and, or, not, minCardinality, hasValue, mx, someOnly, asSubclasses, build } from './dsl';
 
 const RDF_TYPE = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type';
 const OWL_CLASS = 'http://www.w3.org/2002/07/owl#Class';
@@ -162,5 +162,154 @@ describe('defontology', () => {
   it('refuses a second header', () => {
     defontology('http://example.org/zoo');
     expect(() => defontology('http://example.org/zoo')).toThrow(/already called/);
+  });
+});
+
+describe('labels, comments and annotations on classes and properties', () => {
+  const ZOO = 'http://example.org/zoo#';
+  const RDFS = 'http://www.w3.org/2000/01/rdf-schema#';
+  const SKOS = 'http://www.w3.org/2004/02/skos/core#';
+  const about = (quads: Quad[], subject: string, predicate: string) =>
+    quads.filter((q) => q.subject.value === `${ZOO}${subject}` && q.predicate.value === predicate).map((q) => q.object as Literal);
+
+  beforeEach(() => {
+    ontology(ZOO, 'zoo');
+  });
+
+  it('takes a label per language, and keeps a plain one plain', () => {
+    defclass('Animal', { label: [{ value: 'animal', language: 'en' }, { value: 'Tier', language: 'de' }], comment: 'A living creature.' });
+    const { quads } = build();
+    expect(about(quads, 'Animal', RDFS_LABEL).map((l) => [l.value, l.language])).toEqual([
+      ['animal', 'en'],
+      ['Tier', 'de'],
+    ]);
+    const [comment] = about(quads, 'Animal', `${RDFS}comment`);
+    expect([comment.value, comment.language, comment.datatype.value]).toEqual(['A living creature.', '', 'http://www.w3.org/2001/XMLSchema#string']);
+  });
+
+  it('writes any other annotation on a class or a property', () => {
+    defclass('Animal', {
+      annotations: { 'skos:definition': { value: 'A living creature.', language: 'en' }, 'rdfs:seeAlso': { iri: 'https://en.wikipedia.org/wiki/Animal' } },
+    });
+    defobjectproperty('livesIn', { label: 'lives in', annotations: { 'skos:altLabel': ['resides in', 'is housed in'] } });
+    const { quads } = build();
+    expect(about(quads, 'Animal', `${SKOS}definition`)[0].language).toBe('en');
+    expect(about(quads, 'Animal', `${RDFS}seeAlso`)[0].termType).toBe('NamedNode');
+    expect(about(quads, 'livesIn', `${SKOS}altLabel`).map((l) => l.value)).toEqual(['resides in', 'is housed in']);
+  });
+
+  it('leaves out an empty label, as before', () => {
+    defclass('Animal', { label: '' });
+    expect(about(build().quads, 'Animal', RDFS_LABEL)).toEqual([]);
+  });
+});
+
+describe('patterns: someOnly and asSubclasses', () => {
+  const ZOO = 'http://example.org/zoo#';
+  const OWL = 'http://www.w3.org/2002/07/owl#';
+  const named = (quads: Quad[], predicate: string) =>
+    quads.filter((q) => q.predicate.value === predicate && q.object.termType === 'NamedNode').map((q) => [q.subject.value.replace(ZOO, ''), q.object.value.replace(ZOO, '')]);
+
+  beforeEach(() => {
+    ontology(ZOO, 'zoo');
+  });
+
+  it('someOnly: some of each filler, and only their union', () => {
+    const hasTopping = defobjectproperty('hasTopping');
+    const Mozzarella = defclass('Mozzarella');
+    const Tomato = defclass('Tomato');
+    expect(someOnly(hasTopping, Mozzarella, Tomato)).toEqual([some(hasTopping, Mozzarella), some(hasTopping, Tomato), only(hasTopping, or(Mozzarella, Tomato))]);
+    expect(someOnly(hasTopping, Tomato)).toEqual([some(hasTopping, Tomato), only(hasTopping, Tomato)]);
+    expect(() => someOnly(hasTopping)).toThrow('someOnly() needs at least one filler.');
+  });
+
+  it('asSubclasses: each child under the parent, pairwise disjoint, and covering it', () => {
+    const Animal = defclass('Animal');
+    const children = [defclass('Mammal'), defclass('Bird'), defclass('Reptile')];
+    expect(asSubclasses(Animal, children, { disjoint: true, cover: true })).toBe(children);
+    const { quads } = build();
+    expect(named(quads, RDFS_SUBCLASS_OF)).toEqual([
+      ['Mammal', 'Animal'],
+      ['Bird', 'Animal'],
+      ['Reptile', 'Animal'],
+    ]);
+    expect(named(quads, `${OWL}disjointWith`)).toEqual([
+      ['Mammal', 'Bird'],
+      ['Mammal', 'Reptile'],
+      ['Bird', 'Reptile'],
+    ]);
+    const cover = quads.find((q) => q.subject.value === `${ZOO}Animal` && q.predicate.value === RDFS_SUBCLASS_OF)!;
+    expect(cover.object.termType).toBe('BlankNode');
+    expect(quads.some((q) => q.subject.equals(cover.object) && q.predicate.value === `${OWL}unionOf`)).toBe(true);
+  });
+
+  it('asSubclasses writes nothing more than asked for', () => {
+    const Animal = defclass('Animal');
+    asSubclasses(Animal, [defclass('Mammal'), defclass('Bird')]);
+    const { quads } = build();
+    expect(named(quads, `${OWL}disjointWith`)).toEqual([]);
+    expect(quads.some((q) => q.subject.value === `${ZOO}Animal` && q.predicate.value === RDFS_SUBCLASS_OF)).toBe(false);
+  });
+
+  it('build writes a triple stated twice once, and keeps restrictions that look alike', () => {
+    const Animal = defclass('Animal');
+    const livesIn = defobjectproperty('livesIn');
+    const Dog = defclass('Dog', { subClassOf: [Animal, some(livesIn, Animal), some(livesIn, Animal)] });
+    asSubclasses(Animal, [Dog]);
+    const { quads } = build();
+    expect(named(quads, RDFS_SUBCLASS_OF)).toEqual([['Dog', 'Animal']]);
+    expect(quads.filter((q) => q.predicate.value === `${OWL}someValuesFrom`)).toHaveLength(2);
+  });
+});
+
+describe('mx', () => {
+  const ZOO = 'http://example.org/zoo#';
+  const GIST = 'https://w3id.org/semanticarts/ns/ontology/gist/';
+  const cls = (local: string, ns = ZOO) => ({ kind: 'class', iri: `${ns}${local}` });
+
+  beforeEach(() => {
+    ontology(ZOO, 'zoo');
+  });
+
+  it('reads a bare name as a term of this ontology, and a CURIE over its prefixes', () => {
+    expect(mx`livesIn some (Aquarium or gist:Place)`).toEqual({
+      kind: 'restriction',
+      property: `${ZOO}livesIn`,
+      type: 'some',
+      filler: { kind: 'or', operands: [cls('Aquarium'), cls('Place', GIST)] },
+    });
+  });
+
+  it('takes interpolated classes, properties, numbers, strings and class expressions, as the builders do', () => {
+    const Animal = defclass('Animal');
+    const hasMember = defobjectproperty('hasMember');
+    const status = defdatatypeproperty('status');
+    expect(mx`${hasMember} min ${3} ${Animal}`).toEqual(minCardinality(hasMember, 3, Animal));
+    expect(mx`${Animal} and ${some(hasMember, Animal)}`).toEqual(and(Animal, some(hasMember, Animal)));
+    expect(mx`${status} value ${'on the "red" list'}`).toEqual(hasValue(status, 'on the "red" list'));
+  });
+
+  it('covers what the builders cannot: oneOf and Self', () => {
+    expect(mx`{red, green}`).toEqual({ kind: 'oneOf', individuals: [`${ZOO}red`, `${ZOO}green`] });
+    expect(mx`grooms Self`).toEqual({ kind: 'restriction', property: `${ZOO}grooms`, type: 'self' });
+    defclass('Colour', { equivalentClass: mx`{red, green}` });
+    expect(build().quads.some((q) => q.predicate.value === 'http://www.w3.org/2002/07/owl#oneOf')).toBe(true);
+  });
+
+  it('refuses a class used as a property, and a property used as a class', () => {
+    const Animal = defclass('Animal');
+    const eats = defobjectproperty('eats');
+    expect(() => mx`${Animal} some ${eats}`).toThrow('mx: Animal is a class, used here as a property.');
+    expect(() => mx`eats some ${eats}`).toThrow('mx: eats is a property, used here as a class.');
+  });
+
+  it('says where a syntax error is', () => {
+    expect(() => mx`livesIn soem Aquarium`).toThrow(/^mx: Unexpected 'soem' after a complete class expression\.\n {2}livesIn soem Aquarium\n {10}\^$/);
+  });
+
+  it('refuses an unknown prefix, and a cardinality that is not a whole number', () => {
+    const p = defobjectproperty('p');
+    expect(() => mx`foaf:knows some Person`).toThrow(/"foaf:knows" is neither a full IRI nor a CURIE/);
+    expect(() => mx`${p} min ${1.5}`).toThrow('mx: 1.5 is not a cardinality');
   });
 });

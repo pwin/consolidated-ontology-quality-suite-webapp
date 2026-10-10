@@ -60,6 +60,9 @@ class TsServer {
   }
 }
 
+/** A diagnostic as tsserver reports it: lines and offsets count from 1. */
+type Found = { code: number; text: string; start: { line: number; offset: number }; end: { line: number; offset: number } };
+
 describe('TypeScript plugin for ontology-suite/dsl', () => {
   // A stand-in for the installed extension (dist/, and the plugin's package in node_modules), and
   // beside it a folder of scripts with no tsconfig, which is what a user's usually is.
@@ -102,7 +105,7 @@ describe('TypeScript plugin for ontology-suite/dsl', () => {
     return file;
   }
 
-  async function errors(name: string, text: string): Promise<{ code: number; text: string }[]> {
+  async function errors(name: string, text: string): Promise<Found[]> {
     const file = open(name, text);
     return (await server.request('semanticDiagnosticsSync', { file })).body;
   }
@@ -137,6 +140,51 @@ describe('TypeScript plugin for ontology-suite/dsl', () => {
       [2307, "Cannot find module 'no-such-package' or its corresponding type declarations."],
       [2307, "Cannot find module 'n3' or its corresponding type declarations."],
     ]);
+  });
+
+  const located = (found: Found[]) => found.map((d) => [d.code, d.text, `${d.start.line}:${d.start.offset}-${d.end.line}:${d.end.offset}`]);
+
+  it('accepts well-formed mx templates, with each kind of substitution', async () => {
+    const script = [
+      "import { ontology, defclass, defobjectproperty, mx } from 'ontology-suite/dsl';",
+      "ontology('http://example.org/zoo#', 'zoo');",
+      "const Animal = defclass('Animal');",
+      "const hasMember = defobjectproperty('hasMember');",
+      "defclass('Herd', { subClassOf: [mx`${hasMember} min ${3} ${Animal}`, mx`livesIn some (Aquarium or Pond)`, mx`{red, green}`] });",
+    ].join('\n');
+    expect(await errors('mx-ok.ontology.ts', script)).toEqual([]);
+  });
+
+  it('marks a Manchester syntax error in an mx template where it is', async () => {
+    const script = ["import { mx } from 'ontology-suite/dsl';", 'const e = mx`livesIn soem Aquarium`;'].join('\n');
+    expect(located(await errors('mx-word.ontology.ts', script))).toEqual([
+      [98001, "Manchester syntax: Unexpected 'soem' after a complete class expression.", '2:22-2:26'],
+    ]);
+  });
+
+  it('marks the closing backtick when the expression stops short, and a substitution when it is the wrong kind', async () => {
+    const script = [
+      "import { defobjectproperty, mx } from 'ontology-suite/dsl';",
+      "const p = defobjectproperty('p');",
+      'const short = mx`livesIn some`;',
+      "const wrong = mx`${p} min ${'x'} Animal`;",
+    ].join('\n');
+    expect(located(await errors('mx-places.ontology.ts', script))).toEqual([
+      [98001, 'Manchester syntax: Unexpected end of class expression.', '3:30-3:31'],
+      [98001, "Manchester syntax: Expected a whole number after 'min'.", '4:29-4:32'],
+    ]);
+  });
+
+  it("checks the DSL's mx however it is imported, and no other function called mx", async () => {
+    const script = [
+      "import { mx as manchester } from 'ontology-suite/dsl';",
+      "import * as dsl from 'ontology-suite/dsl';",
+      'function mx(s: TemplateStringsArray) { return s; }',
+      'manchester`a soem b`;',
+      'dsl.mx`a soem b`;',
+      'mx`a soem b`;',
+    ].join('\n');
+    expect(located(await errors('mx-imports.ontology.ts', script)).map(([, , at]) => at)).toEqual(['4:14-4:18', '5:10-5:14']);
   });
 
   it('generates declarations that compile on their own, strict and without skipLibCheck', () => {
