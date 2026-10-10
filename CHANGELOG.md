@@ -1,5 +1,59 @@
 # Changelog
 
+## 0.14.0
+
+### Manchester Syntax in a script, checked as you type
+
+`` mx`...` `` takes a class expression in Manchester Syntax wherever a builder's result goes,
+including the enumerations (`{a, b}`) and `Self` that the builders lack:
+
+```typescript
+defclass('Herbivore', { equivalentClass: mx`Animal and ${eats} only ${Plant}` });
+defclass('FeedingTime', { equivalentClass: mx`{morning, evening}` });
+```
+
+A bare name is a term of the ontology and a CURIE uses `ontology()`'s prefixes; `${...}` takes a
+class, property, number, string or class expression. Using a class where a property belongs, or
+the reverse, stops the script with an error that names the term. The TypeScript plugin parses each
+`mx` template in the editor and marks a syntax error at its column, so `livesIn soem Aquarium` is
+underlined at `soem` before the script runs. It checks only the DSL's own `mx`, however it is
+imported.
+
+The parser behind it now has a strict mode that reports where an error is: a stray character, an
+unclosed bracket, words after a complete expression, or a cardinality that isn't a number. The
+lenient reading `.omn` files use is unchanged. The parser also moved into a module of its own with
+no imports, so the plugin loads nothing but itself into the editor.
+
+### Labels and annotations in any language, on classes and properties
+
+A label or comment takes plain text, `{ value, language }`, or a list of them, and every class and
+property takes `annotations`, as `defontology()` already did:
+
+```typescript
+const Animal = defclass('Animal', { label: [{ value: 'animal', language: 'en' }, { value: 'Tier', language: 'de' }] });
+```
+
+### Tawny-OWL's some-only and as-subclasses
+
+`someOnly(property, ...fillers)` is a closure axiom: a `some` restriction for each filler and an
+`only` over their union, to spread into `subClassOf`. `asSubclasses(parent, children, { disjoint,
+cover })` makes each child a subclass of the parent; `disjoint` writes `owl:disjointWith` for every
+pair, the form the reasoner's REA-DISJOINT check reads, and `cover` makes the parent a subclass of
+the children's union. A triple a script states twice is now written once.
+
+### The Outline's Add Subclass no longer writes relative IRIs
+
+A restriction typed into Add Subclass or Add Sibling Class went into the file with its names as
+typed. A bare name, as in the prompt's own example `hasChild some Person`, became a relative IRI,
+`<hasChild>`, and a CURIE with an undeclared prefix became an IRI with that prefix as its scheme.
+Names now resolve as `mx` resolves them: a bare name goes in the namespace the new class goes in, a
+CURIE uses the file's prefixes, and anything else is an error to try again from. The prompt also
+reads the expression strictly, so a stray word is reported with its position rather than dropped.
+To find any an earlier version left in a file, search it for the regular expression `<[^:>]+>`,
+which matches an IRI in angle brackets with no scheme.
+
+All 407 tests pass, 46 of them new.
+
 ## 0.13.14
 
 ### A script can write the ontology's header
