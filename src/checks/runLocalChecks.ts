@@ -9,6 +9,7 @@ import { runLiteralTypingChecks } from './literalTyping';
 import { runShaclChecks } from './shaclRunner';
 import { runReasoningChecks } from './reasoningRunner';
 import { runModellingGuidance } from './modellingGuidance';
+import { runMalformedChecks, withoutRelativeIris } from './malformed';
 import { runVocabularyChecks } from './vocabularyChecks';
 import { evaluateClassRules } from './classRules';
 import { loadClassRulesConfig } from './classRulesLoader';
@@ -56,7 +57,13 @@ export class LocalChecksEngine {
         const doc = await readOntologyDocument(fileUri.fsPath, text);
 
         progress.report({ message: 'resolving imports', increment: 10 });
-        const { mergedQuads } = await resolveImports(fileUri.fsPath, doc.quads, path.dirname(fileUri.fsPath));
+        const { mergedQuads: resolvedQuads } = await resolveImports(fileUri.fsPath, doc.quads, path.dirname(fileUri.fsPath));
+
+        // Malformed OWL that this extension's own earlier versions could write (see malformed.ts).
+        // A relative IRI is reported there and left out of what the engines below are given:
+        // holosdb refuses a graph with one in it, and that refusal used to fail the whole run.
+        const malformedRows = runMalformedChecks(resolvedQuads as Quad[]);
+        const mergedQuads = withoutRelativeIris(resolvedQuads as Quad[]);
 
         const registry = this.getRegistry();
         const config = vscode.workspace.getConfiguration('ontologySuite');
@@ -79,9 +86,15 @@ export class LocalChecksEngine {
         // formulations, which can only test a lexical form -- see literalTyping.ts.
         // Gated with the SPARQL tier because it is the same check id, reported from
         // the same source, and merges under the normal dedup key.
-        const sparqlRows = sparqlEnabled
-          ? [...runSparqlChecks(mergedQuads, registry, disabledChecks), ...runLiteralTypingChecks(mergedQuads as Quad[])]
-          : [];
+        let sparqlRows: ResultRow[] = [];
+        if (sparqlEnabled) {
+          // As the SHACL tier below: a store that refuses the graph costs this tier, not the run.
+          try {
+            sparqlRows = [...runSparqlChecks(mergedQuads, registry, disabledChecks), ...runLiteralTypingChecks(mergedQuads as Quad[])];
+          } catch (err) {
+            console.error('[ontologySuite] SPARQL check run failed:', err);
+          }
+        }
 
         progress.report({ message: 'shacl checks', increment: 20 });
         let shaclRows: ResultRow[] = [];
@@ -112,7 +125,7 @@ export class LocalChecksEngine {
         // Filtered after the merge, not before: a disabled id may still arrive from
         // the SHACL tier (a shapes file is compiled whole, so one shape cannot be
         // skipped the way its SPARQL twin's query file can) or from the reasoner.
-        const merged = mergeResultRows(sparqlRows, shaclRows, reasoningRows, guidanceRows, vocabularyRows, projectRuleRows)
+        const merged = mergeResultRows(sparqlRows, shaclRows, reasoningRows, guidanceRows, vocabularyRows, projectRuleRows, malformedRows)
           .filter((row) => !(row.checkId !== null && disabledChecks.has(row.checkId)));
         const fileDiagnostics = resultRowsToDiagnostics(merged, doc, this.rowsByDiagnostic);
         this.diagnostics.set(fileUri, fileDiagnostics);

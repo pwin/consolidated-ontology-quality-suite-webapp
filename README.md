@@ -308,6 +308,18 @@ gist upper ontology (`ontologySuite.modellingGuidance`, default `"gist"`):
 | `MDL-002` | `owl:equivalentClass` between two plain named classes with no logical definition — usually should be `rdfs:subClassOf` or a SKOS mapping instead. |
 | `MDL-003` | A class with no restrictions of its own — consider `gist:Category` instead, per gist's own scope note on the class. |
 
+### Malformed OWL left by earlier versions
+
+Three `Violation`-severity checks for OWL that this extension's own earlier
+versions could write into a file. They are this extension's only, not in the
+registry it shares with the Python suite.
+
+| Rule | What it flags |
+|---|---|
+| `MAL-001` | A qualified cardinality written with `owl:cardinality` (or `min`/`max`) beside `owl:onClass`. OWL 2 reads it as unqualified and ignores the class. `exactly n C` was written this way before 0.13.14. |
+| `MAL-002` | A restriction with more than one `owl:onProperty`: two restrictions merged into one node. Append and Add Subclass could leave this before 0.13.14. |
+| `MAL-003` | An IRI with no scheme, such as `<hasChild>`. Add Subclass wrote a bare name this way before 0.14.0. Local Checks leaves the statements that use it out of the engines, which refuse such a graph, and checks the rest. |
+
 ### Quick Fix: Schematron-Quick-Fix-style repair
 
 16 checks (`STR-001/002/005/007/008`, `QUA-001/002/004/005/007`,

@@ -141,6 +141,39 @@ suite('Ontology Development Suite (extension host)', () => {
     }
   });
 
+  test('Run Local Checks reports a relative IRI, and still checks the rest of the file', async () => {
+    // Before 0.16 one relative IRI -- which Add Subclass wrote for a bare name before 0.14.0 --
+    // made holosdb refuse the graph, and the whole run failed with no findings at all.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ontology-suite-checks-'));
+    const uri = vscode.Uri.file(path.join(dir, 'damaged.ttl'));
+    fs.writeFileSync(
+      uri.fsPath,
+      [
+        '@prefix ex: <http://example.org/clinic#> .',
+        '@prefix owl: <http://www.w3.org/2002/07/owl#> .',
+        '@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .',
+        'ex:Parent a owl:Class ; rdfs:subClassOf [ a owl:Restriction ; owl:onProperty <hasChild> ; owl:someValuesFrom ex:Person ] .',
+        'ex:Person a owl:Class .',
+      ].join('\n'),
+    );
+    try {
+      await vscode.window.showTextDocument(uri);
+      await vscode.commands.executeCommand('ontologySuite.runLocalChecks');
+      let codes: string[] = [];
+      for (let attempt = 0; attempt < 30; attempt++) {
+        codes = vscode.languages.getDiagnostics(uri).map((d) => String(d.code));
+        if (codes.includes('MAL-003') && codes.includes('QUA-001')) break;
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+      assert.ok(codes.includes('MAL-003'), `expected MAL-003 among ${JSON.stringify(codes)}`);
+      // QUA-001 (a class without a label) comes from the SPARQL tier: the engines ran on the rest.
+      assert.ok(codes.includes('QUA-001'), `expected QUA-001 among ${JSON.stringify(codes)}`);
+    } finally {
+      await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+      removeTempDir(dir);
+    }
+  }).timeout(60000);
+
   test('Run Ontology Script runs the script as it stands in the editor, unsaved edits included', async () => {
     // Until 0.13.13 the command read the file from disk, so an unsaved edit was not run.
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ontology-suite-run-'));
