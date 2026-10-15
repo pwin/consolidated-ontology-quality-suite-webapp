@@ -53,6 +53,8 @@ describe('the ontology-suite npm package', () => {
     const manifest = JSON.parse(fs.readFileSync(path.join(pkg, 'package.json'), 'utf8'));
     expect(manifest.version).toBe(JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version);
     expect(manifest.dependencies).toBeUndefined();
+    // LF whatever the checkout: a Windows one has CRLF, and the package must not depend on that.
+    expect(fs.readFileSync(path.join(pkg, 'README.md'), 'utf8')).not.toContain('\r');
   });
 
   it('loads with require and with import, and builds an ontology', () => {

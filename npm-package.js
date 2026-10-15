@@ -65,7 +65,10 @@ function buildNpmPackage(outDir) {
   // For resolvers that predate `exports` -- TypeScript's node10 resolution among them.
   fs.writeFileSync(path.join(outDir, 'dsl', 'package.json'), `${JSON.stringify({ main: 'index.js', types: 'types/scripting/dsl.d.ts' }, null, 2)}\n`);
   fs.copyFileSync(path.join(__dirname, 'LICENSE'), path.join(outDir, 'LICENSE'));
-  fs.copyFileSync(path.join(__dirname, 'resources', 'npm', 'README.md'), path.join(outDir, 'README.md'));
+  // With LF endings whatever this checkout has: core.autocrlf gives a Windows checkout CRLF, and
+  // the package should be the same file whichever machine built it.
+  const readme = fs.readFileSync(path.join(__dirname, 'resources', 'npm', 'README.md'), 'utf8').replace(/\r\n/g, '\n');
+  fs.writeFileSync(path.join(outDir, 'README.md'), readme);
   return outDir;
 }
 
