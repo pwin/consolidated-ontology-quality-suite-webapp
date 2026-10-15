@@ -21,6 +21,8 @@ describe('Manchester class-expression grammar: parse -> render -> RDF -> read-ba
     'ex:hasOwner exactly 1 ex:Person',
     '(ex:Dog and ex:hasOwner some ex:Person) or ex:Cat',
     '{ex:alice, ex:bob}',
+    'inverse ex:hasPart some ex:Car',
+    'ex:Dog and not inverse ex:hasPet min 2 ex:Person',
   ];
 
   it.each(cases)('round-trips: %s', (exprText) => {
@@ -65,6 +67,17 @@ describe('a real ontology with OWL2 restrictions round-trips through Manchester 
     const reparsed = await parseRdf(manchesterText, 'manchester');
     expect(reparsed.errors).toEqual([]);
     expect(reparsed.quads).toHaveLength(original.quads.length);
+  });
+});
+
+describe('a restriction on an inverse property', () => {
+  it('is written with an anonymous owl:inverseOf as its owl:onProperty, as OWL 2 encodes it', () => {
+    const owl = 'http://www.w3.org/2002/07/owl#';
+    const out: Quad[] = [];
+    const restriction = classExprToRdf(parseClassExpression('inverse ex:hasPart some ex:Car')!, prefixes, out);
+    const onProperty = out.find((q) => q.subject.equals(restriction) && q.predicate.value === `${owl}onProperty`)!.object;
+    expect(onProperty.termType).toBe('BlankNode');
+    expect(out.filter((q) => q.subject.equals(onProperty)).map((q) => [q.predicate.value, q.object.value])).toEqual([[`${owl}inverseOf`, 'http://example.org/demo#hasPart']]);
   });
 });
 

@@ -121,7 +121,8 @@ Validation" and "Full Triplify" commands, degrading gracefully if absent.
   `disjointWith`), `defobjectproperty` (characteristics, inverse, chain),
   `defdatatypeproperty` (datatype ranges with facets), `defindividual`
   (types and facts), labels and annotations in any language,
-  restriction-builders `some`/`only`/`and`/`or`/`not`/cardinality,
+  restriction-builders `some`/`only`/`and`/`or`/`not`/cardinality and
+  `inverse` (a restriction on a property's inverse),
   Manchester Syntax through `` mx`...` `` (checked as you type), and
   Tawny-OWL's `someOnly` and `asSubclasses` patterns) — and run it to
   generate real Turtle. The DSL is also on npm as

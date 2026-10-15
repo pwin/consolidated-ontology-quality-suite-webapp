@@ -52,6 +52,20 @@ describe('an integer after value', () => {
   });
 });
 
+describe('an inverse property', () => {
+  it('reads `inverse p` as a restriction on the inverse of p, in both parsers', () => {
+    const expected = { kind: 'restriction', property: 'ex:hasPart', inverse: true, type: 'some', filler: { kind: 'class', iri: 'ex:Car' } };
+    expect(parseClassExpressionStrict('inverse ex:hasPart some ex:Car')).toEqual(expected);
+    expect(parseClassExpression('inverse ex:hasPart some ex:Car')).toEqual(expected);
+    expect(parseClassExpressionStrict('not inverse ex:hasPart min 2 ex:Car')).toEqual({ kind: 'not', operand: { ...expected, type: 'min', cardinality: 2 } });
+  });
+
+  it('must be a property followed by a restriction, since an inverse property is not a class', () => {
+    expect(syntaxError('inverse some ex:Car')).toEqual({ message: "Expected a property after 'inverse'.", offset: 8, length: 4 });
+    expect(syntaxError('inverse ex:hasPart')).toEqual({ message: 'Expected some, only, value, Self, min, max or exactly after an inverse property.', offset: 18, length: 0 });
+  });
+});
+
 describe("a literal's datatype", () => {
   it('is a full IRI in angle brackets or a prefixed name, and stops before a closing bracket', () => {
     // Read as `\S+`, the datatype here was `xsd:int)` and the `)` was lost.

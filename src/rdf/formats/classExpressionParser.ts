@@ -10,11 +10,12 @@
  *   description  ::= conjunction ('or' conjunction)*
  *   conjunction  ::= primary ('and' primary)*
  *   primary      ::= 'not'? (restriction | atomic)
- *   restriction  ::= propertyRef 'some' primary
- *                  | propertyRef 'only' primary
- *                  | propertyRef 'value' (individualRef | literal)
- *                  | propertyRef 'Self'
- *                  | propertyRef ('min'|'max'|'exactly') integer [primary]
+ *   restriction  ::= property 'some' primary
+ *                  | property 'only' primary
+ *                  | property 'value' (individualRef | literal)
+ *                  | property 'Self'
+ *                  | property ('min'|'max'|'exactly') integer [primary]
+ *   property     ::= 'inverse'? propertyRef
  *   atomic       ::= classRef | '{' individualRef (',' individualRef)* '}' | '(' description ')'
  *
  * classExpression.ts translates the result to and from RDF. This module has no
@@ -30,6 +31,8 @@ export type ClassExpr =
   | {
       kind: 'restriction';
       property: string;
+      /** The restriction is on the inverse of `property`: Manchester's `inverse p`, OWL's `[ owl:inverseOf p ]`. */
+      inverse?: boolean;
       type: 'some' | 'only' | 'value' | 'self' | 'min' | 'max' | 'exactly';
       filler?: ClassExpr;
       individual?: string;
@@ -98,7 +101,8 @@ type Token = {
   end: number;
 };
 
-const KEYWORDS = new Set(['and', 'or', 'not', 'some', 'only', 'value', 'min', 'max', 'exactly', 'Self']);
+const KEYWORDS = new Set(['and', 'or', 'not', 'inverse', 'some', 'only', 'value', 'min', 'max', 'exactly', 'Self']);
+const RESTRICTION_WORDS = ['some', 'only', 'value', 'Self', 'min', 'max', 'exactly'];
 
 /**
  * Lenient by default, as `.omn` files and the Outline have always had it: an unrecognized
@@ -310,6 +314,20 @@ function parseRestrictionOrAtomic(s: TokenStream): ClassExpr {
     return { kind: 'oneOf', individuals };
   }
 
+  // `inverse p ...`: a restriction on the inverse of p. Only a restriction can follow, since an
+  // inverse property is not a class.
+  if (t.type === 'word' && t.value === 'inverse') {
+    s.next();
+    const propertyRef = s.next();
+    if (propertyRef?.type !== 'curie' && propertyRef?.type !== 'iri') s.fail("Expected a property after 'inverse'.", propertyRef);
+    const next = s.next();
+    if (next?.type !== 'word' || !RESTRICTION_WORDS.includes(next.value)) {
+      s.fail("Expected some, only, value, Self, min, max or exactly after an inverse property.", next);
+    }
+    const restriction = parseRestrictionTail(s, propertyRef.value, next.value) as Extract<ClassExpr, { kind: 'restriction' }>;
+    return { ...restriction, inverse: true };
+  }
+
   // Either a bare class/individual reference, or the start of a property restriction
   // (`propertyRef some|only|value|Self|min|max|exactly ...`) -- one token of lookahead
   // after the reference tells them apart.
@@ -317,7 +335,7 @@ function parseRestrictionOrAtomic(s: TokenStream): ClassExpr {
     s.next();
     const propertyRef = t.value;
     const next = s.peek();
-    if (next?.type === 'word' && ['some', 'only', 'value', 'Self', 'min', 'max', 'exactly'].includes(next.value)) {
+    if (next?.type === 'word' && RESTRICTION_WORDS.includes(next.value)) {
       s.next();
       return parseRestrictionTail(s, propertyRef, next.value);
     }

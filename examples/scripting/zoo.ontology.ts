@@ -13,6 +13,9 @@ import {
   datatype,
   classRef,
   mx,
+  and,
+  some,
+  inverse,
   someOnly,
   asSubclasses,
 } from 'ontology-suite/dsl';
@@ -50,6 +53,8 @@ const age = defdatatypeproperty('age', { domain: Animal, range: datatype('xsd:in
 const Penguin = defclass('Penguin', { label: 'penguin', subClassOf: [Animal, ...someOnly(eats, Fish)] });
 defclass('Herbivore', { equivalentClass: mx`Animal and ${eats} only ${Plant}` });
 defclass('CaredForAnimal', { equivalentClass: mx`Animal and ${caredForBy} some Keeper` });
+// The inverse of livesIn inline, with no named inverse property: an enclosure some animal lives in.
+defclass('OccupiedEnclosure', { equivalentClass: and(Enclosure, some(inverse(livesIn), Animal)) });
 
 // Individuals, and what is known about them.
 const coast = defindividual('coast', { types: [Place], facts: [[name, 'The coast']] });

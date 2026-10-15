@@ -489,42 +489,60 @@ export function individualRef(name: string): IndividualRef {
 // into `{ kind: 'class', iri }` automatically).
 // ---------------------------------------------------------------------------
 
-function iriOf(x: Ref | ClassExpr): string {
-  if ('localName' in x) return x.iri;
-  if (x.kind === 'class') return x.iri;
-  throw new Error('Expected a class/property reference or an atomic class expression here.');
+/** The inverse of an object property, made by inverse(). */
+export interface InverseProperty {
+  kind: 'inverse';
+  of: ObjectPropertyRef;
+}
+
+/** What a restriction can be on: a property, or the inverse of an object property. */
+export type PropertyExpression = PropertyRef | InverseProperty;
+
+/**
+ * The inverse of an object property, for a restriction: `some(inverse(hasPart), Car)` is "part
+ * of some car", with no named inverse property to declare and keep in step. That is gist's
+ * convention, and what Local Checks' MDL-001 suggests in place of a named inverse.
+ */
+export function inverse(property: ObjectPropertyRef): InverseProperty {
+  if (property.kind !== 'objectProperty') throw new Error(`inverse: ${(property as Ref).localName} is not an object property; only an object property has an inverse.`);
+  return { kind: 'inverse', of: property };
+}
+
+/** A restriction's property fields for `p`. */
+function onProperty(p: PropertyExpression): { property: string; inverse?: boolean } {
+  return p.kind === 'inverse' ? { property: p.of.iri, inverse: true } : { property: p.iri };
 }
 
 function exprOf(x: ClassRef | ClassExpr): ClassExpr {
   return 'localName' in x ? { kind: 'class', iri: x.iri } : x;
 }
 
-export function some(property: PropertyRef, filler: ClassRef | ClassExpr): ClassExpr {
-  return { kind: 'restriction', property: iriOf(property), type: 'some', filler: exprOf(filler) };
+export function some(property: PropertyExpression, filler: ClassRef | ClassExpr): ClassExpr {
+  return { kind: 'restriction', ...onProperty(property), type: 'some', filler: exprOf(filler) };
 }
 
-export function only(property: PropertyRef, filler: ClassRef | ClassExpr): ClassExpr {
-  return { kind: 'restriction', property: iriOf(property), type: 'only', filler: exprOf(filler) };
+export function only(property: PropertyExpression, filler: ClassRef | ClassExpr): ClassExpr {
+  return { kind: 'restriction', ...onProperty(property), type: 'only', filler: exprOf(filler) };
 }
 
 /** `property value` an individual or a literal. A class reference stands for the individual with its IRI. */
-export function hasValue(property: PropertyRef, value: IndividualRef | ClassRef | LiteralValue): ClassExpr {
+export function hasValue(property: PropertyExpression, value: IndividualRef | ClassRef | LiteralValue): ClassExpr {
   if (typeof value === 'object' && 'localName' in value) {
-    return { kind: 'restriction', property: iriOf(property), type: 'value', individual: value.iri };
+    return { kind: 'restriction', ...onProperty(property), type: 'value', individual: value.iri };
   }
-  return { kind: 'restriction', property: iriOf(property), type: 'value', literalValue: literalParts(requireCurrent(), value) };
+  return { kind: 'restriction', ...onProperty(property), type: 'value', literalValue: literalParts(requireCurrent(), value) };
 }
 
-export function minCardinality(property: PropertyRef, n: number, filler?: ClassRef | ClassExpr): ClassExpr {
-  return { kind: 'restriction', property: iriOf(property), type: 'min', cardinality: n, filler: filler ? exprOf(filler) : undefined };
+export function minCardinality(property: PropertyExpression, n: number, filler?: ClassRef | ClassExpr): ClassExpr {
+  return { kind: 'restriction', ...onProperty(property), type: 'min', cardinality: n, filler: filler ? exprOf(filler) : undefined };
 }
 
-export function maxCardinality(property: PropertyRef, n: number, filler?: ClassRef | ClassExpr): ClassExpr {
-  return { kind: 'restriction', property: iriOf(property), type: 'max', cardinality: n, filler: filler ? exprOf(filler) : undefined };
+export function maxCardinality(property: PropertyExpression, n: number, filler?: ClassRef | ClassExpr): ClassExpr {
+  return { kind: 'restriction', ...onProperty(property), type: 'max', cardinality: n, filler: filler ? exprOf(filler) : undefined };
 }
 
-export function exactCardinality(property: PropertyRef, n: number, filler?: ClassRef | ClassExpr): ClassExpr {
-  return { kind: 'restriction', property: iriOf(property), type: 'exactly', cardinality: n, filler: filler ? exprOf(filler) : undefined };
+export function exactCardinality(property: PropertyExpression, n: number, filler?: ClassRef | ClassExpr): ClassExpr {
+  return { kind: 'restriction', ...onProperty(property), type: 'exactly', cardinality: n, filler: filler ? exprOf(filler) : undefined };
 }
 
 export function and(...operands: (ClassRef | ClassExpr)[]): ClassExpr {
@@ -544,7 +562,7 @@ export function not(operand: ClassRef | ClassExpr): ClassExpr {
 // ---------------------------------------------------------------------------
 
 /** What a `${...}` inside mx can hold. */
-export type MxValue = Ref | ClassExpr | string | number | boolean;
+export type MxValue = Ref | InverseProperty | ClassExpr | string | number | boolean;
 
 const MX_NESTED = 'urn:x-ontology-suite-mx:';
 
@@ -588,6 +606,10 @@ function mxToken(value: MxValue, nested: ClassExpr[], refs: Map<string, Ref>): s
     return `"${parts.value}"^^<${parts.datatype}>`;
   }
   if (typeof value === 'string') return `"${value.replace(/["\\]/g, '\\$&')}"`;
+  if (value.kind === 'inverse') {
+    refs.set(value.of.iri, value.of);
+    return `inverse <${value.of.iri}>`;
+  }
   if ('localName' in value) {
     refs.set(value.iri, value);
     return `<${value.iri}>`;
@@ -635,7 +657,7 @@ function resolveMx(b: OntologyBuilder, expr: ClassExpr, nested: ClassExpr[], ref
  *
  *   defclass('MargheritaPizza', { subClassOf: [Pizza, ...someOnly(hasTopping, Mozzarella, Tomato)] });
  */
-export function someOnly(property: PropertyRef, ...fillers: (ClassRef | ClassExpr)[]): ClassExpr[] {
+export function someOnly(property: PropertyExpression, ...fillers: (ClassRef | ClassExpr)[]): ClassExpr[] {
   if (fillers.length === 0) throw new Error('someOnly() needs at least one filler.');
   return [...fillers.map((filler) => some(property, filler)), only(property, fillers.length === 1 ? fillers[0] : or(...fillers))];
 }

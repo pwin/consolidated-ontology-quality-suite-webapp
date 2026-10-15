@@ -520,7 +520,11 @@ allDifferent(coast, pool, pingu, sam);
 - **Object properties** take `characteristics` (`functional`,
   `inverseFunctional`, `transitive`, `symmetric`, `asymmetric`,
   `reflexive`, `irreflexive`), `inverseOf` and a property `chain`. A named
-  inverse draws Local Checks' MDL-001 hint, after gist's convention.
+  inverse draws Local Checks' MDL-001 hint, after gist's convention, which
+  is to write the inverse inline in the one restriction that needs it:
+  `some(inverse(livesIn), Animal)`, or `` mx`inverse livesIn some Animal` ``.
+  From 0.16.0 the Outline's Add Subclass and `.omn` files read
+  `inverse p` too.
 - **Datatype properties** take a `range` from `datatype('xsd:integer',
   { minInclusive: 0 })`, with any of OWL 2's facets, and can be
   `functional`.

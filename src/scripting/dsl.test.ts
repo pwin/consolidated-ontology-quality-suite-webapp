@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import type { Literal, Quad } from 'n3';
+import { runModellingGuidance } from '../checks/modellingGuidance';
 import {
   ontology,
   defontology,
@@ -13,6 +14,7 @@ import {
   objectPropertyRef,
   datatypePropertyRef,
   individualRef,
+  inverse,
   some,
   only,
   and,
@@ -560,5 +562,51 @@ describe('0.15: individuals, property axioms, datatypes and references', () => {
       expect(() => mx`${rex} and Dog`).toThrow('mx: rex is an individual, used here as a class.');
       expect(() => mx`${rex} some Dog`).toThrow('mx: rex is an individual, used here as a property.');
     });
+  });
+});
+
+describe('inverse: a restriction on the inverse of a property', () => {
+  const ZOO = 'http://example.org/zoo#';
+  const OWL = 'http://www.w3.org/2002/07/owl#';
+
+  beforeEach(() => {
+    ontology(ZOO, 'zoo');
+  });
+
+  it('is written as an anonymous owl:inverseOf, the same from the builders and from mx', () => {
+    const Car = defclass('Car');
+    const hasPart = defobjectproperty('hasPart');
+    const partOfACar = some(inverse(hasPart), Car);
+    expect(partOfACar).toEqual({ kind: 'restriction', property: `${ZOO}hasPart`, inverse: true, type: 'some', filler: { kind: 'class', iri: `${ZOO}Car` } });
+    expect(mx`${inverse(hasPart)} some ${Car}`).toEqual(partOfACar);
+    expect(mx`inverse hasPart some Car`).toEqual(partOfACar);
+
+    defclass('Wheel', { subClassOf: [partOfACar] });
+    const { quads } = build();
+    const onProperty = quads.find((q) => q.predicate.value === `${OWL}onProperty`)!.object;
+    expect(onProperty.termType).toBe('BlankNode');
+    expect(quads.filter((q) => q.subject.equals(onProperty)).map((q) => [q.predicate.value, q.object.value])).toEqual([[`${OWL}inverseOf`, `${ZOO}hasPart`]]);
+  });
+
+  it('is not a named inverse, so Local Checks gives it no MDL-001 hint', () => {
+    const hasPart = defobjectproperty('hasPart');
+    defclass('Wheel', { subClassOf: [some(inverse(hasPart), defclass('Car'))] });
+    expect(runModellingGuidance(build().quads).filter((r) => r.checkId === 'MDL-001')).toEqual([]);
+    defobjectproperty('partOf', { inverseOf: hasPart });
+    expect(runModellingGuidance(build().quads).filter((r) => r.checkId === 'MDL-001')).toHaveLength(1);
+  });
+
+  it('works with every restriction builder and with someOnly', () => {
+    const Car = defclass('Car');
+    const hasPart = defobjectproperty('hasPart');
+    const partOf = inverse(hasPart);
+    for (const r of [only(partOf, Car), minCardinality(partOf, 1, Car), hasValue(partOf, defindividual('myCar')), ...someOnly(partOf, Car)]) {
+      expect(r).toMatchObject({ kind: 'restriction', property: `${ZOO}hasPart`, inverse: true });
+    }
+  });
+
+  it('refuses a datatype property, which has no inverse', () => {
+    const age = defdatatypeproperty('age');
+    expect(() => inverse(age as any)).toThrow('inverse: age is not an object property; only an object property has an inverse.');
   });
 });

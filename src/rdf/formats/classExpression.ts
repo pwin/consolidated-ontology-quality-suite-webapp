@@ -49,7 +49,14 @@ export function classExprToRdf(expr: ClassExpr, prefixes: Record<string, string>
     case 'restriction': {
       const bnode = blankNode();
       out.push(quad(bnode, namedNode(`${RDF}type`), namedNode(`${OWL}Restriction`)));
-      out.push(quad(bnode, namedNode(`${OWL}onProperty`), namedNode(resolve(expr.property))));
+      // The inverse of a property is an anonymous property expression: `[ owl:inverseOf p ]`.
+      let property: NamedNode | BlankNode = namedNode(resolve(expr.property));
+      if (expr.inverse) {
+        const inverse = blankNode();
+        out.push(quad(inverse, namedNode(`${OWL}inverseOf`), property));
+        property = inverse;
+      }
+      out.push(quad(bnode, namedNode(`${OWL}onProperty`), property));
       switch (expr.type) {
         case 'some':
           out.push(quad(bnode, namedNode(`${OWL}someValuesFrom`), classExprToRdf(expr.filler!, prefixes, out)));
@@ -169,19 +176,23 @@ function readClassExprBody(term: Term, bySubject: Map<string, Quad[]>, ancestors
 
   const onProperty = get(`${OWL}onProperty`);
   if (onProperty) {
-    const property = onProperty.value;
+    // An inverse property expression, `[ owl:inverseOf p ]`: Manchester's `inverse p`.
+    const inverseOf =
+      onProperty.termType === 'BlankNode' ? (bySubject.get(onProperty.value) ?? []).find((q) => q.predicate.value === `${OWL}inverseOf`)?.object : undefined;
+    const property = inverseOf ? inverseOf.value : onProperty.value;
+    const on = inverseOf ? { property, inverse: true } : { property };
     const someValuesFrom = get(`${OWL}someValuesFrom`);
-    if (someValuesFrom) return { kind: 'restriction', property, type: 'some', filler: readClassExpr(someValuesFrom, bySubject, ancestors, depth + 1) };
+    if (someValuesFrom) return { kind: 'restriction', ...on, type: 'some', filler: readClassExpr(someValuesFrom, bySubject, ancestors, depth + 1) };
     const allValuesFrom = get(`${OWL}allValuesFrom`);
-    if (allValuesFrom) return { kind: 'restriction', property, type: 'only', filler: readClassExpr(allValuesFrom, bySubject, ancestors, depth + 1) };
+    if (allValuesFrom) return { kind: 'restriction', ...on, type: 'only', filler: readClassExpr(allValuesFrom, bySubject, ancestors, depth + 1) };
     const hasValue = get(`${OWL}hasValue`);
     if (hasValue) {
-      if (hasValue.termType === 'NamedNode') return { kind: 'restriction', property, type: 'value', individual: hasValue.value };
+      if (hasValue.termType === 'NamedNode') return { kind: 'restriction', ...on, type: 'value', individual: hasValue.value };
       const lit = hasValue as import('n3').Literal;
-      return { kind: 'restriction', property, type: 'value', literalValue: { value: lit.value, datatype: lit.datatype?.value, language: lit.language || undefined } };
+      return { kind: 'restriction', ...on, type: 'value', literalValue: { value: lit.value, datatype: lit.datatype?.value, language: lit.language || undefined } };
     }
     const hasSelf = get(`${OWL}hasSelf`);
-    if (hasSelf) return { kind: 'restriction', property, type: 'self' };
+    if (hasSelf) return { kind: 'restriction', ...on, type: 'self' };
     for (const [predSuffix, kind] of [
       ['minQualifiedCardinality', 'min'],
       ['maxQualifiedCardinality', 'max'],
@@ -195,7 +206,7 @@ function readClassExprBody(term: Term, bySubject: Map<string, Quad[]>, ancestors
         const onClass = get(`${OWL}onClass`) ?? get(`${OWL}onDataRange`);
         return {
           kind: 'restriction',
-          property,
+          ...on,
           type: kind,
           cardinality: Number(card.value),
           filler: onClass ? readClassExpr(onClass, bySubject, ancestors, depth + 1) : undefined,
@@ -254,7 +265,7 @@ export function renderClassExpression(expr: ClassExpr, prefixes: Record<string, 
   }
 
   function renderRestriction(e: Extract<ClassExpr, { kind: 'restriction' }>): string {
-    const p = ref(e.property);
+    const p = e.inverse ? `inverse ${ref(e.property)}` : ref(e.property);
     switch (e.type) {
       case 'self':
         return `${p} Self`;

@@ -33,7 +33,7 @@ console.log(`${quads.length} triples`);
 ## What the language has
 
 - **Declarations:** `ontology`, `defontology` (version IRI, imports, annotations), `defclass`, `defobjectproperty` (characteristics, inverse, chain), `defdatatypeproperty` (datatype ranges with facets), `defindividual` (types and facts), `allDifferent`.
-- **Class expressions:** `some`, `only`, `hasValue`, `minCardinality`, `maxCardinality`, `exactCardinality`, `and`, `or`, `not`, and Manchester Syntax through `` mx`...` ``.
+- **Class expressions:** `some`, `only`, `hasValue`, `minCardinality`, `maxCardinality`, `exactCardinality`, `and`, `or`, `not`, `inverse` for a restriction on the inverse of a property, and Manchester Syntax through `` mx`...` ``.
 - **Patterns:** `someOnly` and `asSubclasses`, after Tawny-OWL.
 - **References** to terms declared elsewhere: `classRef`, `objectPropertyRef`, `datatypePropertyRef`, `individualRef`.
 
