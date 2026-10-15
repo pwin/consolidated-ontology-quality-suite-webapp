@@ -1,5 +1,55 @@
 # Changelog
 
+## 0.16.0
+
+### One relative IRI no longer makes Local Checks fail
+
+The Outline's Add Subclass wrote a bare name in its restriction as a relative IRI, such as
+`<hasChild>`, until 0.14.0. n3 parses one without complaint, but holosdb refuses the whole graph
+("No scheme found in an absolute IRI"), the SPARQL tier did not catch that, and **Run Local
+Checks** failed with no findings at all, on exactly the files those versions wrote. The statements
+that use a relative IRI are now reported (MAL-003, below) and left out of what the engines are
+given, and the rest of the file is checked. The SPARQL tier is also wrapped as the SHACL tier
+already was, so any graph a store refuses costs that tier, not the run.
+
+### Checks for malformed OWL left by earlier versions
+
+Three `Violation`-severity checks, this extension's own rather than the registry's, which is
+shared with the Python suite:
+
+- **MAL-001:** a qualified cardinality written with `owl:cardinality` (or `min`/`max`) beside
+  `owl:onClass`, as `exactly n C` was before 0.13.14. OWL 2 reads it as unqualified.
+- **MAL-002:** a restriction with more than one `owl:onProperty`: two restrictions merged into one
+  node, which Append and Add Subclass could leave before 0.13.14.
+- **MAL-003:** an IRI with no scheme, as Add Subclass wrote a bare name before 0.14.0.
+
+A finding about an anonymous restriction is placed on the named class that uses it. None of the
+repository's 14 example ontologies trips any of them.
+
+### A restriction on the inverse of a property, inline
+
+Manchester's `inverse p some C`, written as OWL 2 does with `[ owl:inverseOf p ]` as the
+restriction's property. This is what Local Checks' MDL-001 recommends in place of a named inverse
+property, after gist's convention, and it now works everywhere the class-expression engine does:
+`.omn` files, the Outline's Add Subclass, the DSL's new `inverse(p)` in every restriction builder,
+and `mx` as either `inverse hasPart` or `${inverse(hasPart)}`. MDL-001 does not flag it. Checked
+outside this project: Owlready2 reads the output as `Inverse(hasPart).some(Car)`, and HermiT
+classifies an individual a car has as a part accordingly.
+
+### Every check now runs on GitHub Actions
+
+A CI workflow runs the type check, lint, unit tests and integration tests (in a real VS Code with
+no screen), and builds both packages, on every push and pull request. Two new integration tests
+cover what had been tested only outside VS Code: Run Ontology Script running unsaved editor text,
+and VS Code's own TypeScript extension loading the plugin and marking an `mx` syntax error at its
+column. `@vscode/vsce` is now a pinned dependency rather than whatever `npx` fetched.
+
+### The npm package's README has LF line endings on any checkout
+
+A Windows checkout gave it CRLF endings, which built a different package and failed its test.
+
+All 466 tests pass, and the 8 integration tests.
+
 ## 0.15.0
 
 ### Individuals, property axioms, datatypes and references in the DSL
