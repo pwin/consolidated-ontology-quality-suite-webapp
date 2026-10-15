@@ -1,0 +1,43 @@
+# Every check this project has, on every push to main and every pull request: the type check,
+# lint and unit tests; the integration tests, in a real VS Code with no screen; and both packages,
+# the .vsix (with package-vsix.mjs's check that every engine and the TypeScript plugin are in it)
+# and the ontology-suite npm package. The two packages are kept as the run's artifacts.
+#
+# Publishing stays a deliberate step (see CHANGELOG.md's release commits): nothing here releases
+# or publishes anything.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "20"
+          cache: npm
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+
+      # VS Code needs a display, and xvfb-run gives it one. The pretest step builds dist/, which
+      # also writes the TypeScript plugin's package into node_modules.
+      - run: xvfb-run -a npm run test:integration
+
+      - run: npm run vsix
+      - run: npm run npm-package
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: packages
+          path: |
+            *.vsix
+            dist-npm/ontology-suite

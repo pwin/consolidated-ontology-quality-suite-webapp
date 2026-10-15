@@ -478,6 +478,7 @@
     "@typescript-eslint/parser": "^8.65.0",
     "@vscode/test-cli": "^0.0.12",
     "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.9.2",
     "eslint": "^10.8.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10"
@@ -487,8 +488,8 @@
     "@viz-js/viz": "^3.28.0",
     "esbuild": "^0.28.1",
     "eyereasoner": "^21.1.16",
-    "n3": "^2.1.1",
     "holos-wasm-node": "^0.21.0",
+    "n3": "^2.1.1",
     "rdfxml-streaming-parser": "^3.2.0",
     "shacl-wasm-node": "^0.3.2"
   },

@@ -1,5 +1,6 @@
 import * as assert from 'node:assert';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 
@@ -16,6 +17,19 @@ const MANIFEST = JSON.parse(fs.readFileSync(path.resolve(__dirname, '../../../pa
 };
 const EXTENSION_ID = `${MANIFEST.publisher}.${MANIFEST.name}`;
 const TUTORIAL_DIR = path.resolve(__dirname, '../../../examples/tutorial');
+
+/**
+ * Removes a test's temporary folder. On Windows the TypeScript server can still be watching it
+ * for a moment after its editors close, and the delete fails with EPERM; that is retried, and a
+ * folder in the system temp directory left behind is no reason to fail the test.
+ */
+function removeTempDir(dir: string): void {
+  try {
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+  } catch {
+    /* left for the system's temp cleanup */
+  }
+}
 const TARQL_DRIFT_DIR = path.resolve(__dirname, '../../../examples/tarql_drift');
 
 suite('Ontology Development Suite (extension host)', () => {
@@ -79,7 +93,7 @@ suite('Ontology Development Suite (extension host)', () => {
     await vscode.window.showTextDocument(uri);
     await vscode.commands.executeCommand('ontologySuite.runLocalChecks');
 
-    // Local checks run async work (Oxigraph/shacl-engine/EYE); poll briefly for diagnostics
+    // Local checks run async work (holosdb, shacl-wasm, EYE); poll briefly for diagnostics
     // to land rather than assuming they're synchronous by the time the command resolves.
     let diagnostics: vscode.Diagnostic[] = [];
     for (let attempt = 0; attempt < 30; attempt++) {
@@ -126,4 +140,52 @@ suite('Ontology Development Suite (extension host)', () => {
       );
     }
   });
+
+  test('Run Ontology Script runs the script as it stands in the editor, unsaved edits included', async () => {
+    // Until 0.13.13 the command read the file from disk, so an unsaved edit was not run.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ontology-suite-run-'));
+    const scriptUri = vscode.Uri.file(path.join(dir, 'unsaved.ontology.ts'));
+    fs.writeFileSync(scriptUri.fsPath, "import { ontology, defclass } from 'ontology-suite/dsl';\nontology('http://example.org/t#', 't');\n");
+    try {
+      const editor = await vscode.window.showTextDocument(scriptUri);
+      await editor.edit((edit) => edit.insert(new vscode.Position(2, 0), "defclass('OnlyInTheEditor');\n"));
+      assert.ok(editor.document.isDirty, 'the edit should be unsaved');
+
+      await vscode.commands.executeCommand('ontologySuite.runOntologyScript');
+
+      // No unsaved.ttl yet, so the command writes one rather than asking how to apply the output.
+      const turtle = fs.readFileSync(path.join(dir, 'unsaved.ttl'), 'utf8');
+      assert.match(turtle, /OnlyInTheEditor/);
+    } finally {
+      await vscode.window.showTextDocument(scriptUri);
+      await vscode.commands.executeCommand('workbench.action.files.revert');
+      await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+      removeTempDir(dir);
+    }
+  }).timeout(60000);
+
+  test("the editor types a script through the extension's TypeScript plugin, and marks an mx syntax error", async () => {
+    // The plugin is tested against tsserver directly (scripting/tsPlugin.test.ts); this is VS Code
+    // itself loading it from typescriptServerPlugins, for a file outside any tsconfig.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ontology-suite-types-'));
+    const uri = vscode.Uri.file(path.join(dir, 'typo.ontology.ts'));
+    fs.writeFileSync(uri.fsPath, "import { ontology, mx } from 'ontology-suite/dsl';\nontology('http://example.org/t#', 't');\nexport const fish = mx`livesIn soem Aquarium`;\n");
+    try {
+      await vscode.window.showTextDocument(uri);
+      // The TypeScript server starts on first use, which can take a while.
+      let diagnostics: vscode.Diagnostic[] = [];
+      for (let attempt = 0; attempt < 120; attempt++) {
+        diagnostics = vscode.languages.getDiagnostics(uri);
+        if (diagnostics.some((d) => d.message.startsWith('Manchester syntax'))) break;
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+      assert.deepStrictEqual(
+        diagnostics.map((d) => [d.message, d.range.start.line, d.range.start.character, d.range.end.character]),
+        [["Manchester syntax: Unexpected 'soem' after a complete class expression.", 2, 31, 35]],
+      );
+    } finally {
+      await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+      removeTempDir(dir);
+    }
+  }).timeout(90000);
 });
