@@ -488,10 +488,10 @@
     "@viz-js/viz": "^3.28.0",
     "esbuild": "^0.28.1",
     "eyereasoner": "^21.1.16",
-    "holos-wasm-node": "^0.21.0",
+    "holos-wasm-node": "^0.23.0",
     "n3": "^2.1.1",
     "rdfxml-streaming-parser": "^3.2.0",
-    "shacl-wasm-node": "^0.3.2"
+    "shacl-wasm-node": "^0.3.4"
   },
   "homepage": "https://github.com/pwin/consolidated-ontology-quality-suite-webapp#readme",
   "bugs": {
