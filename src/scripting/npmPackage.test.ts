@@ -40,6 +40,8 @@ describe('the ontology-suite npm package', () => {
     fs.writeFileSync(path.join(consumer, 'package.json'), JSON.stringify({ name: 'consumer', private: true }));
     const installed = run('npm', ['install', '--no-audit', '--no-fund', '--prefer-offline', tarball], consumer);
     expect(installed.status, installed.out).toBe(0);
+    // The RDF/JS types, as a project that uses n3 with @types/n3 has them (copied, not fetched).
+    fs.cpSync(path.join(root, 'node_modules', '@rdfjs', 'types'), path.join(consumer, 'node_modules', '@rdfjs', 'types'), { recursive: true });
   }, 120000);
 
   afterAll(() => {
@@ -92,6 +94,29 @@ describe('the ontology-suite npm package', () => {
     const ran = run(process.execPath, ['readme.cjs'], consumer);
     expect(ran.status, ran.out).toBe(0);
     expect(ran.out).toMatch(/^\d+ triples\n$/);
+  });
+
+  it("gives build().quads a type RDF/JS's Quad accepts, as n3's Writer under @types/n3 takes them", () => {
+    // The SemOps manual's claim C08.16: without termType and value on the package's Quad, handing
+    // build().quads to `new Writer().addQuads(...)` failed strict type checking with TS2345.
+    fs.writeFileSync(
+      path.join(consumer, 'rdfjs.ts'),
+      [
+        // data-model is where Quad is; the index also needs @types/node, which this project does not have.
+        "import type { Quad } from '@rdfjs/types/data-model';",
+        "import { ontology, defclass, build } from 'ontology-suite/dsl';",
+        "ontology('https://acme.example.org/ns/', 'acme');",
+        "defclass('Employee');",
+        'export const quads: Quad[] = build().quads;',
+      ].join('\n'),
+    );
+    fs.writeFileSync(
+      path.join(consumer, 'tsconfig.rdfjs.json'),
+      JSON.stringify({ compilerOptions: { strict: true, noEmit: true, types: [], target: 'es2022', module: 'nodenext', moduleResolution: 'nodenext' }, files: ['rdfjs.ts'] }),
+    );
+    const checked = tsc(consumer, 'tsconfig.rdfjs.json');
+    expect(checked.out).toBe('');
+    expect(checked.status).toBe(0);
   });
 
   it("reports a fact of the wrong kind from the package's own types", () => {

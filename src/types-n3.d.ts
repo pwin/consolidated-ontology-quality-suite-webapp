@@ -7,8 +7,13 @@
 // RDF/JS term/quad shapes), confirmed against the installed n3@2.1.1 at
 // c:\repos\consolidated_ontology_suite_webapp\node_modules\n3.
 
+// The term and quad shapes are RDF/JS's (@rdfjs/types) member for member, n3's runtime objects
+// having all of them. ts-plugin-build.js ships them with the DSL's declarations, and
+// `build().quads` has to be accepted wherever RDF/JS quads are -- n3's own Writer under
+// @types/n3 among them. Without termType and value on Quad it was not (the SemOps manual's
+// claim C08.16).
 declare module 'n3' {
-  export type TermType = 'NamedNode' | 'BlankNode' | 'Literal' | 'Variable' | 'DefaultGraph';
+  export type TermType = 'NamedNode' | 'BlankNode' | 'Literal' | 'Variable' | 'DefaultGraph' | 'Quad';
 
   export interface Term {
     termType: TermType;
@@ -27,6 +32,8 @@ declare module 'n3' {
   export interface Literal extends Term {
     termType: 'Literal';
     language: string;
+    /** The base direction of a directional language-tagged string (RDF 1.2): `"x"@ar--rtl`. */
+    direction?: 'ltr' | 'rtl' | '' | null;
     datatype: NamedNode;
   }
 
@@ -36,6 +43,7 @@ declare module 'n3' {
 
   export interface DefaultGraph extends Term {
     termType: 'DefaultGraph';
+    value: '';
   }
 
   export type Quad_Subject = NamedNode | BlankNode | Variable;
@@ -43,12 +51,13 @@ declare module 'n3' {
   export type Quad_Object = NamedNode | BlankNode | Literal | Variable;
   export type Quad_Graph = NamedNode | BlankNode | DefaultGraph | Variable;
 
-  export interface Quad {
+  export interface Quad extends Term {
+    termType: 'Quad';
+    value: '';
     subject: Quad_Subject;
     predicate: Quad_Predicate;
     object: Quad_Object;
     graph: Quad_Graph;
-    equals(other: Quad | null | undefined): boolean;
   }
 
   export interface ParserOptions {
