@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.16.1
+
+Two fixes to the scripting DSL, both reported by the SemOps manual, which tests it from the npm
+package.
+
+### `build().quads` goes to n3's Writer without a cast
+
+The DSL's `Quad` type lacked `termType` and `value`, so under strict TypeScript with `@types/n3`,
+`new Writer({ prefixes }).addQuads(build().quads)` failed with TS2345, though it ran. That is the
+use the package's README suggests (the manual's claim C08.16). The term and quad types now match
+RDF/JS (`@rdfjs/types`) member for member, as n3's runtime objects always did.
+
+### Code the type checker did not see gets an error that names its mistake
+
+A script run without type checking, with `tsx` or as JavaScript, could pass a DSL function
+anything, and the DSL trusted its types. `defdatatypeproperty('id', { range: 'xsd:string' })`
+failed inside the DSL with `TypeError: Cannot convert undefined or null to object` (claim C08.15),
+and a domain given by name wrote an IRI made of `undefined` without failing at all. Every public
+function now checks its arguments before it writes anything:
+
+```text
+defdatatypeproperty('hasEmployeeId'): range takes a datatype, made with datatype('xsd:string') say, and was given the string "xsd:string".
+```
+
+Three errors the DSL already gave, for a datatype property in a property chain, in `inverseOf`
+or in `inverse()`, now use the same wording.
+
+All 509 tests pass, 43 of them new, and the 8 integration tests.
+
 ## 0.16.0
 
 ### One relative IRI no longer makes Local Checks fail
