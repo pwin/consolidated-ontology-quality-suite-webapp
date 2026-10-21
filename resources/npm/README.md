@@ -28,7 +28,7 @@ const { quads, prefixes } = build();
 console.log(`${quads.length} triples`);
 ```
 
-`build()` returns the ontology as [RDF/JS](https://rdf.js.org/) quads, with the prefixes it uses, ready for any RDF/JS serializer, such as [n3](https://www.npmjs.com/package/n3)'s Writer. The types catch a mistake before the script runs: a fact giving an object property a literal, say, or a datatype property in a property chain.
+`build()` returns the ontology as [RDF/JS](https://rdf.js.org/) quads, with the prefixes it uses, ready for any RDF/JS serializer, such as [n3](https://www.npmjs.com/package/n3)'s Writer. The types catch a mistake before the script runs: a fact giving an object property a literal, say, or a datatype property in a property chain. Code the type checker never saw, run with `tsx` or written in JavaScript, gets the same mistake back as an error naming the function, the argument and what it was given.
 
 ## What the language has
 

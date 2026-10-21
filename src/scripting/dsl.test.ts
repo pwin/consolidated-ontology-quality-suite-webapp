@@ -476,8 +476,8 @@ describe('0.15: individuals, property axioms, datatypes and references', () => {
       const p = defobjectproperty('p');
       const age = defdatatypeproperty('age');
       expect(() => defobjectproperty('q', { chain: [p] })).toThrow('q: a property chain needs at least two properties.');
-      expect(() => defobjectproperty('q', { chain: [p, age as any] })).toThrow('age is not an object property; chain takes object properties.');
-      expect(() => defobjectproperty('q', { inverseOf: age as any })).toThrow('age is not an object property; inverseOf takes object properties.');
+      expect(() => defobjectproperty('q', { chain: [p, age as any] })).toThrow("defobjectproperty('q'): chain[1] takes an object property (from defobjectproperty or objectPropertyRef), and was given a datatype property, age.");
+      expect(() => defobjectproperty('q', { inverseOf: age as any })).toThrow("defobjectproperty('q'): inverseOf takes an object property (from defobjectproperty or objectPropertyRef), and was given a datatype property, age.");
       expect(() => defobjectproperty('q', { characteristics: ['sticky' as any] })).toThrow('"sticky" is not a property characteristic.');
     });
   });
@@ -607,6 +607,6 @@ describe('inverse: a restriction on the inverse of a property', () => {
 
   it('refuses a datatype property, which has no inverse', () => {
     const age = defdatatypeproperty('age');
-    expect(() => inverse(age as any)).toThrow('inverse: age is not an object property; only an object property has an inverse.');
+    expect(() => inverse(age as any)).toThrow('inverse takes an object property (from defobjectproperty or objectPropertyRef), and was given a datatype property, age.');
   });
 });

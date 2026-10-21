@@ -25,6 +25,25 @@ import {
 } from '../rdf/vocab';
 import { classExprToRdf, rdfList } from '../rdf/formats/classExpression';
 import { ClassExpr, ClassExpressionSyntaxError, mapClassExprNames, parseClassExpressionStrict } from '../rdf/formats/classExpressionParser';
+import {
+  checkAnnotated,
+  checkCardinality,
+  checkClass,
+  checkClassExpression,
+  checkDatatype,
+  checkDatatypeProperty,
+  checkEach,
+  checkFact,
+  checkIndividual,
+  checkList,
+  checkLiteral,
+  checkObjectProperty,
+  checkOptions,
+  checkPropertyExpression,
+  checkString,
+  checkText,
+  checkValue,
+} from './dslArguments';
 
 /**
  * Tawny-OWL-inspired scripting DSL: build an ontology as real TypeScript
@@ -97,7 +116,11 @@ let current: OntologyBuilder | undefined;
 
 /** Must be called once, before any defclass/defobjectproperty/defdatatypeproperty call. */
 export function ontology(baseIri: string, prefix: string, extraPrefixes: Record<string, string> = {}): void {
-  current = { baseIri, prefix, header: [], quads: [], prefixes: { ...WELL_KNOWN_PREFIXES, [prefix]: baseIri, ...extraPrefixes } };
+  checkString('ontology: the base IRI', baseIri);
+  checkText('ontology: the prefix', prefix);
+  checkOptions('ontology: the extra prefixes', extraPrefixes);
+  for (const [name, ns] of Object.entries(extraPrefixes)) checkString(`ontology: the extra prefix '${name}'`, ns);
+  current ={ baseIri, prefix, header: [], quads: [], prefixes: { ...WELL_KNOWN_PREFIXES, [prefix]: baseIri, ...extraPrefixes } };
 }
 
 function requireCurrent(): OntologyBuilder {
@@ -136,6 +159,13 @@ export interface DefOntologyOptions extends Annotated {
  */
 export function defontology(iri: string, opts: DefOntologyOptions = {}): void {
   const b = requireCurrent();
+  checkString('defontology: the IRI', iri);
+  checkOptions('defontology', opts);
+  for (const key of ['versionIRI', 'versionInfo', 'priorVersion'] as const) {
+    if (opts[key] !== undefined) checkString(`defontology: ${key}`, opts[key]);
+  }
+  checkEach('defontology: imports', opts.imports, 'IRIs', checkString);
+  checkAnnotated('defontology', opts);
   if (b.header.length > 0) throw new Error('defontology() was already called: an ontology has one header.');
   const subject = namedNode(resolveIri(b, iri));
   const add = (predicate: string, object: Quad_Object) => b.header.push(quad(subject, namedNode(predicate), object));
@@ -216,6 +246,13 @@ export interface DefClassOptions extends Annotated {
 
 export function defclass(name: string, opts: DefClassOptions = {}): ClassRef {
   const b = requireCurrent();
+  const where = `defclass('${name}')`;
+  checkString('defclass: the name', name);
+  checkOptions(where, opts);
+  checkEach(`${where}: subClassOf`, opts.subClassOf, 'classes or class expressions', checkClassExpression);
+  if (opts.equivalentClass !== undefined) checkClassExpression(`${where}: equivalentClass`, opts.equivalentClass);
+  checkEach(`${where}: disjointWith`, opts.disjointWith, 'classes', checkClass);
+  checkAnnotated(where, opts);
   const iri = `${b.baseIri}${name}`;
   const subject = namedNode(iri);
   b.quads.push(quad(subject, namedNode(RDF_TYPE), namedNode(OWL_CLASS)));
@@ -291,25 +328,29 @@ function declareProperty(
   return subject;
 }
 
-/** `ref`'s IRI, if it is an object property; for scripts the type checker didn't see. */
-function objectPropertyIri(ref: PropertyRef, option: string): string {
-  if (ref.kind !== 'objectProperty') throw new Error(`${ref.localName} is not an object property; ${option} takes object properties.`);
-  return ref.iri;
-}
-
 /**
  * Declares an owl:ObjectProperty. It never generates a paired inverse: declare one with
  * `inverseOf` if you want it.
  */
 export function defobjectproperty(name: string, opts: DefObjectPropertyOptions = {}): ObjectPropertyRef {
   const b = requireCurrent();
+  const where = `defobjectproperty('${name}')`;
+  checkString('defobjectproperty: the name', name);
+  checkOptions(where, opts);
+  if (opts.domain !== undefined) checkClass(`${where}: domain`, opts.domain);
+  if (opts.range !== undefined) checkClass(`${where}: range`, opts.range);
+  if (opts.subPropertyOf !== undefined) checkObjectProperty(`${where}: subPropertyOf`, opts.subPropertyOf);
+  checkEach(`${where}: characteristics`, opts.characteristics, 'characteristics', checkString);
+  if (opts.inverseOf !== undefined) checkObjectProperty(`${where}: inverseOf`, opts.inverseOf);
+  checkEach(`${where}: chain`, opts.chain, 'object properties', checkObjectProperty);
+  checkAnnotated(where, opts);
+  if (opts.chain && opts.chain.length < 2) throw new Error(`${name}: a property chain needs at least two properties.`);
   const iri = `${b.baseIri}${name}`;
   const subject = declareProperty(b, iri, OWL_OBJECT_PROPERTY, opts);
   if (opts.range) b.quads.push(quad(subject, namedNode(RDFS_RANGE), namedNode(opts.range.iri)));
-  if (opts.inverseOf) b.quads.push(quad(subject, namedNode(`${OWL}inverseOf`), namedNode(objectPropertyIri(opts.inverseOf, 'inverseOf'))));
+  if (opts.inverseOf) b.quads.push(quad(subject, namedNode(`${OWL}inverseOf`), namedNode(opts.inverseOf.iri)));
   if (opts.chain) {
-    if (opts.chain.length < 2) throw new Error(`${name}: a property chain needs at least two properties.`);
-    const links = opts.chain.map((p) => namedNode(objectPropertyIri(p, 'chain')));
+    const links = opts.chain.map((p) => namedNode(p.iri));
     b.quads.push(quad(subject, namedNode(`${OWL}propertyChainAxiom`), rdfList(links, b.quads)));
   }
   return { kind: 'objectProperty', iri, localName: name };
@@ -317,6 +358,14 @@ export function defobjectproperty(name: string, opts: DefObjectPropertyOptions =
 
 export function defdatatypeproperty(name: string, opts: DefDatatypePropertyOptions = {}): DatatypePropertyRef {
   const b = requireCurrent();
+  const where = `defdatatypeproperty('${name}')`;
+  checkString('defdatatypeproperty: the name', name);
+  checkOptions(where, opts);
+  if (opts.domain !== undefined) checkClass(`${where}: domain`, opts.domain);
+  if (opts.range !== undefined) checkDatatype(`${where}: range`, opts.range);
+  if (opts.subPropertyOf !== undefined) checkDatatypeProperty(`${where}: subPropertyOf`, opts.subPropertyOf);
+  checkEach(`${where}: characteristics`, opts.characteristics, 'characteristics', checkString);
+  checkAnnotated(where, opts);
   for (const characteristic of opts.characteristics ?? []) {
     if (characteristic !== 'functional') throw new Error(`${name}: a datatype property can only be functional, not ${characteristic}.`);
   }
@@ -362,6 +411,8 @@ const COUNT_FACETS = new Set(['length', 'minLength', 'maxLength', 'totalDigits',
  */
 export function datatype(name: string, facets: DatatypeFacets = {}): DatatypeRef {
   const b = requireCurrent();
+  checkString('datatype: the name', name);
+  checkOptions(`datatype('${name}'): the facets`, facets);
   for (const [facet, value] of Object.entries(facets)) {
     if (value === undefined) continue;
     if (BOUND_FACETS.has(facet)) {
@@ -417,12 +468,22 @@ export interface DefIndividualOptions extends Annotated {
  */
 export function defindividual(name: string, opts: DefIndividualOptions = {}): IndividualRef {
   const b = requireCurrent();
+  const where = `defindividual('${name}')`;
+  checkString('defindividual: the name', name);
+  checkOptions(where, opts);
+  checkEach(`${where}: types`, opts.types, 'classes or class expressions', checkClassExpression);
+  checkEach(`${where}: facts`, opts.facts, 'facts', checkFact);
+  checkEach(`${where}: sameAs`, opts.sameAs, 'individuals', checkIndividual);
+  checkEach(`${where}: differentFrom`, opts.differentFrom, 'individuals', checkIndividual);
+  checkAnnotated(where, opts);
+  // Worked out before anything is written, so that a fact of the wrong kind leaves nothing behind.
+  const facts = (opts.facts ?? []).map(([property, value]) => [namedNode(property.iri), factObject(b, name, property, value)] as const);
   const iri = `${b.baseIri}${name}`;
   const subject = namedNode(iri);
   b.quads.push(quad(subject, namedNode(RDF_TYPE), namedNode(`${OWL}NamedIndividual`)));
   b.quads.push(...annotations(b, subject, opts));
   for (const type of opts.types ?? []) b.quads.push(quad(subject, namedNode(RDF_TYPE), toClassExprNode(b, type)));
-  for (const [property, value] of opts.facts ?? []) b.quads.push(quad(subject, namedNode(property.iri), factObject(b, name, property, value)));
+  for (const [predicate, object] of facts) b.quads.push(quad(subject, predicate, object));
   for (const other of opts.sameAs ?? []) b.quads.push(quad(subject, namedNode(`${OWL}sameAs`), namedNode(other.iri)));
   for (const other of opts.differentFrom ?? []) b.quads.push(quad(subject, namedNode(`${OWL}differentFrom`), namedNode(other.iri)));
   return { kind: 'individual', iri, localName: name };
@@ -430,12 +491,13 @@ export function defindividual(name: string, opts: DefIndividualOptions = {}): In
 
 /** A fact's object, checked against its property's kind for scripts the type checker didn't see. */
 function factObject(b: OntologyBuilder, subjectName: string, property: PropertyRef, value: IndividualRef | LiteralValue): Quad_Object {
-  const ref = typeof value === 'object' && 'localName' in value ? (value as Ref) : undefined;
+  const ref = typeof value === 'object' && value !== null && 'localName' in value ? (value as Ref) : undefined;
   if (property.kind === 'objectProperty') {
     if (ref?.kind !== 'individual') throw new Error(`${subjectName}: ${property.localName} is an object property, so its value must be an individual.`);
     return namedNode(ref.iri);
   }
   if (ref) throw new Error(`${subjectName}: ${property.localName} is a datatype property, so its value must be a literal.`);
+  checkLiteral(`${subjectName}: the value of ${property.localName}`, value);
   return literalTerm(b, value as LiteralValue);
 }
 
@@ -445,6 +507,7 @@ function factObject(b: OntologyBuilder, subjectName: string, property: PropertyR
  */
 export function allDifferent(...individuals: IndividualRef[]): void {
   const b = requireCurrent();
+  individuals.forEach((individual, i) => checkIndividual(`allDifferent: argument ${i + 1}`, individual));
   individuals.forEach((individual, i) => {
     for (const other of individuals.slice(i + 1)) b.quads.push(quad(namedNode(individual.iri), namedNode(`${OWL}differentFrom`), namedNode(other.iri)));
   });
@@ -455,8 +518,10 @@ export function allDifferent(...individuals: IndividualRef[]): void {
 // ---------------------------------------------------------------------------
 
 /** The IRI and local name of a term named in a script: a bare name is in this ontology. */
-function named(name: string): { iri: string; localName: string } {
-  const iri = resolveName(requireCurrent(), name);
+function named(fn: string, name: string): { iri: string; localName: string } {
+  const b = requireCurrent();
+  checkString(`${fn}: the name`, name);
+  const iri = resolveName(b, name);
   return { iri, localName: iri.replace(/^.*[#/:]/, '') };
 }
 
@@ -465,19 +530,19 @@ function named(name: string): { iri: string; localName: string } {
  * this script (`classRef('Keeper')`). Writes nothing. The same goes for the three below.
  */
 export function classRef(name: string): ClassRef {
-  return { kind: 'class', ...named(name) };
+  return { kind: 'class', ...named('classRef', name) };
 }
 
 export function objectPropertyRef(name: string): ObjectPropertyRef {
-  return { kind: 'objectProperty', ...named(name) };
+  return { kind: 'objectProperty', ...named('objectPropertyRef', name) };
 }
 
 export function datatypePropertyRef(name: string): DatatypePropertyRef {
-  return { kind: 'datatypeProperty', ...named(name) };
+  return { kind: 'datatypeProperty', ...named('datatypePropertyRef', name) };
 }
 
 export function individualRef(name: string): IndividualRef {
-  return { kind: 'individual', ...named(name) };
+  return { kind: 'individual', ...named('individualRef', name) };
 }
 
 // ---------------------------------------------------------------------------
@@ -504,7 +569,8 @@ export type PropertyExpression = PropertyRef | InverseProperty;
  * convention, and what Local Checks' MDL-001 suggests in place of a named inverse.
  */
 export function inverse(property: ObjectPropertyRef): InverseProperty {
-  if (property.kind !== 'objectProperty') throw new Error(`inverse: ${(property as Ref).localName} is not an object property; only an object property has an inverse.`);
+  // Only an object property has an inverse.
+  checkObjectProperty('inverse', property);
   return { kind: 'inverse', of: property };
 }
 
@@ -518,42 +584,58 @@ function exprOf(x: ClassRef | ClassExpr): ClassExpr {
 }
 
 export function some(property: PropertyExpression, filler: ClassRef | ClassExpr): ClassExpr {
+  checkPropertyExpression('some: the property', property);
+  checkClassExpression('some: the filler', filler);
   return { kind: 'restriction', ...onProperty(property), type: 'some', filler: exprOf(filler) };
 }
 
 export function only(property: PropertyExpression, filler: ClassRef | ClassExpr): ClassExpr {
+  checkPropertyExpression('only: the property', property);
+  checkClassExpression('only: the filler', filler);
   return { kind: 'restriction', ...onProperty(property), type: 'only', filler: exprOf(filler) };
 }
 
 /** `property value` an individual or a literal. A class reference stands for the individual with its IRI. */
 export function hasValue(property: PropertyExpression, value: IndividualRef | ClassRef | LiteralValue): ClassExpr {
+  checkPropertyExpression('hasValue: the property', property);
+  checkValue('hasValue: the value', value);
   if (typeof value === 'object' && 'localName' in value) {
     return { kind: 'restriction', ...onProperty(property), type: 'value', individual: value.iri };
   }
   return { kind: 'restriction', ...onProperty(property), type: 'value', literalValue: literalParts(requireCurrent(), value) };
 }
 
+function cardinality(fn: string, type: 'min' | 'max' | 'exactly', property: PropertyExpression, n: number, filler?: ClassRef | ClassExpr): ClassExpr {
+  checkPropertyExpression(`${fn}: the property`, property);
+  checkCardinality(`${fn}: the number`, n);
+  if (filler !== undefined) checkClassExpression(`${fn}: the filler`, filler);
+  return { kind: 'restriction', ...onProperty(property), type, cardinality: n, filler: filler ? exprOf(filler) : undefined };
+}
+
 export function minCardinality(property: PropertyExpression, n: number, filler?: ClassRef | ClassExpr): ClassExpr {
-  return { kind: 'restriction', ...onProperty(property), type: 'min', cardinality: n, filler: filler ? exprOf(filler) : undefined };
+  return cardinality('minCardinality', 'min', property, n, filler);
 }
 
 export function maxCardinality(property: PropertyExpression, n: number, filler?: ClassRef | ClassExpr): ClassExpr {
-  return { kind: 'restriction', ...onProperty(property), type: 'max', cardinality: n, filler: filler ? exprOf(filler) : undefined };
+  return cardinality('maxCardinality', 'max', property, n, filler);
 }
 
 export function exactCardinality(property: PropertyExpression, n: number, filler?: ClassRef | ClassExpr): ClassExpr {
-  return { kind: 'restriction', ...onProperty(property), type: 'exactly', cardinality: n, filler: filler ? exprOf(filler) : undefined };
+  return cardinality('exactCardinality', 'exactly', property, n, filler);
 }
 
 export function and(...operands: (ClassRef | ClassExpr)[]): ClassExpr {
+  operands.forEach((operand, i) => checkClassExpression(`and: argument ${i + 1}`, operand));
   return { kind: 'and', operands: operands.map(exprOf) };
 }
 
 export function or(...operands: (ClassRef | ClassExpr)[]): ClassExpr {
+  operands.forEach((operand, i) => checkClassExpression(`or: argument ${i + 1}`, operand));
   return { kind: 'or', operands: operands.map(exprOf) };
 }
 
 export function not(operand: ClassRef | ClassExpr): ClassExpr {
+  checkClassExpression('not', operand);
   return { kind: 'not', operand: exprOf(operand) };
 }
 
@@ -580,11 +662,12 @@ const MX_NESTED = 'urn:x-ontology-suite-mx:';
  */
 export function mx(strings: TemplateStringsArray, ...values: MxValue[]): ClassExpr {
   const b = requireCurrent();
+  if (!Array.isArray(strings) || !('raw' in strings)) throw new Error('mx is a tagged template: write mx`...`, not mx(...).');
   const nested: ClassExpr[] = [];
   const refs = new Map<string, Ref>();
   let text = strings[0];
   values.forEach((value, i) => {
-    text += mxToken(value, nested, refs) + strings[i + 1];
+    text += mxToken(`mx: \${...} ${i + 1}`, value, nested, refs) + strings[i + 1];
   });
   let expr: ClassExpr;
   try {
@@ -597,7 +680,7 @@ export function mx(strings: TemplateStringsArray, ...values: MxValue[]): ClassEx
 }
 
 /** The Manchester text an interpolated value stands for. */
-function mxToken(value: MxValue, nested: ClassExpr[], refs: Map<string, Ref>): string {
+function mxToken(where: string, value: MxValue, nested: ClassExpr[], refs: Map<string, Ref>): string {
   // A whole number 0 or more is written bare, so it reads as a cardinality or, after `value`, as
   // an xsd:integer; any other number, and a boolean, as a typed literal.
   if (typeof value === 'number' || typeof value === 'boolean') {
@@ -606,6 +689,12 @@ function mxToken(value: MxValue, nested: ClassExpr[], refs: Map<string, Ref>): s
     return `"${parts.value}"^^<${parts.datatype}>`;
   }
   if (typeof value === 'string') return `"${value.replace(/["\\]/g, '\\$&')}"`;
+  // Anything else must be a term or an expression the DSL made.
+  const kind = typeof value === 'object' && value !== null ? (value as { kind?: unknown }).kind : undefined;
+  if (kind === 'inverse') checkPropertyExpression(where, value);
+  else if (kind === 'objectProperty' || kind === 'datatypeProperty') checkPropertyExpression(where, value);
+  else if (kind === 'individual') checkIndividual(where, value);
+  else checkClassExpression(where, value);
   if (value.kind === 'inverse') {
     refs.set(value.of.iri, value.of);
     return `inverse <${value.of.iri}>`;
@@ -658,6 +747,8 @@ function resolveMx(b: OntologyBuilder, expr: ClassExpr, nested: ClassExpr[], ref
  *   defclass('MargheritaPizza', { subClassOf: [Pizza, ...someOnly(hasTopping, Mozzarella, Tomato)] });
  */
 export function someOnly(property: PropertyExpression, ...fillers: (ClassRef | ClassExpr)[]): ClassExpr[] {
+  checkPropertyExpression('someOnly: the property', property);
+  fillers.forEach((filler, i) => checkClassExpression(`someOnly: filler ${i + 1}`, filler));
   if (fillers.length === 0) throw new Error('someOnly() needs at least one filler.');
   return [...fillers.map((filler) => some(property, filler)), only(property, fillers.length === 1 ? fillers[0] : or(...fillers))];
 }
@@ -677,6 +768,10 @@ export interface AsSubclassesOptions {
  */
 export function asSubclasses(parent: ClassRef, children: ClassRef[], opts: AsSubclassesOptions = {}): ClassRef[] {
   const b = requireCurrent();
+  checkClass('asSubclasses: the parent', parent);
+  checkList('asSubclasses: the children', children, 'classes');
+  checkEach('asSubclasses: the children', children, 'classes', checkClass);
+  checkOptions('asSubclasses', opts);
   for (const child of children) b.quads.push(quad(namedNode(child.iri), namedNode(RDFS_SUBCLASS_OF), namedNode(parent.iri)));
   if (opts.disjoint) {
     children.forEach((child, i) => {
