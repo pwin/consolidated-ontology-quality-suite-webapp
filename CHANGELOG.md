@@ -1,5 +1,42 @@
 # Changelog
 
+## 0.16.2
+
+The SHACL engine and the HOLOS store move to their current releases. No behaviour here changes;
+both were checked rather than taken from the release notes.
+
+### `shacl-wasm-node` 0.3.2 -> 0.3.4
+
+0.3.3 put `rdfsClosure` on the JavaScript surface. It is there because this project's Python
+sibling hit a real defect with it missing: that suite runs every check twice, once as a SHACL
+shape and once as a portable SPARQL query, and only the shape arm saw the entailed triples. The
+two arms were reading different graphs, and their findings were then merged as though they came
+from one run -- 479 findings against 497 on one ontology.
+
+Nothing here calls it yet, and this is not a swap. Reasoning in Run Local Checks goes through the
+EYE reasoner over `resources/reasoning/core-rules.n3`, which does more than RDFS: the disjointness
+and contradiction detection behind REA-001 to REA-006 has no RDFS equivalent. Which closure is
+authoritative for which checks is a decision still to make, and there are three closures across
+this family of tools to reconcile.
+
+0.3.4 itself is a command-line guard against validating a graph against no shapes, and does not
+reach this surface.
+
+### `holos-wasm-node` 0.21.0 -> 0.23.0
+
+Housekeeping, and worth recording why it is only that. Both pins were caret ranges on a `0.x`
+version, which pins the minor, so no amount of reinstalling could have reached either current
+release.
+
+`crates/holos-wasm` is byte-identical between the two tags. The one change in what it compiles is
+the store's `Engine::query` unification, and this binding calls `query_with` directly, so it was
+never on the pipeline that had drifted. HOLOS 0.22.0's fixes are the `holos validate` CLI exit
+codes and its default validator; this surface exposes no validate at all. Two minors behind cost
+nothing, which is not what the version numbers suggested.
+
+The `ontology-suite` npm package is unchanged at 0.16.1: it is the scripting DSL on its own and
+has no dependencies, so neither engine reaches it.
+
 ## 0.16.1
 
 Two fixes to the scripting DSL, both reported by the SemOps manual, which tests it from the npm
