@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.16.3
+
+The HOLOS store moves to its current release, 0.25.0. Nothing you do in the editor behaves
+differently on the checks this extension ships; the reasons are below, because the last entry
+gave the wrong one.
+
+### `holos-wasm-node` 0.23.0 -> 0.25.0
+
+0.16.2 said this binding calls `query_with` and was never on the query pipeline that had
+drifted. It is not so: `queryRdf`, which every portable check goes through, calls
+`Engine::query`, which was that pipeline until HOLOS 0.23.0. So 0.16.2 did pick up the
+unification, and with it a bug the unified pipeline carried: its index join treated a value it
+had bound earlier as though the query had written it, so a zero-length path between two
+variables (`?a rdfs:subClassOf* ?b`) could match a term that is not in the graph. HOLOS 0.24.0
+fixes it.
+
+Three shipped checks have a zero-length path. DAT-004's two `rdf:type/rdfs:subClassOf*` legs each
+end at a constant, which keeps its meaning. CNF-003 and CNF-004 have the changed shape, with both
+ends variables, but both ends are bound from triples in the graph -- the object of an `rdf:type`,
+and of an `rdfs:domain` or `rdfs:range` -- so they are always nodes of it and the answer is the
+same either side of the fix.
+
+HOLOS 0.25.0 changes its own SHACL engine. This binding exposes no validation; SHACL here is
+`shacl-wasm-node`, unchanged at 0.3.4.
+
+509 tests pass. `npm audit` reports 18 findings, the same 18 as 0.16.2, all of them in development
+and packaging tooling -- vsce, the test runners, vite -- and none in the engines.
+
+The `ontology-suite` npm package is unchanged at 0.16.1: it is the scripting DSL on its own and
+has no dependencies.
+
 ## 0.16.2
 
 The SHACL engine and the HOLOS store move to their current releases. No behaviour here changes;
