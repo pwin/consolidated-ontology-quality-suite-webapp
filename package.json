@@ -488,7 +488,7 @@
     "@viz-js/viz": "^3.28.0",
     "esbuild": "^0.28.1",
     "eyereasoner": "^21.1.16",
-    "holos-wasm-node": "^0.23.0",
+    "holos-wasm-node": "^0.25.0",
     "n3": "^2.1.1",
     "rdfxml-streaming-parser": "^3.2.0",
     "shacl-wasm-node": "^0.3.4"
