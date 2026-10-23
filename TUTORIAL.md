@@ -65,8 +65,8 @@ smell (grounded in gist's own conventions — see the README's
 | `MDL-003` on `ex:AppointmentType` (and a few others) | No restrictions/relationships of its own — a candidate for `gist:Category` instead of a new class. The heuristic is intentionally broad: it'll flag *every* structure-less class it finds (`ex:Animal`, `ex:Person`, `ex:Appointment` too), not just the one purpose-built example — that's honest heuristic behavior, not a bug. |
 
 You'll also see real SPARQL/SHACL structural and style findings (missing
-`owl:versionInfo`, naming-convention checks, etc.) — the same 39+6-check
-registry `consolidated_ontology_suite` ships, just run by Oxigraph and
+`owl:versionInfo`, naming-convention checks, etc.) — the same 61-check
+registry the Python suite ships, just run by Oxigraph and
 `shacl-engine` instead of a Python subprocess.
 
 You'll also see a `PRJ-REQUIRED` finding on `ex:Vaccination`: it's missing
@@ -550,4 +550,4 @@ so keep the two at the same version.
   crashing on some check shapes; `findPair` not searching sibling `csv/`/
   `queries/` directories) and the Quick Fix repair engine added in 0.3.0.
 - `npm test` — the full automated suite these examples are also verified
-  against (151 tests as of this writing).
+  against (509 tests as of this writing).

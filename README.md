@@ -10,7 +10,7 @@ class expressions — `and`/`or`/`not`/`some`/`only`/cardinality
 restrictions — not just atomic declarations; see [Serializations](#serializations)).
 
 It grew out of two sibling projects: `consolidated_ontology_suite`
-(a mature Python CLI with a 59-check registry, reasoning, docgen, and the
+(a mature Python CLI with a 61-check registry, reasoning, docgen, and the
 real `oxi-gen` triplifier) and `turtle-editor-viewer`
 (a browser-based Turtle/SPARQL editor). This extension reuses the check
 registry's *data* (`registry.json` + `sparql/*.rq` + `shapes/*.ttl` —
@@ -200,7 +200,7 @@ Validation" and "Full Triplify" commands, degrading gracefully if absent.
   menu. [docs/TESTING_TARQL.md](docs/TESTING_TARQL.md) covers what these three
   catch, what nothing here catches, and a review order.
 - *Run Deep Validation*: optional Python CLI fallback for full OWL2 DL
-  reasoning (owlready2/HermiT). **Nine of the 59 registry checks can only be
+  reasoning (owlready2/HermiT). **Eleven of the 61 registry checks can only be
   produced this way**, and are listed with the reason in
   [`registryCoverage.test.ts`](src/checks/registryCoverage.test.ts): `REA-020`/
   `REA-021`/`REA-022` need a real DL reasoner, `REA-010`/`REA-011`/`REA-012`
@@ -527,7 +527,7 @@ separate registry with its own publish step, `npx ovsx publish`.
 
 Two tiers, both real and both passing as of this writing:
 
-- **`npm test`** (Vitest) — 216 tests across 34 files covering every
+- **`npm test`** (Vitest) — 509 tests across 56 files covering every
   pure-logic module: parsing, all six serializations' round-trips
   (including the Manchester class-expression engine against real OWL2
   restrictions), import resolution (including the gist v11→v14.1 drift-
@@ -544,7 +544,7 @@ Two tiers, both real and both passing as of this writing:
   styling and its literal-aware `quadKey()` diffing) and PNG rasterization
   (a real pixel-content check, not just PNG-signature validity — the check
   that would have caught the blank-text font bug before it shipped). Fast
-  (~10-15s), no VS Code required.
+  (~20-40s depending on cache warmth), no VS Code required.
 - **`npm run test:integration`** (`@vscode/test-cli` + `@vscode/test-electron`)
   — launches a real, headless VS Code Extension Development Host and
   exercises the actual extension: activation, command registration,
