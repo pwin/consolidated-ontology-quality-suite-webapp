@@ -44,7 +44,11 @@ export class OntologySuiteClient {
 
   async runChecks(ontologyPath: string, dataPaths: string[] = []): Promise<ResultRow[]> {
     const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ontology-suite-'));
-    const args = ['run', '--ontology', ontologyPath, '--out-dir', outDir];
+    // `--fail-on never`: the CLI's default is `--fail-on Violation`, which exits 1 when it finds
+    // one, and exec() reads any exit but 0 as failure -- so an ontology with a Violation in it
+    // showed nothing at all, the one case a deep validation most needs to show. The exit code is
+    // for CI; here the findings are the result. The flag is as old as the CLI.
+    const args = ['run', '--ontology', ontologyPath, '--out-dir', outDir, '--fail-on', 'never'];
     for (const d of dataPaths) args.push('--data', d);
 
     await this.exec(args);
