@@ -1,5 +1,81 @@
 # Changelog
 
+## 0.17.0
+
+A severity policy says how strict each check is at each stage of a project. Deep Validation no
+longer loses its results when the CLI finds a Violation. Both come from reviewing the Python
+suite's releases since 0.24 against this extension.
+
+### Severity policy
+
+The Python suite's 0.25.0 added `--severity-policy` and `--stringency`. Their reasoning: the same
+fault means different things at different times. A property with no domain or range is worth
+knowing about while you sketch, and worth blocking a release over. Nothing about the check changes
+between the two; only the stringency does. Projects had been copying the suite's shapes and queries
+and rewriting their severities in place. That is fragile, and it fails silently when only one of a
+check's two formulations is rewritten.
+
+This release ports it. `.ontology-suite/severity-policy.json`, or wherever
+`ontologySuite.severityPolicy` points, holds the same file the Python suite takes, read by the same
+rules:
+
+- Named stages, with `extends`.
+- A flat object or a list of objects for a single stage.
+- `off` to drop a check's findings at that stage.
+
+In the editor, the file gets completion and validation from a bundled schema, as `class-rules.json`
+does. It offers every check id, with its title on hover, and the four values.
+
+`ontologySuite.stringency` picks the stage. *Run Local Checks* applies it after the engines' rows
+are merged, so a check written as both a shape and a query is re-mapped once and wholly. *Run Deep
+Validation* applies the same policy to the CLI's rows rather than passing the flags on. That way it
+works with a CLI from before 0.25, and one file reads the same in both commands.
+
+Nothing is relabelled quietly. A re-mapped finding says in the Problems panel what its check
+declared. Every re-mapping is written to the new *Ontology Suite (Severity Policy)* output channel.
+A stage that changed nothing says so.
+
+A policy that cannot be applied whole is refused, and the run does not go ahead. That covers:
+
+- an unknown check (with the near miss: `STR-0003` gets "did you mean STR-003?");
+- a severity the suite does not have;
+- an unknown stage, or an unnamed one when there are several;
+- an `extends` cycle;
+- a check listed twice with different severities.
+
+Findings shown without the policy someone asked for would read as findings with it.
+
+The port is tested against the Python suite's own test cases. Where both checkouts are present, a
+further test runs the Python module itself on the same policies and compares every answer, error
+messages included. One difference is deliberate: a policy here may name the checks only this
+extension reports (`MAL-*`, `MDL-*`, `PRJ-REQUIRED`), which the Python suite refuses.
+
+### Deep Validation kept nothing when the CLI found a Violation
+
+The CLI's `run` defaults to `--fail-on Violation`, exiting 1 when it finds one. *Run Deep
+Validation* treated any exit other than 0 as a failure. So on an ontology with a Violation in it,
+it showed nothing, not even an error, which is exactly when a deep validation matters most. It now
+passes `--fail-on never`, which the CLI has always accepted. The exit code is for CI; here the
+findings are the result.
+
+### `full_results.csv`
+
+The CLI has written thirteen columns since 0.25, not the ten this extension's parser was documented
+against:
+
+- `source_file` and `line` (0.17);
+- `declared_severity` (0.25).
+
+Each was inserted mid-row. The parser reads by column name, so nothing broke. A second fixture,
+captured from CLI 0.25.0 with a staged policy, now pins that, and `declared_severity` is read when
+present.
+
+538 unit tests and 9 integration tests pass. `npm audit` reports 15 findings, all in development
+and packaging tooling, and none in what ships.
+
+The `ontology-suite` npm package is unchanged at 0.16.1. It is the scripting DSL on its own, and
+building it from this release gives the same files.
+
 ## 0.16.3
 
 The HOLOS store moves to its current release, 0.25.0. Nothing you do in the editor behaves
