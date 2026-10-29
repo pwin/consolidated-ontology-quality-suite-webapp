@@ -166,11 +166,17 @@ Validation" and "Full Triplify" commands, degrading gracefully if absent.
   Python CLI) for production-scale output once a query is finalized.
 
 **Validation**
-- *Run Local Checks*: the registry's 44 SPARQL + 6 SHACL-SPARQL checks,
-  OWL2-RL-ish inference/consistency, gist-informed modelling guidance, a
-  closed-world vocabulary check (`VOC-001`, see below), and this project's
+- *Run Local Checks*: the registry's 44 SPARQL checks — `registry.sparqlFiles`,
+  the 46 `.rq` files less the `tarql/` pair excluded by
+  `SUBJECT_SPECIFIC_DIRS` — of which 21 are *also* written as SHACL-SPARQL
+  shapes and run both ways, those 21 living in 6 shape files. Plus OWL2-RL-ish
+  inference/consistency, gist-informed modelling guidance, a closed-world
+  vocabulary check (`VOC-001`, see below), and this project's
   own [minimum-required-content rules](#project-rules-minimum-required-content) —
   merged into one Problems-panel view, entirely in-process.
+  That comes to **50 of the registry's 61 checks running in-process**, and the
+  other 11 are exactly the CLI-only list below: the two tiers partition the
+  registry, with nothing falling between them.
 - **`VOC-001` (closed-world vocabulary check)**: SHACL's open-world
   semantics never flag "used `ex:Dgo`, meant `ex:Dog`" — nothing
   *contradicts* an undeclared class/property existing, it's just never
@@ -205,9 +211,12 @@ Validation" and "Full Triplify" commands, degrading gracefully if absent.
   [`registryCoverage.test.ts`](src/checks/registryCoverage.test.ts): `REA-020`/
   `REA-021`/`REA-022` need a real DL reasoner, `REA-010`/`REA-011`/`REA-012`
   are OWL2 profile membership (computed here for *Show Metrics*, not reported
-  as findings), and `CNF-001`/`CNF-002`/`CNF-005` compare a data graph against
+  as findings), `CNF-001`/`CNF-002`/`CNF-005` compare a data graph against
   a *separate* ontology — where *Run Local Checks* merges a document with its
-  imports into one graph, so there is no second graph to be absent from.
+  imports into one graph, so there is no second graph to be absent from — and
+  `TQL-004`/`TQL-005` query the Python suite's BIND-*facts* graph, one node per
+  BIND statement, which nothing here builds. Those last two are why the SPARQL
+  count above is 44 and not 46.
 - Competency questions as VS Code tests: `.cq.rq` files (SPARQL ASK/SELECT
   + expected-result directives) show up in Test Explorer.
 - *Quick Fix*: 16 checks (see [Quick Fix](#quick-fix-schematron-quick-fix-style-repair))
