@@ -5,7 +5,15 @@
 //   node npm-package.js     (or: npm run npm-package)
 //
 // writes dist-npm/ontology-suite and lists what `npm pack` would put in the tarball. Publishing is
-// a separate step: `npm publish dist-npm/ontology-suite`.
+// a separate step, and the leading `./` is not optional:
+//
+//   npm publish ./dist-npm/ontology-suite
+//
+// Without it npm reads `dist-npm/ontology-suite` as a package spec rather than a directory, and a
+// bare `a/b` is GitHub shorthand for a repository, so it goes looking for
+// ssh://git@github.com/dist-npm/ontology-suite.git and fails with "Repository not found" -- which
+// reads like a credentials problem and is nothing of the kind. This comment said it the wrong way
+// for several releases.
 //
 // The package is built from the same source as the extension's DSL: dsl.js bundled with
 // everything it uses (n3 included, so the package has no dependencies), and the declarations
