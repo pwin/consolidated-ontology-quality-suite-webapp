@@ -510,13 +510,19 @@ export function activate(context: vscode.ExtensionContext): void {
       if (!uri) return;
       const text = new TextDecoder('utf-8').decode(await vscode.workspace.fs.readFile(uri));
       const parsed = await readOntologyDocument(uri.fsPath, text);
+      // The same policy as Run Local Checks, applied here to the CLI's rows rather than passed to it
+      // as --severity-policy: that works with a CLI from before 0.25, and one file then reads the
+      // same in both commands, ids only this extension reports included.
+      const policy = localChecks.severityPolicyForRun(uri, 'Deep validation');
+      if (policy === 'refused') return;
       try {
-        const rows = await vscode.window.withProgress(
+        const cliRows = await vscode.window.withProgress(
           { location: vscode.ProgressLocation.Notification, title: 'Ontology Suite: running Python CLI deep validation…' },
           () => cliClient.runChecks(uri.fsPath),
         );
+        const { rows, note } = policy ? localChecks.applySeverityPolicy(cliRows, policy, 'Deep validation') : { rows: cliRows, note: '' };
         cliDiagnostics.set(uri, resultRowsToDiagnostics(rows, parsed));
-        void vscode.window.showInformationMessage(`Deep validation: ${rows.length} finding(s). See Problems panel.`);
+        void vscode.window.showInformationMessage(`Deep validation: ${rows.length} finding(s). ${note ? `${note} ` : ''}See Problems panel.`);
       } catch {
         /* errors already surfaced via the CLI client's own error message / output channel */
       }

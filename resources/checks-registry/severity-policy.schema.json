@@ -1,0 +1,336 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Ontology Suite severity policy",
+  "description": "The severity each check is reported at, per stage of the project. The same file as the Python suite's --severity-policy. Applied by Run Local Checks and Run Deep Validation; ontologySuite.stringency picks the stage. A file with no 'stages' is a single stage.",
+  "definitions": {
+    "target": {
+      "enum": [
+        "Violation",
+        "Warning",
+        "Info",
+        "off"
+      ],
+      "description": "The severity to report this check's findings at in this stage, or 'off' to leave the check out of this stage."
+    },
+    "stage": {
+      "type": "object",
+      "properties": {
+        "extends": {
+          "type": "string",
+          "description": "Another stage of this file to start from; the entries here are applied on top of it."
+        },
+        "CNF-001": {
+          "$ref": "#/definitions/target",
+          "description": "Class used but not declared in the ontology. Declared Warning."
+        },
+        "CNF-002": {
+          "$ref": "#/definitions/target",
+          "description": "Property used but not declared in the ontology. Declared Warning."
+        },
+        "CNF-003": {
+          "$ref": "#/definitions/target",
+          "description": "rdfs:domain violation. Declared Violation."
+        },
+        "CNF-004": {
+          "$ref": "#/definitions/target",
+          "description": "rdfs:range violation. Declared Violation."
+        },
+        "CNF-005": {
+          "$ref": "#/definitions/target",
+          "description": "Ontology class never populated. Declared Info."
+        },
+        "DAT-001": {
+          "$ref": "#/definitions/target",
+          "description": "Literal lexical form invalid for its datatype. Declared Violation."
+        },
+        "DAT-002": {
+          "$ref": "#/definitions/target",
+          "description": "Dangling IRI reference. Declared Warning."
+        },
+        "DAT-003": {
+          "$ref": "#/definitions/target",
+          "description": "Duplicate literal values. Declared Info."
+        },
+        "DAT-004": {
+          "$ref": "#/definitions/target",
+          "description": "gist:Magnitude without a unit of measure. Declared Violation."
+        },
+        "EFF-001": {
+          "$ref": "#/definitions/target",
+          "description": "Class hierarchy chain too deep. Declared Warning."
+        },
+        "EFF-002": {
+          "$ref": "#/definitions/target",
+          "description": "Excessive blank-node ratio. Declared Warning."
+        },
+        "EFF-003": {
+          "$ref": "#/definitions/target",
+          "description": "Excessive property fan-out on a single subject. Declared Info."
+        },
+        "LOG-001": {
+          "$ref": "#/definitions/target",
+          "description": "Class disjoint with its own ancestor. Declared Violation."
+        },
+        "LOG-002": {
+          "$ref": "#/definitions/target",
+          "description": "owl:FunctionalProperty violated by data. Declared Violation."
+        },
+        "LOG-003": {
+          "$ref": "#/definitions/target",
+          "description": "Redundant equivalentClass + subClassOf pair. Declared Warning."
+        },
+        "LOG-004": {
+          "$ref": "#/definitions/target",
+          "description": "Property has more than one inverse. Declared Violation."
+        },
+        "LOG-005": {
+          "$ref": "#/definitions/target",
+          "description": "Property declared inverse of itself. Declared Violation."
+        },
+        "LOG-006": {
+          "$ref": "#/definitions/target",
+          "description": "Symmetric property has unequal domain and range. Declared Violation."
+        },
+        "LOG-007": {
+          "$ref": "#/definitions/target",
+          "description": "Transitive property has unequal domain and range. Declared Violation."
+        },
+        "MAL-001": {
+          "$ref": "#/definitions/target",
+          "description": "Qualified cardinality written as unqualified. Declared Violation. Reported by this extension only: the Python suite refuses it in a policy."
+        },
+        "MAL-002": {
+          "$ref": "#/definitions/target",
+          "description": "Restriction on more than one property. Declared Violation. Reported by this extension only: the Python suite refuses it in a policy."
+        },
+        "MAL-003": {
+          "$ref": "#/definitions/target",
+          "description": "IRI with no scheme. Declared Violation. Reported by this extension only: the Python suite refuses it in a policy."
+        },
+        "MDL-001": {
+          "$ref": "#/definitions/target",
+          "description": "Named inverse property (consider a SPARQL property path instead). Declared Hint. Reported by this extension only: the Python suite refuses it in a policy."
+        },
+        "MDL-002": {
+          "$ref": "#/definitions/target",
+          "description": "owl:equivalentClass between two named classes with no logical definition. Declared Hint. Reported by this extension only: the Python suite refuses it in a policy."
+        },
+        "MDL-003": {
+          "$ref": "#/definitions/target",
+          "description": "Consider gist:Category instead of a new owl:Class. Declared Hint. Reported by this extension only: the Python suite refuses it in a policy."
+        },
+        "PRJ-REQUIRED": {
+          "$ref": "#/definitions/target",
+          "description": "Missing required predicate (project rule). Declared Warning. Reported by this extension only: the Python suite refuses it in a policy."
+        },
+        "QUA-001": {
+          "$ref": "#/definitions/target",
+          "description": "Class or property missing rdfs:label. Declared Warning."
+        },
+        "QUA-002": {
+          "$ref": "#/definitions/target",
+          "description": "Ontology missing versioning/title metadata. Declared Info."
+        },
+        "QUA-003": {
+          "$ref": "#/definitions/target",
+          "description": "Deprecated term still in active use. Declared Warning."
+        },
+        "QUA-004": {
+          "$ref": "#/definitions/target",
+          "description": "Resource missing skos:prefLabel. Declared Warning."
+        },
+        "QUA-005": {
+          "$ref": "#/definitions/target",
+          "description": "Ontology has no identifying IRI at all. Declared Warning."
+        },
+        "QUA-006": {
+          "$ref": "#/definitions/target",
+          "description": "Ontology IRI reused as the namespace IRI for its own concepts. Declared Warning."
+        },
+        "QUA-007": {
+          "$ref": "#/definitions/target",
+          "description": "Ontology missing owl:versionIRI. Declared Info."
+        },
+        "QUA-008": {
+          "$ref": "#/definitions/target",
+          "description": "Ontology or version IRI does not use the https:// scheme. Declared Warning."
+        },
+        "QUA-009": {
+          "$ref": "#/definitions/target",
+          "description": "Class or property without one skos:prefLabel per language. Declared Warning."
+        },
+        "QUA-010": {
+          "$ref": "#/definitions/target",
+          "description": "Class or property without a skos:definition. Declared Warning."
+        },
+        "REA-001": {
+          "$ref": "#/definitions/target",
+          "description": "Individual in two disjoint classes (post-closure). Declared Violation."
+        },
+        "REA-002": {
+          "$ref": "#/definitions/target",
+          "description": "Asymmetric property holds in both directions. Declared Violation."
+        },
+        "REA-003": {
+          "$ref": "#/definitions/target",
+          "description": "Irreflexive property asserted as a self-loop. Declared Violation."
+        },
+        "REA-004": {
+          "$ref": "#/definitions/target",
+          "description": "Individual inferred to be a member of owl:Nothing. Declared Violation."
+        },
+        "REA-005": {
+          "$ref": "#/definitions/target",
+          "description": "Individual both owl:sameAs and owl:differentFrom the same node. Declared Violation."
+        },
+        "REA-006": {
+          "$ref": "#/definitions/target",
+          "description": "Reasoner-derived contradiction (unclassified). Declared Violation."
+        },
+        "REA-010": {
+          "$ref": "#/definitions/target",
+          "description": "Ontology exceeds the OWL2 EL profile. Declared Info."
+        },
+        "REA-011": {
+          "$ref": "#/definitions/target",
+          "description": "Ontology exceeds the OWL2 QL profile. Declared Info."
+        },
+        "REA-012": {
+          "$ref": "#/definitions/target",
+          "description": "Ontology exceeds the OWL2 RL profile. Declared Info."
+        },
+        "REA-020": {
+          "$ref": "#/definitions/target",
+          "description": "Ontology found inconsistent by an external DL reasoner. Declared Violation."
+        },
+        "REA-021": {
+          "$ref": "#/definitions/target",
+          "description": "Class found unsatisfiable by an external DL reasoner. Declared Violation."
+        },
+        "REA-022": {
+          "$ref": "#/definitions/target",
+          "description": "External DL reasoner unavailable -- only owlrl-based checks ran. Declared Info."
+        },
+        "STR-001": {
+          "$ref": "#/definitions/target",
+          "description": "Undefined class used as rdf:type. Declared Violation."
+        },
+        "STR-002": {
+          "$ref": "#/definitions/target",
+          "description": "Undefined property used. Declared Violation."
+        },
+        "STR-003": {
+          "$ref": "#/definitions/target",
+          "description": "Property missing both domain and range. Declared Warning."
+        },
+        "STR-004": {
+          "$ref": "#/definitions/target",
+          "description": "Class has no formal definition. Declared Warning."
+        },
+        "STR-005": {
+          "$ref": "#/definitions/target",
+          "description": "Property domain value has no declared type. Declared Violation."
+        },
+        "STR-006": {
+          "$ref": "#/definitions/target",
+          "description": "Untyped object of a triple. Declared Violation."
+        },
+        "STR-007": {
+          "$ref": "#/definitions/target",
+          "description": "Predicate has no declared rdf:type. Declared Violation."
+        },
+        "STR-008": {
+          "$ref": "#/definitions/target",
+          "description": "Property range value has no declared type. Declared Violation."
+        },
+        "STR-009": {
+          "$ref": "#/definitions/target",
+          "description": "Untyped subject of a triple. Declared Violation."
+        },
+        "STY-001": {
+          "$ref": "#/definitions/target",
+          "description": "Class name not UpperCamelCase. Declared Warning."
+        },
+        "STY-002": {
+          "$ref": "#/definitions/target",
+          "description": "Property name not lowerCamelCase. Declared Warning."
+        },
+        "STY-003": {
+          "$ref": "#/definitions/target",
+          "description": "Label missing a language tag. Declared Info."
+        },
+        "STY-004": {
+          "$ref": "#/definitions/target",
+          "description": "skos:prefLabel does not match local name. Declared Warning."
+        },
+        "STY-005": {
+          "$ref": "#/definitions/target",
+          "description": "Inconsistent local-name separator style. Declared Warning."
+        },
+        "TQL-001": {
+          "$ref": "#/definitions/target",
+          "description": "Variable bound by structurally different expressions across queries. Declared Warning."
+        },
+        "TQL-002": {
+          "$ref": "#/definitions/target",
+          "description": "Constructed-IRI variable used in CONSTRUCT but never bound. Declared Violation."
+        },
+        "TQL-003": {
+          "$ref": "#/definitions/target",
+          "description": "CONSTRUCT variable not bound in the query. Declared Info."
+        },
+        "TQL-004": {
+          "$ref": "#/definitions/target",
+          "description": "Constructed IRI variable never converted from a string. Declared Violation."
+        },
+        "TQL-005": {
+          "$ref": "#/definitions/target",
+          "description": "Datatype-suffixed variable never given a datatype. Declared Warning."
+        },
+        "VOC-001": {
+          "$ref": "#/definitions/target",
+          "description": "Undeclared term referenced by an axiom. Declared Warning."
+        }
+      },
+      "additionalProperties": {
+        "$ref": "#/definitions/target",
+        "description": "A check from a registry set in ontologySuite.checksRegistryPath. An id nothing reports is refused when the policy is applied."
+      }
+    },
+    "stageOrList": {
+      "anyOf": [
+        {
+          "$ref": "#/definitions/stage"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/stage"
+          }
+        }
+      ]
+    }
+  },
+  "anyOf": [
+    {
+      "type": "object",
+      "required": [
+        "stages"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "stages": {
+          "type": "object",
+          "minProperties": 1,
+          "description": "Named stages; the names are the project's own, e.g. sketch, draft, release.",
+          "additionalProperties": {
+            "$ref": "#/definitions/stageOrList"
+          }
+        }
+      }
+    },
+    {
+      "$ref": "#/definitions/stageOrList"
+    }
+  ]
+}

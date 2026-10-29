@@ -409,6 +409,16 @@
           "default": [],
           "markdownDescription": "Check ids to suppress in *Run Local Checks*, e.g. `[\"QUA-009\", \"QUA-010\"]`. A disabled check's SPARQL query is not run at all, and findings for the id are dropped whichever engine reported them. Aimed at the checks that encode a convention rather than a defect — `QUA-009`/`QUA-010` ask for SKOS documentation on every term, which an ontology documented with `rdfs:label` does not have and may not want."
         },
+        "ontologySuite.severityPolicy": {
+          "type": "string",
+          "default": ".ontology-suite/severity-policy.json",
+          "markdownDescription": "A JSON file saying what severity this project wants checks reported at, optionally per named stage, e.g. `{\"stages\": {\"draft\": {\"STR-003\": \"Warning\"}, \"release\": {\"extends\": \"draft\", \"STR-003\": \"Violation\", \"QUA-004\": \"off\"}}}`. Applied to the findings of *Run Local Checks* and *Run Deep Validation*; `off` drops a check's findings for that stage. The same file format as the Python suite's `--severity-policy`. Every re-mapping is written to the *Ontology Suite (Severity Policy)* output channel, and a re-mapped finding says what its check declared. Relative to the workspace folder. The default location is optional; a path set here must exist, and a policy that names an unknown check or severity stops the run rather than being half applied. Empty turns policies off."
+        },
+        "ontologySuite.stringency": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Which stage of `#ontologySuite.severityPolicy#` to apply, e.g. `release`. The stage names are the policy file's own. Optional when the policy declares one stage; required when it declares several, since picking one silently is the failure a policy exists to prevent."
+        },
         "ontologySuite.maxIndexedFileSizeKb": {
           "type": "number",
           "default": 5120,
@@ -444,6 +454,10 @@
       {
         "fileMatch": "**/.ontology-suite/class-rules.json",
         "url": "./resources/checks-registry/class-rules.schema.json"
+      },
+      {
+        "fileMatch": "**/.ontology-suite/severity-policy.json",
+        "url": "./resources/checks-registry/severity-policy.schema.json"
       }
     ],
     "typescriptServerPlugins": [

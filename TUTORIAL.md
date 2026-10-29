@@ -74,6 +74,41 @@ You'll also see a `PRJ-REQUIRED` finding on `ex:Vaccination`: it's missing
 project's own* `.ontology-suite/class-rules.json`, which declares "every
 `owl:Class` needs `rdfs:label`" (see [Part 3](#part-3-quick-fix-the-findings)).
 
+### Try it: the same findings at a different stage
+
+Most of those findings are `QUA-009`/`QUA-010`, which ask for SKOS labels
+`clinic.ttl` was never going to have yet. They're true, but they're not what
+matters while sketching. Rather than editing the checks, save this as
+`.ontology-suite/severity-policy.json`:
+
+```json
+{
+  "stages": {
+    "sketch":  { "QUA-009": "off", "QUA-010": "off" },
+    "release": { "STR-003": "Violation" }
+  }
+}
+```
+
+Set `ontologySuite.stringency` to `sketch` and run the checks again. The 37
+SKOS findings are gone. The *Ontology Suite (Severity Policy)* output channel
+records what happened:
+
+```
+Run Local Checks: severity policy 'sketch' from …severity-policy.json: 2 check(s) re-mapped
+  QUA-009 Warning -> off (19 finding(s) dropped)
+  QUA-010 Warning -> off (18 finding(s) dropped)
+```
+
+Now switch to `release`. The SKOS findings come back, and `STR-003` on
+`ex:isOwnerOf` (no domain or range) is an error. The diagnostic says
+"(declared Warning; re-mapped by the severity policy)", so a re-mapped finding
+never passes for the check's own reading.
+
+When you're done, delete the file and clear `ontologySuite.stringency`. Do
+both: a stage named with no policy to take it from stops the run, rather than
+being quietly ignored.
+
 ## Part 3: Quick Fix the findings
 
 Click on the `MDL-001` diagnostic for `ex:isOwnerOf` (or put the cursor on

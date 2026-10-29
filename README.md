@@ -379,6 +379,53 @@ predicates like `rdfs:domain`/`rdfs:range` have no safe machine-
 generated value, so those are correctly flagged with no Quick Fix
 offered.
 
+### Severity policy: how strict, at which stage
+
+The same fault means different things at different points in a project: a
+property with no domain or range is worth knowing about while you sketch, and
+worth blocking a release over. The check doesn't change between those two
+readings, only the stringency. `.ontology-suite/severity-policy.json` says what
+severity each check should be reported at, per stage, and the stage names are
+your own:
+
+```json
+{
+  "stages": {
+    "sketch":  { "STR-003": "Info", "QUA-009": "off" },
+    "draft":   { "STR-003": "Warning" },
+    "release": { "extends": "draft", "STR-003": "Violation" }
+  }
+}
+```
+
+`ontologySuite.stringency` picks the stage. `extends` pulls another stage in
+and applies the rest on top. `off` is not a severity: it drops the check's
+findings at that stage, where `Info` reports them. A file with no `stages` is
+a single stage, and needs no `stringency`. The editor offers every check id,
+with its title on hover, and the four values.
+
+This is the Python suite's `--severity-policy` file, with the same format and
+the same rules, applied by *Run Local Checks* and *Run Deep Validation* to
+the finished findings. It is ported, not shared, and a test runs both ports
+on the same policies. One difference: a policy here may also name the checks
+only this extension reports (`MAL-*`, `MDL-*`, `PRJ-REQUIRED`). The Python
+suite refuses those, so a policy file shared with its CI should name only
+registry checks.
+
+Nothing is relabelled quietly:
+
+- A re-mapped finding keeps what its check declared. It says so in the
+  Problems panel: "(declared Warning; re-mapped by the severity policy)".
+- Every re-mapping is written to the *Ontology Suite (Severity Policy)*
+  output channel on the run that made it.
+- A stage that changed nothing says so, since that usually means a wrong
+  stage name.
+- A policy that names an unknown check or severity is refused whole, and the
+  run doesn't happen. `STR-0003` for `STR-003` gets "did you mean STR-003?".
+
+`ontologySuite.disabledChecks` is the other tool. It means "never ask this",
+in every stage, and also skips running the check's query.
+
 ## Serializations
 
 Six formats, both directions, via `rdf/serialization.ts`:
@@ -447,11 +494,12 @@ Two different mechanisms, for two different kinds of customization:
   `.vscode/settings.json`) if the whole team should share them — commit
   `.vscode/settings.json` to get everyone on the same checks/CLI configuration automatically.
 - **Project config files** (`.ontology-suite/*.json`, workspace-relative, paths themselves
-  configurable via the two `*Path` settings below) — not VS Code settings at all, just plain
-  JSON files meant to be committed alongside the ontology they apply to, so the whole team
-  (and CI, if it also runs this suite) sees the same project standards/rules. See
-  [Quick Fix](#quick-fix-schematron-quick-fix-style-repair) and
-  [Project rules](#project-rules-minimum-required-content) above for what goes in each.
+  configurable via the two `*Path` settings and `severityPolicy` below) — not VS Code
+  settings at all, just plain JSON files meant to be committed alongside the ontology they
+  apply to, so the whole team (and CI, if it also runs this suite) sees the same project
+  standards/rules. See [Quick Fix](#quick-fix-schematron-quick-fix-style-repair),
+  [Project rules](#project-rules-minimum-required-content) and
+  [Severity policy](#severity-policy-how-strict-at-which-stage) above for what goes in each.
 
 | Setting | Default | Purpose |
 |---|---|---|
@@ -461,6 +509,8 @@ Two different mechanisms, for two different kinds of customization:
 | `ontologySuite.enableSparqlChecks` | `true` | Run the registry's SPARQL CONSTRUCT checks. Fast (~0.2s on this project's own fixtures) |
 | `ontologySuite.enableShaclChecks` | `true` | Run the registry's SHACL-SPARQL shapes (via `shacl-wasm-node`). Fast since 0.10.0 — ~0.3s for all six shapes files where the previous `shacl-engine` took ~71s — so there is rarely a reason to turn it off now |
 | `ontologySuite.disabledChecks` | `[]` | Check ids to suppress in *Run Local Checks*, e.g. `["QUA-009", "QUA-010"]`. A disabled check’s SPARQL query is not run at all, and findings for the id are dropped whichever engine reported them |
+| `ontologySuite.severityPolicy` | `.ontology-suite/severity-policy.json` | Per-stage severities for *Run Local Checks* and *Run Deep Validation* — see [Severity policy](#severity-policy-how-strict-at-which-stage). The default location is optional; a path set here must exist. Empty turns policies off |
+| `ontologySuite.stringency` | `""` | Which stage of the severity policy to apply. Optional when the policy has one stage |
 | `ontologySuite.enableVocabularyChecks` | `true` | Run the closed-world vocabulary check (`VOC-001`) — flags an axiom (`rdfs:subClassOf`, `rdfs:domain`, `sh:class`, …) pointing at an undeclared IRI, within namespaces the graph has closed-world knowledge of. `STR-001`/`STR-002` cover the `rdf:type` object and the predicate position |
 | `ontologySuite.queryOntologyPaths` | `[]` | Ontology file(s) a query is checked for conformance against. Each entry is a literal path **or** a glob (`*`, `?`, `**`), mixed freely in one list — e.g. `["core.ttl", "vocab/*_ontology.ttl"]`. Absolute or workspace-relative. Empty = discover automatically (query's own directory, then parent, then siblings). All resolved ontologies are merged |
 | `ontologySuite.triplifyPreviewSampleSize` | `20` | CSV rows sampled for the live triplify preview |
@@ -666,6 +716,12 @@ actually setting one, and the practical detail behind each.
   workspace-relative paths; these two are the ones actually meant to be
   committed to version control alongside the ontology, not set as personal
   User settings (see [Project rules](#project-rules-minimum-required-content)).
+- **`severityPolicy`** (default `.ontology-suite/severity-policy.json`) is
+  resolved against the workspace folder of the file being checked, and
+  accepts an absolute path. **`stringency`** is the one to set per person or
+  per branch. The policy is the team's, and which stage you are working to
+  can differ. Setting `stringency` with no policy file is refused rather than
+  ignored.
 - **`modellingGuidance`** (`"gist"` | `"off"`) and the three
   **`enable*Checks`** booleans are plain toggles, no path resolution
   involved — see the [Configuration](#configuration) table above for what

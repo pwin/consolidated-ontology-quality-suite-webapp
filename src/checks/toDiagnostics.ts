@@ -33,7 +33,9 @@ export function resultRowsToDiagnostics(rows: ResultRow[], doc: ParsedDocument, 
 
     const prefix = row.checkId ? `[${row.checkId}] ` : '';
     const suffix = line < 0 ? ` (focus: ${row.focusNode})` : '';
-    const diagnostic = new vscode.Diagnostic(range, `${prefix}${row.message}${suffix}`, SEVERITY_MAP[row.severity]);
+    // Said where the severity is shown, so a re-mapped finding never passes for the check's own reading.
+    const remapped = row.declaredSeverity ? ` (declared ${row.declaredSeverity}; re-mapped by the severity policy)` : '';
+    const diagnostic = new vscode.Diagnostic(range, `${prefix}${row.message}${remapped}${suffix}`, SEVERITY_MAP[row.severity]);
     diagnostic.source = CHECKS_DIAGNOSTIC_SOURCE;
     diagnostic.code = row.checkId ?? undefined;
     if (row.remediation) {

@@ -174,6 +174,55 @@ suite('Ontology Development Suite (extension host)', () => {
     }
   }).timeout(60000);
 
+  test('Run Local Checks applies the severity policy stage it is given, and refuses one it cannot apply', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ontology-suite-policy-'));
+    const uri = vscode.Uri.file(path.join(dir, 'mine.ttl'));
+    // A class with no label (QUA-001) and a property with neither domain nor range (STR-003), both
+    // declared Warning: one stage raises the first and leaves the second out.
+    fs.writeFileSync(
+      uri.fsPath,
+      [
+        '@prefix ex: <https://example.org/mine#> .',
+        '@prefix owl: <http://www.w3.org/2002/07/owl#> .',
+        '<https://example.org/mine> a owl:Ontology .',
+        'ex:Widget a owl:Class .',
+        'ex:looselyRelated a owl:ObjectProperty .',
+      ].join('\n'),
+    );
+    const policyPath = path.join(dir, 'severities.json');
+    fs.writeFileSync(policyPath, JSON.stringify({ stages: { draft: { 'QUA-001': 'off' }, release: { extends: 'draft', 'STR-003': 'Violation' } } }));
+    // Global, which in a test run is the throwaway profile's: Workspace would write a settings file
+    // into examples/tutorial.
+    const config = () => vscode.workspace.getConfiguration('ontologySuite');
+    try {
+      await config().update('severityPolicy', policyPath, vscode.ConfigurationTarget.Global);
+      await config().update('stringency', 'release', vscode.ConfigurationTarget.Global);
+      await vscode.window.showTextDocument(uri);
+      await vscode.commands.executeCommand('ontologySuite.runLocalChecks');
+
+      const diagnostics = vscode.languages.getDiagnostics(uri).filter((d) => d.source === 'ontology-suite');
+      const codes = diagnostics.map((d) => String(d.code));
+      const str003 = diagnostics.find((d) => d.code === 'STR-003');
+      assert.ok(str003, `expected STR-003 among ${JSON.stringify(codes)}`);
+      assert.strictEqual(str003.severity, vscode.DiagnosticSeverity.Error);
+      assert.ok(str003.message.includes('declared Warning'), `the re-mapped finding should say what its check declared: ${str003.message}`);
+      assert.ok(!codes.includes('QUA-001'), `QUA-001 is off in this stage, inherited from draft: ${JSON.stringify(codes)}`);
+
+      // A misspelt id: the run is refused before any check runs, so nothing new is reported.
+      fs.writeFileSync(policyPath, JSON.stringify({ stages: { release: { 'STR-0003': 'Violation' } } }));
+      const second = vscode.Uri.file(path.join(dir, 'second.ttl'));
+      fs.copyFileSync(uri.fsPath, second.fsPath);
+      await vscode.window.showTextDocument(second);
+      await vscode.commands.executeCommand('ontologySuite.runLocalChecks');
+      assert.deepStrictEqual(vscode.languages.getDiagnostics(second).filter((d) => d.source === 'ontology-suite'), []);
+    } finally {
+      await config().update('severityPolicy', undefined, vscode.ConfigurationTarget.Global);
+      await config().update('stringency', undefined, vscode.ConfigurationTarget.Global);
+      await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+      removeTempDir(dir);
+    }
+  }).timeout(60000);
+
   test('Run Ontology Script runs the script as it stands in the editor, unsaved edits included', async () => {
     // Until 0.13.13 the command read the file from disk, so an unsaved edit was not run.
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ontology-suite-run-'));
