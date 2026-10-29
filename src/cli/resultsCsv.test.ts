@@ -65,4 +65,47 @@ describe('parseResultsCsv against real CLI output', () => {
     expect(reasoner?.remediation).toContain('reasoner');
     expect(reasoner?.sources).toEqual(['external-reasoner']);
   });
+
+  it('carries no declared severity, the CLI having had no policy to apply', () => {
+    expect(rows.filter((r) => r.declaredSeverity !== undefined)).toEqual([]);
+  });
+});
+
+/**
+ * The same command against `consolidated_ontology_suite` 0.25.0, with
+ *
+ *     --severity-policy severities.json --stringency release
+ *
+ * and a policy whose `draft` stage sets QUA-009 and STY-003 to Info and whose `release` stage
+ * extends it, setting STR-003 to Violation and QUA-004 to off. Trimmed the same way. That CLI
+ * writes thirteen columns, not ten: `declared_severity` after `severity`, and `source_file` and
+ * `line` (0.17) after `sources` -- in the middle of the row, which is what a by-position read
+ * would get wrong.
+ */
+const FIXTURE_0_25 = fs.readFileSync(path.resolve(__dirname, '__fixtures__/full_results-0.25.0.csv'), 'utf8');
+
+describe('parseResultsCsv against CLI 0.25.0 output with a severity policy', () => {
+  const rows = parseResultsCsv(FIXTURE_0_25);
+  const byId = (id: string) => rows.find((r) => r.checkId === id);
+
+  it('reads every row, every column landing where it belongs', () => {
+    expect(rows.map((r) => r.checkId)).toEqual(['REA-022', 'QUA-001', 'QUA-008', 'QUA-009', 'STR-003', 'STY-003']);
+    expect(byId('QUA-001')?.focusNode).toBe('http://example.org/clinic#Vaccination');
+    expect(byId('QUA-001')?.sources).toEqual(['shacl', 'sparql']);
+    expect(byId('QUA-009')?.path).toBe('http://www.w3.org/2004/02/skos/core#prefLabel');
+    expect(byId('REA-022')?.message).toContain('"main"');
+    expect(byId('REA-022')?.sources).toEqual(['external-reasoner']);
+  });
+
+  it('keeps what the check declared on a re-mapped row, either way', () => {
+    expect(byId('STR-003')).toMatchObject({ severity: 'Violation', declaredSeverity: 'Warning' });
+    expect(byId('QUA-009')).toMatchObject({ severity: 'Info', declaredSeverity: 'Warning' });
+  });
+
+  it('leaves it unset on a row the policy did not move, named in it or not', () => {
+    // STY-003 is in the policy as Info and declared Info: listed, not moved.
+    expect(byId('STY-003')?.severity).toBe('Info');
+    expect(byId('STY-003')).not.toHaveProperty('declaredSeverity');
+    expect(byId('QUA-001')).not.toHaveProperty('declaredSeverity');
+  });
 });

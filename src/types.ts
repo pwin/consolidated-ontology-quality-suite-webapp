@@ -29,6 +29,13 @@ export interface ResultRow {
    * checks/merge.py.
    */
   focusIsBlank?: boolean;
+  /**
+   * What the check itself declared, set only when a severity policy moved
+   * `severity` away from it -- so a populated one means "re-mapped" and nothing
+   * else. See checks/severityPolicy.ts; mirrors `declared_severity` in the
+   * Python suite's checks/merge.py and its full_results.csv.
+   */
+  declaredSeverity?: Severity;
 }
 
 export interface ImportResolution {

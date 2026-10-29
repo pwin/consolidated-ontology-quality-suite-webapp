@@ -5,12 +5,15 @@ import type { ResultRow, Severity } from '../types';
  * Reads the `full_results.csv` the Python CLI writes into this project's own
  * `ResultRow`, so a CLI-backed finding renders exactly like an in-process one.
  *
- * The contract is that file's ten columns, and it is worth pinning rather than
- * assuming: this is the only place the two projects meet at runtime, and the
- * *other* thing joining them — the name of the executable — was silently wrong
- * for six releases (see ontologySuiteClient.ts). `__fixtures__/full_results.csv`
- * is real output, not a hand-written approximation, including the row whose
- * message carries an embedded newline and doubled quotes.
+ * The contract is that file's columns, read by name, and it is worth pinning
+ * rather than assuming: this is the only place the two projects meet at
+ * runtime, and the *other* thing joining them — the name of the executable —
+ * was silently wrong for six releases (see ontologySuiteClient.ts). The CLI
+ * wrote ten columns up to 0.16; 0.17 added `source_file` and `line`, and 0.25
+ * `declared_severity`, each in the middle of the row, which only a by-name
+ * read survives. Both `__fixtures__` files are real output, not hand-written
+ * approximations, including the row whose message carries an embedded newline
+ * and doubled quotes.
  *
  * Pure (no `vscode` import) so it can be tested, the same split
  * `checks/projectStandardsCore.ts` and `checks/findingSummary.ts` make.
@@ -25,6 +28,11 @@ export function parseResultsCsv(csvText: string): ResultRow[] {
     category: r.category === 'unmapped' ? null : r.category || null,
     title: r.title || null,
     severity: (r.severity as Severity) || 'Info',
+    // Empty unless a severity policy moved the row (CLI 0.25 and later). This
+    // extension applies its own policy rather than passing one to the CLI, so it
+    // arrives only from a CLI someone has wrapped to add the flag -- and is kept
+    // then, because dropping it would show a re-mapped severity as the check's own.
+    ...(r.declared_severity ? { declaredSeverity: r.declared_severity as Severity } : {}),
     focusNode: r.focus_node ?? '',
     path: r.path || null,
     value: r.value || null,
