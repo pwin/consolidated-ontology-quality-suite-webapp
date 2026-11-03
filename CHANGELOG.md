@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.17.2
+
+The HOLOS store moves to 0.26.1. Its one change is that a `GROUP BY` or aggregate over a single
+triple pattern goes to HOLOS's evaluator again, instead of being built into a table first:
+counting 50,000 matches of one pattern in 800k triples went from 87 ms to 4.5 ms in HOLOS's
+measurement. The shipped checks are `CONSTRUCT`s over joins and filters, which keep the path they
+had, so nothing here behaves differently; a project query that counts one pattern gets faster.
+
+538 tests pass. Production dependencies have no advisories.
+
 ## 0.17.1
 
 The HOLOS store moves to its current release, 0.26.0. Nothing the extension does behaves
