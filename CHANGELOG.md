@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.17.1
+
+The HOLOS store moves to its current release, 0.26.0. Nothing the extension does behaves
+differently, and the reasons are checked rather than taken from the release notes.
+
+### `holos-wasm-node` 0.25.0 -> 0.26.0
+
+0.26.0 adds backups of an in-memory store: the server's `POST /backup` writes a snapshot, and
+Python gains `Store.dump()`. It moves holosdb's Python floor to 3.11, and fixes two error
+messages in its validator and its Python binding. None of that is on this binding's surface.
+The query pipeline `queryRdf` runs, which every portable check goes through, is the same as in
+0.25.0.
+
+One call here does change underneath. `holosStore.ts` reads the store back with `dump('nquads')`,
+and from 0.26.0 that `dump()` is the same implementation as the command line's, Python's and the
+server's. The output is the same N-Quads; only the refusal for a named graph in a graph-only
+format is reworded, and N-Quads never meets it.
+
+538 tests pass. `npm audit` reports 28 findings, the same 28 as 0.17.0. All of them are in
+development tooling: `npm audit --omit=dev` reports none.
+
 ## 0.17.0
 
 A severity policy says how strict each check is at each stage of a project. Deep Validation no
