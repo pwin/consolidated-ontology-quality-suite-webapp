@@ -1,5 +1,65 @@
 # Changelog
 
+## 0.17.3
+
+`ontologySuite.checksRegistryPath` now says when it stops the bundled checks running, finds a
+relative path, and explains a path it can't use. This came from reviewing the Python suite's
+change since 0.25.0.
+
+### A registry path that replaces the bundled checks says so
+
+The Python suite has just made its `--shapes` warn when it replaces the suite's own shapes. On its
+example project, a directory holding one house shape took a run from 37 findings to 1, with no
+warning. Its `--sparql` had the same gap, found when a CI gate was running 8 of 61 checks and
+reporting clean.
+
+`checksRegistryPath` had the same gap, and wider. It replaces the bundled registry, queries and
+shapes as one set, and the README and the setting's description both said it was for adding
+project checks. A directory holding only your own checks stopped every shipped one, and Local
+Checks then reported clean.
+
+Now the first run with such a registry names the bundled checks it leaves out. The warning says
+the setting replaces rather than adds, and gives the bundled registry's path to copy from. Every
+run's summary repeats the count, because a run missing most of its checks still reads as a clean
+one weeks after anyone saw the warning.
+
+Checks are counted the way the Python suite now counts them. A shape's check is its local name
+unless an `oq:checkId` annotation says otherwise, so a split shape is one check. That gives the
+same 21 shape-backed checks as that suite's `declared_check_ids` over the same files. Pointing the
+setting at a Python checkout's `ontology_suite/resources` names two checks, `CNF-003` and
+`CNF-004`. They are this extension's own, and genuinely don't run from there.
+
+### A relative path is found, and a path that isn't a registry is explained
+
+The README has always said a relative `checksRegistryPath` is resolved against the workspace root.
+It wasn't: it was taken as it stood, which made it relative to the extension host's working
+directory. That is VS Code's install folder, so a relative path found nothing. It now resolves
+against the workspace.
+
+A path with no `registry.json` used to fail with a bare file-not-found error. It now says what is
+missing, notes that a Python checkout keeps the file in `ontology_suite/resources`, and stops the
+run before any check starts.
+
+### Docs
+
+- The README's notes on `checksRegistryPath` now cover how to add project checks: copy the bundled
+  registry and add to the copy.
+- They also cover why a check written as both a query and a shape must report the same focus
+  node, path and value. The Python suite found that one by walking into it.
+- They note that shape files belong at the top of `shapes/`: this extension reads subdirectories,
+  and the Python suite doesn't.
+- `docs/TESTING_TARQL.md` told readers to change a TQL check's severity by editing
+  `default_severity` in a copied registry. No engine reads that field, so it never worked. That
+  page now says the TARQL review's severities are fixed, and that the Python CLI's `sketch` takes
+  a severity policy for CI.
+
+543 unit tests and 10 integration tests pass. The new integration test fails against the old path
+handling, which was checked; its first version didn't, for a reason now recorded in the test.
+Production dependencies have no advisories.
+
+The `ontology-suite` npm package is unchanged at 0.16.1. Building it from this release gives the
+same files.
+
 ## 0.17.2
 
 The HOLOS store moves to 0.26.1. Its one change is that a `GROUP BY` or aggregate over a single
