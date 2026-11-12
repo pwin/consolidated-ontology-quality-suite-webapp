@@ -227,13 +227,26 @@ case skeleton comparison exists to *not* report.
 
 ## Turning a check up or down
 
-`ontologySuite.disabledChecks` takes a list of check ids to suppress. After a run
-where one check is most of the findings, the summary notification names it and
-offers to add it there in one click.
+In the editor you can't. The three checks report at fixed severities: `TQL-001`
+is a Warning, `TQL-002` a Violation and `TQL-003` Info. *Review TARQL BIND
+Consistency* reports every finding. `ontologySuite.disabledChecks` and the
+severity policy (`.ontology-suite/severity-policy.json`) apply to *Run Local
+Checks*, and the policy also to *Run Deep Validation*, but neither applies to
+this command.
 
-To change a severity rather than silence a check, point
-`ontologySuite.checksRegistryPath` at your own copy of the registry and edit
-`default_severity`. The check keeps its id, prose and implementation.
+Editing `default_severity` in a copy of the registry doesn't do it either. No
+engine here reads that field. The queries and shapes carry their own
+severities, and these three checks are code. This page used to recommend it.
+
+The Python CLI's `sketch` takes a severity policy, so a CI gate can treat these
+checks as strictly as its stage needs. The same file works there as long as it
+names only registry checks:
+
+```bash
+ontology-quality-suite sketch --queries queries/ --out-dir out/sketch \
+  --severity-policy .ontology-suite/severity-policy.json --stringency release \
+  --fail-on Violation
+```
 
 ## In CI
 
