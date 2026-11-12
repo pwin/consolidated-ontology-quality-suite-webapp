@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.17.4
+
+The SHACL engine moves to 0.3.5. Its one change is to the engine command line's readable report,
+which named each result's constraint component and focus node but never the shape's own
+`sh:message`, so custom wording never reached the person reading it; each result now leads with
+its severity and carries its messages underneath. That is the `human` output format only. This
+extension does not use it — it validates through `shacl-wasm-node`'s `Validator`, and those
+bindings have exposed `severity` and `message` all along — so nothing here behaves differently.
+
+The reason to take it anyway is that the lock was the only place still on 0.3.4. `^0.3.4` already
+admits 0.3.5, so a fresh `npm install` was resolving 0.3.5 while the committed lock and the
+shipped `.vsix` stayed behind. That gap is the one the SemOps Manual had to write a caveat around
+once before, when the extension's lock and the Python suite's release disagreed about which HOLOS
+they ran.
+
+543 tests pass. Production dependencies have no advisories.
+
 ## 0.17.3
 
 `ontologySuite.checksRegistryPath` now says when it stops the bundled checks running, finds a
