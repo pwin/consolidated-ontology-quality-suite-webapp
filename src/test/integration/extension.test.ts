@@ -174,6 +174,60 @@ suite('Ontology Development Suite (extension host)', () => {
     }
   }).timeout(60000);
 
+  test('ontologySuite.checksRegistryPath is resolved against the workspace, and a path with no registry stops the run', async () => {
+    // A house registry with one check, LIB-001: QUA-001's query under another id. The setting
+    // replaces the bundled checks rather than adding to them, so QUA-001 itself must not run.
+    const bundledRoot = path.resolve(__dirname, '../../../resources/checks-registry');
+    // Inside the workspace folder, under an out/ that git ignores. Elsewhere, the relative path
+    // resolved the same from both candidates -- the workspace and the extension host's working
+    // directory, which is VS Code's install folder and under the test runner sits as deep below the
+    // repo as examples/tutorial does -- and this test passed against the code it was written to catch.
+    const houseParent = path.join(TUTORIAL_DIR, 'out');
+    fs.mkdirSync(houseParent, { recursive: true });
+    const house = fs.mkdtempSync(path.join(houseParent, 'house-registry-'));
+    fs.mkdirSync(path.join(house, 'sparql'));
+    fs.writeFileSync(
+      path.join(house, 'registry.json'),
+      JSON.stringify({
+        namespace: 'https://semantechs.co.uk/ontology-quality/',
+        checks: [{ id: 'LIB-001', category: 'house', title: 'House rule', default_severity: 'Warning', description: 'd', remediation: 'r' }],
+      }),
+    );
+    const qua001 = fs.readFileSync(path.join(bundledRoot, 'sparql', 'quality', 'QUA-001.rq'), 'utf8');
+    fs.writeFileSync(path.join(house, 'sparql', 'LIB-001.rq'), qua001.replace(/QUA-001/g, 'LIB-001'));
+
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ontology-suite-registry-'));
+    const uri = vscode.Uri.file(path.join(dir, 'mine.ttl'));
+    fs.writeFileSync(uri.fsPath, '@prefix owl: <http://www.w3.org/2002/07/owl#> .\n<https://example.org/mine#Widget> a owl:Class .\n');
+    const config = () => vscode.workspace.getConfiguration('ontologySuite');
+    try {
+      // Relative to the workspace folder (examples/tutorial), as the README says.
+      await config().update('checksRegistryPath', path.relative(TUTORIAL_DIR, house), vscode.ConfigurationTarget.Global);
+      await vscode.window.showTextDocument(uri);
+      await vscode.commands.executeCommand('ontologySuite.runLocalChecks');
+      const codes = vscode.languages.getDiagnostics(uri).filter((d) => d.source === 'ontology-suite').map((d) => String(d.code));
+      assert.ok(codes.includes('LIB-001'), `expected the house check among ${JSON.stringify(codes)}`);
+      assert.ok(!codes.includes('QUA-001'), `the bundled QUA-001 should not run from a house registry: ${JSON.stringify(codes)}`);
+
+      await config().update('checksRegistryPath', path.join(dir, 'no-such-registry'), vscode.ConfigurationTarget.Global);
+      const second = vscode.Uri.file(path.join(dir, 'second.ttl'));
+      fs.copyFileSync(uri.fsPath, second.fsPath);
+      await vscode.window.showTextDocument(second);
+      await vscode.commands.executeCommand('ontologySuite.runLocalChecks');
+      assert.deepStrictEqual(vscode.languages.getDiagnostics(second).filter((d) => d.source === 'ontology-suite'), []);
+    } finally {
+      await config().update('checksRegistryPath', undefined, vscode.ConfigurationTarget.Global);
+      await vscode.commands.executeCommand('workbench.action.closeAllEditors');
+      removeTempDir(dir);
+      removeTempDir(house);
+      try {
+        fs.rmdirSync(houseParent); // only when empty: anything else in it is not this test's
+      } catch {
+        /* not empty, or already gone */
+      }
+    }
+  }).timeout(60000);
+
   test('Run Local Checks applies the severity policy stage it is given, and refuses one it cannot apply', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ontology-suite-policy-'));
     const uri = vscode.Uri.file(path.join(dir, 'mine.ttl'));

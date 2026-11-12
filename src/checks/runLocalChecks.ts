@@ -4,7 +4,7 @@ import * as vscode from 'vscode';
 import { Quad } from 'n3';
 import { readOntologyDocument } from '../rdf/parseDocument';
 import { resolveImports } from '../ontology/resolveImports';
-import { loadRegistry, Registry } from './registryLoader';
+import { checksNotIn, loadRegistry, Registry, runnableCheckIds } from './registryLoader';
 import { runSparqlChecks } from './sparqlRunner';
 import { runLiteralTypingChecks } from './literalTyping';
 import { runShaclChecks } from './shaclRunner';
@@ -30,11 +30,15 @@ export interface ActiveSeverityPolicy {
   targets: Map<string, PolicyTarget>;
 }
 
+/** `ontologySuite.checksRegistryPath` names a registry that cannot be loaded. The message is what the user is shown. */
+class RegistryPathError extends Error {}
+
 export class LocalChecksEngine {
   private readonly diagnostics = vscode.languages.createDiagnosticCollection(CHECKS_DIAGNOSTIC_SOURCE);
   /** The audit trail for severity policies: every re-mapping, on every run that made one. */
   private readonly policyOutput = vscode.window.createOutputChannel('Ontology Suite (Severity Policy)');
-  private registryCache: { rootDir: string; registry: Registry } | undefined;
+  /** `notRunning`: the bundled checks a configured registry has no query or shape for. */
+  private registryCache: { rootDir: string; registry: Registry; notRunning: string[] } | undefined;
   /** Diagnostic identity -> the ResultRow it was rendered from, so the Quick Fix CodeActionProvider can recover focusNode/path/value without re-parsing the diagnostic message. */
   readonly rowsByDiagnostic = new WeakMap<vscode.Diagnostic, ResultRow>();
 
@@ -45,9 +49,17 @@ export class LocalChecksEngine {
     this.policyOutput.dispose();
   }
 
+  private bundledRegistryDir(): string {
+    return path.join(this.extensionPath, 'resources', 'checks-registry');
+  }
+
   private getRegistryRootDir(): string {
-    const configured = vscode.workspace.getConfiguration('ontologySuite').get<string>('checksRegistryPath', '');
-    return configured && configured.trim().length > 0 ? configured : path.join(this.extensionPath, 'resources', 'checks-registry');
+    const configured = vscode.workspace.getConfiguration('ontologySuite').get<string>('checksRegistryPath', '').trim();
+    if (!configured) return this.bundledRegistryDir();
+    // Against the workspace root, as the README has always said. Before 0.17.3 a relative path was
+    // taken as it stood, which made it relative to the extension host's working directory -- VS
+    // Code's own installation folder -- so it never found anything.
+    return path.resolve(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? '', configured);
   }
 
   /** Directory containing the repair (*.ru) templates + manifest.json used by checks/repairEngine.ts. */
@@ -55,12 +67,57 @@ export class LocalChecksEngine {
     return path.join(this.getRegistryRootDir(), 'repairs');
   }
 
+  /**
+   * The registry this run uses: the bundled one, or the one `ontologySuite.checksRegistryPath`
+   * names. Throws RegistryPathError when that one cannot be loaded, rather than the bare ENOENT a
+   * mistyped path used to fail with.
+   *
+   * A configured registry replaces the bundled one whole -- registry.json, queries and shapes --
+   * rather than adding to it, so one holding only a project's own checks stops every shipped check
+   * without a word. The first load of one says how many of the bundled checks it leaves out, and
+   * every run's summary says it again; see `checksNotIn`.
+   */
   private getRegistry(): Registry {
     const rootDir = this.getRegistryRootDir();
     if (this.registryCache?.rootDir === rootDir) return this.registryCache.registry;
-    const registry = loadRegistry(rootDir);
-    this.registryCache = { rootDir, registry };
+
+    const bundledDir = this.bundledRegistryDir();
+    if (!fs.existsSync(path.join(rootDir, 'registry.json'))) {
+      throw new RegistryPathError(
+        `ontologySuite.checksRegistryPath points at ${rootDir}, which has no registry.json, so no registry check can run. ` +
+        'A checkout of the Python suite keeps it in ontology_suite/resources. Check the path, or clear the setting to use the bundled checks.',
+      );
+    }
+    let registry: Registry;
+    try {
+      registry = loadRegistry(rootDir);
+    } catch (err) {
+      throw new RegistryPathError(`ontologySuite.checksRegistryPath: ${path.join(rootDir, 'registry.json')} could not be read: ${(err as Error).message}`);
+    }
+
+    const bundled = path.resolve(rootDir) === path.resolve(bundledDir) ? undefined : loadRegistry(bundledDir);
+    const notRunning = bundled ? checksNotIn(bundled, registry) : [];
+    this.registryCache = { rootDir, registry, notRunning };
+    if (bundled && notRunning.length) {
+      const shown = notRunning.length > 6 ? `${notRunning.slice(0, 6).join(', ')} and ${notRunning.length - 6} more` : notRunning.join(', ');
+      void vscode.window.showWarningMessage(
+        `Ontology Suite: ontologySuite.checksRegistryPath replaces the bundled checks rather than adding to them, ` +
+        `and ${notRunning.length} of the ${runnableCheckIds(bundled).size} the bundled registry runs are not in ${rootDir}, so they will not run: ${shown}. ` +
+        `To run your own checks as well as the bundled ones, copy the bundled registry from ${bundledDir} and add yours to the copy.`,
+      );
+    }
     return registry;
+  }
+
+  /** The registry, or undefined when it cannot be loaded -- in which case the user has been told why, and the run should not go ahead. */
+  private registryForRun(runName: string): Registry | undefined {
+    try {
+      return this.getRegistry();
+    } catch (err) {
+      if (!(err instanceof RegistryPathError)) throw err;
+      void vscode.window.showErrorMessage(`Ontology Suite: ${runName} did not run. ${err.message}`);
+      return undefined;
+    }
   }
 
   /**
@@ -87,7 +144,9 @@ export class LocalChecksEngine {
       if (configured === DEFAULT_SEVERITY_POLICY && !stringency && !fs.existsSync(policyPath)) return undefined;
 
       const { stage, resolved } = resolveStage(loadPolicy(policyPath), stringency);
-      const targets = validateStage(resolved, [...this.getRegistry().checksById.keys(), ...EXTENSION_CHECK_IDS]);
+      const registry = this.registryForRun(runName);
+      if (!registry) return 'refused';
+      const targets = validateStage(resolved, [...registry.checksById.keys(), ...EXTENSION_CHECK_IDS]);
       return { path: policyPath, stage, targets };
     } catch (err) {
       if (!(err instanceof PolicyError)) throw err;
@@ -112,7 +171,10 @@ export class LocalChecksEngine {
   }
 
   async runForFile(fileUri: vscode.Uri): Promise<void> {
-    // Before any check runs: a run the policy refuses has nothing to show for the work.
+    // Before any check runs: a run with no registry, or one the policy refuses, has nothing to
+    // show for the work.
+    const registry = this.registryForRun('Run Local Checks');
+    if (!registry) return;
     const policy = this.severityPolicyForRun(fileUri, 'Run Local Checks');
     if (policy === 'refused') return;
 
@@ -132,7 +194,6 @@ export class LocalChecksEngine {
         const malformedRows = runMalformedChecks(resolvedQuads as Quad[]);
         const mergedQuads = withoutRelativeIris(resolvedQuads as Quad[]);
 
-        const registry = this.getRegistry();
         const config = vscode.workspace.getConfiguration('ontologySuite');
         const guidanceMode = config.get<string>('modellingGuidance', 'gist');
         const sparqlEnabled = config.get<boolean>('enableSparqlChecks', true);
@@ -219,7 +280,11 @@ export class LocalChecksEngine {
    * named here and offered directly.
    */
   private async report(rows: ResultRow[], violations: number, warnings: number, disabled: ReadonlySet<string>, policyNote: string): Promise<void> {
-    const summary = `Ontology Suite: ${rows.length} finding(s) (${violations} violation(s), ${warnings} warning(s)). ${policyNote ? `${policyNote} ` : ''}See Problems panel.`;
+    // Said on every run, not only when the registry was loaded: a run missing most of its checks
+    // reads as a clean one, weeks after anyone saw the warning.
+    const notRunning = this.registryCache?.notRunning.length ?? 0;
+    const registryNote = notRunning ? `${notRunning} bundled check(s) did not run: ontologySuite.checksRegistryPath replaces them. ` : '';
+    const summary = `Ontology Suite: ${rows.length} finding(s) (${violations} violation(s), ${warnings} warning(s)). ${registryNote}${policyNote ? `${policyNote} ` : ''}See Problems panel.`;
 
     const flooding = dominantCheck(rows, disabled);
     if (!flooding) {

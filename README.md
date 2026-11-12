@@ -505,7 +505,7 @@ Two different mechanisms, for two different kinds of customization:
 |---|---|---|
 | `ontologySuite.modellingGuidance` | `"gist"` | `"gist"` or `"off"` — advisory MDL-001/002/003 hints |
 | `ontologySuite.pythonCliPath` | `"ontology-quality-suite"` | CLI executable for the optional deep-validation/docgen/version-diff fallback — see the [Appendix](#appendix-configuring-ontologysuite-settings) for how to set it and how to get a working CLI in the first place |
-| `ontologySuite.checksRegistryPath` | `""` | Point at your own registry.json/sparql/shapes checkout instead of the bundled copy — e.g. to add project-specific SPARQL/SHACL checks beyond what `class-rules.json` can express |
+| `ontologySuite.checksRegistryPath` | `""` | A registry directory (`registry.json`, `sparql/`, `shapes/`) to use **instead of** the bundled one — not as well as. To add project checks, copy the bundled registry and add yours to the copy; see the [notes](#setting-by-setting-notes) |
 | `ontologySuite.enableSparqlChecks` | `true` | Run the registry's SPARQL CONSTRUCT checks. Fast (~0.2s on this project's own fixtures) |
 | `ontologySuite.enableShaclChecks` | `true` | Run the registry's SHACL-SPARQL shapes (via `shacl-wasm-node`). Fast since 0.10.0 — ~0.3s for all six shapes files where the previous `shacl-engine` took ~71s — so there is rarely a reason to turn it off now |
 | `ontologySuite.disabledChecks` | `[]` | Check ids to suppress in *Run Local Checks*, e.g. `["QUA-009", "QUA-010"]`. A disabled check’s SPARQL query is not run at all, and findings for the id are dropped whichever engine reported them |
@@ -707,10 +707,30 @@ actually setting one, and the practical detail behind each.
     "install from the Store" prompt) are easy to mistake for a real
     interpreter being present when it isn't.
 - **`checksRegistryPath`** (default `""`, meaning "use the bundled copy") —
-  point at another `consolidated_ontology_suite` checkout's root (the
-  directory containing `registry.json`/`sparql/`/`shapes/`) to add
-  project-specific checks beyond what `class-rules.json` can express. A
-  relative path is resolved against the workspace root.
+  a directory holding `registry.json`, `sparql/` and `shapes/`. In a
+  checkout of the Python suite that is `ontology_suite/resources`, not the
+  checkout's root. A relative path is resolved against the workspace root.
+  - **It replaces the bundled checks; it doesn't add to them.** A directory
+    holding only your own checks stops every shipped one. The first run
+    with it names the bundled checks it leaves out, and every run's summary
+    gives their number. Pointing it at a Python checkout leaves out
+    `CNF-003` and `CNF-004`, which are this extension's own.
+  - **To add project checks,** copy the bundled registry (the warning gives
+    its path inside the extension's install folder) and add yours to the
+    copy: an entry in `registry.json`, plus a query in `sparql/`, a shape in
+    `shapes/`, or both. The Python suite's `--shapes` and `--sparql` work the
+    same way, and its `docs/EXTENDING.md` walks through a house check.
+  - **A check written as both a query and a shape** must report the same
+    focus node, path and value from each. Findings merge on those, so if
+    the two disagree, one defect comes back as two rows. A shape using
+    `sh:property` reports `sh:resultPath`, so its query has to bind the same
+    path.
+  - **Shape files go at the top of `shapes/`.** This extension also reads
+    subdirectories, but the Python suite doesn't, so a check kept there
+    runs in the editor and not in CI.
+  - Before 0.17.3 a relative path was resolved against VS Code's install
+    folder and found nothing, and a path with no `registry.json` failed
+    with a bare file-not-found error.
 - **`projectStandardsPath`** / **`projectRulesPath`** (defaults
   `.ontology-suite/standards.json` / `.ontology-suite/class-rules.json`) —
   workspace-relative paths; these two are the ones actually meant to be

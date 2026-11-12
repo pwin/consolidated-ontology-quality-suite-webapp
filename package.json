@@ -384,7 +384,7 @@
         "ontologySuite.checksRegistryPath": {
           "type": "string",
           "default": "",
-          "description": "Path to a consolidated_ontology_suite checkout providing registry.json/sparql/shapes for the local checks engine. Leave empty to use the bundled copy."
+          "markdownDescription": "A registry directory (`registry.json`, `sparql/`, `shapes/`) for *Run Local Checks* to use **instead of** the bundled one. In a checkout of the Python suite that is `ontology_suite/resources`. Relative to the workspace folder. It replaces the bundled checks rather than adding to them: to add project checks, copy the bundled registry and add yours to the copy. Leave empty to use the bundled copy."
         },
         "ontologySuite.enableSparqlChecks": {
           "type": "boolean",

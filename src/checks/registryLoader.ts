@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { Parser } from 'n3';
 
 export interface CheckDef {
   id: string;
@@ -84,6 +85,58 @@ function walk(dir: string, ext: string): string[] {
     else if (entry.name.endsWith(ext)) out.push(full);
   }
   return out;
+}
+
+const RDF_TYPE = 'http://www.w3.org/1999/02/22-rdf-syntax-ns#type';
+const SHAPE_TYPES = new Set(['http://www.w3.org/ns/shacl#NodeShape', 'http://www.w3.org/ns/shacl#PropertyShape']);
+
+/**
+ * The distinct check ids a registry's shapes declare, counted as the Python suite's
+ * `declared_check_ids` counts them: a named shape's id is its local name, unless it carries an
+ * `oq:checkId` annotation naming the check it belongs to. The annotation is what makes
+ * `STY-002-data` and `STY-002-obj` one check rather than two. Deliberately not filtered by
+ * registry.json, since a project's own shapes name ids the bundled registry has never heard of.
+ */
+export function shapeCheckIds(registry: Registry): Set<string> {
+  const ids = new Set<string>();
+  for (const file of registry.shaclFiles) {
+    let quads;
+    try {
+      quads = new Parser().parse(fs.readFileSync(file, 'utf8'));
+    } catch {
+      continue; // a file that does not parse runs nothing; the SHACL tier reports it when it runs
+    }
+    const shapes = new Set<string>();
+    const annotated = new Map<string, string>();
+    for (const q of quads) {
+      if (q.subject.termType !== 'NamedNode') continue;
+      if (q.predicate.value === RDF_TYPE && SHAPE_TYPES.has(q.object.value)) shapes.add(q.subject.value);
+      // By local name, as shaclRunner.ts matches it: the shapes and registry.json have disagreed
+      // about which namespace `oq:` is.
+      if (localName(q.predicate.value) === 'checkId' && q.object.termType === 'Literal') annotated.set(q.subject.value, q.object.value);
+    }
+    for (const shape of shapes) ids.add(annotated.get(shape) ?? localName(shape));
+  }
+  return ids;
+}
+
+/** The check ids a registry has a query or a shape for here: what *Run Local Checks* runs from it. */
+export function runnableCheckIds(registry: Registry): Set<string> {
+  return new Set([...registry.sparqlFiles.map((f) => path.basename(f, '.rq')), ...shapeCheckIds(registry)]);
+}
+
+/**
+ * The checks `bundled` runs that `configured` does not, sorted.
+ *
+ * `ontologySuite.checksRegistryPath` replaces the bundled registry, queries and shapes as one set
+ * rather than adding to them, so a directory holding only a project's own checks stops every
+ * shipped check -- and says nothing, and the next run reports clean. The Python suite found the
+ * same failure in its `--sparql` (a CI gate running 8 of 61 checks) and then its `--shapes` (1
+ * finding where there were 37). This is what the warning about it counts.
+ */
+export function checksNotIn(bundled: Registry, configured: Registry): string[] {
+  const kept = runnableCheckIds(configured);
+  return [...runnableCheckIds(bundled)].filter((id) => !kept.has(id)).sort();
 }
 
 /** Extracts the local name (check id) from an IRI like `.../oq:STR-001` or `https://.../STR-001`. */
