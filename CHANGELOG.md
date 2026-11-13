@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.17.5
+
+The HOLOS store moves to 0.26.2 and the SHACL engine to 0.3.6. Both now round an `xsd:decimal`
+product or quotient to 18 fractional digits, half to even, where they used to leave the variable
+unbound: `1.3 * 31.583333333333333333` had no value, so a SPARQL constraint whose message named it
+printed `{?ratio}` as written. Division used to truncate, so `2 / 3` is now `0.666666666666666667`
+rather than `0.666666666666666666`.
+
+Both also move to Oxigraph's current SPARQL parser, which reads three things as written that the
+old one did not. A chain of `-` or `/` groups from the left: `10 - 2 - 3` is 5, where it was 11. A
+signed literal after an operand keeps the operator before it: `1 -2*3 -4` is -9, where it was -1.
+And a `FILTER` in a group nested inside `OPTIONAL` stays in that group, where it cannot see the
+variables bound outside it. `ROUND(-2.5001)` is -3, where it was -2.
+
+Of the shipped checks, only EFF-002 does arithmetic: `?bnodes * 1.0 / ?total`, which the old parser
+read as `?bnodes * (1.0 / ?total)`. The two readings differ at most in the 18th decimal place and
+the ratio is compared with 0.2, so no shipped check reports differently. Project queries, shapes
+and scripts that use any of the above get the corrected answers.
+
+543 tests pass. Production dependencies have no advisories.
+
+The `ontology-suite` npm package is unchanged at 0.16.1. Building it from this release gives the
+same files.
+
 ## 0.17.4
 
 The SHACL engine moves to 0.3.5. Its one change is to the engine command line's readable report,
