@@ -66,8 +66,8 @@ smell (grounded in gist's own conventions — see the README's
 
 You'll also see real SPARQL/SHACL structural and style findings (missing
 `owl:versionInfo`, naming-convention checks, etc.) — the same 61-check
-registry the Python suite ships, just run by Oxigraph and
-`shacl-engine` instead of a Python subprocess.
+registry the Python suite ships, just run by HOLOS (`holos-wasm-node`) and
+the SHACL engine (`shacl-wasm-node`) instead of a Python subprocess.
 
 You'll also see a `PRJ-REQUIRED` finding on `ex:Vaccination`: it's missing
 `rdfs:label`. That's not from the copied-in registry — it's from *this
@@ -201,7 +201,7 @@ Suite: Open Query Workbench"**. You'll see, live and updating as you edit:
 1. **The static sketch** — the CONSTRUCT template's shape, with `?var`s
    turned into `:var` entities, no CSV or SPARQL engine involved.
 2. **The real triplified output** — all three CSV rows actually run
-   through Oxigraph (via a SPARQL `VALUES` injection reproducing TARQL's
+   through HOLOS (via a SPARQL `VALUES` injection reproducing TARQL's
    per-row-binding semantics), producing real typed triples: dates as
    `xsd:date`, animal/vet names IRI-minted with `ENCODE_FOR_URI` (so `Dr
    Patel` correctly becomes `vet-Dr%20Patel`).

@@ -389,7 +389,7 @@
         "ontologySuite.enableSparqlChecks": {
           "type": "boolean",
           "default": true,
-          "description": "Run the registry's SPARQL CONSTRUCT checks (via Oxigraph) as part of Run Local Checks. Fast (~0.2s for this project's own test fixtures)."
+          "description": "Run the registry's SPARQL CONSTRUCT checks (via HOLOS) as part of Run Local Checks. Fast (~0.2s for this project's own test fixtures)."
         },
         "ontologySuite.enableShaclChecks": {
           "type": "boolean",
