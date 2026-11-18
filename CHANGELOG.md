@@ -2,7 +2,7 @@
 
 ## 0.17.6
 
-The HOLOS store moves to 0.26.3 and the SHACL engine to 0.3.7. Both now compare `xsd:date`,
+The HOLOS store moves to 0.26.4 and the SHACL engine to 0.3.8. Both now compare `xsd:date`,
 `xsd:time` and the duration types by value. Until now `<`, `<=`, `>` and `>=` between two dates was
 a type error, and an error inside a `FILTER` removes the row, so `FILTER(?d >= "2024-11-04"^^xsd:date)`
 returned nothing, silently, and inside `EXISTS` the error made it false. A SPARQL constraint built on a
@@ -10,6 +10,12 @@ date comparison never fired: a certificate that expired on 2025-06-30 passed a s
 still in date, and now it is reported. Equality, sorting and `xsd:dateTime` comparisons already worked.
 With the fix come date and duration arithmetic (`"2026-11-04"^^xsd:date - "2024-11-04"^^xsd:date` is
 `P730D`) and `YEAR`, `MONTH` and `DAY` on an `xsd:date`.
+
+The releases skipped here, HOLOS 0.26.3 and SHACL 0.3.7, brought the same comparison, but adding a
+duration to a dateTime came out unbound for some values: their query optimizer orders the operands of
+`+` by hash, and their evaluator took a duration only after the date. In the WebAssembly build every
+`?d + "P2Y"^^xsd:yearMonthDuration` was unbound. 0.26.4 and 0.3.8 accept the duration on either side,
+and all thirty sums the two engines were tested on come out, in both orders.
 
 No shipped check compares dates: the registry's only `xsd:date` test, in DAT-001, checks a datatype IRI
 and matches the lexical form, which neither release touches. So nothing here reports differently.
