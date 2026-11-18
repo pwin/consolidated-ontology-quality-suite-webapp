@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.17.6
+
+The HOLOS store moves to 0.26.3 and the SHACL engine to 0.3.7. Both now compare `xsd:date`,
+`xsd:time` and the duration types by value. Until now `<`, `<=`, `>` and `>=` between two dates was
+a type error, and an error inside a `FILTER` removes the row, so `FILTER(?d >= "2024-11-04"^^xsd:date)`
+returned nothing, silently, and inside `EXISTS` the error made it false. A SPARQL constraint built on a
+date comparison never fired: a certificate that expired on 2025-06-30 passed a shape asking for one
+still in date, and now it is reported. Equality, sorting and `xsd:dateTime` comparisons already worked.
+With the fix come date and duration arithmetic (`"2026-11-04"^^xsd:date - "2024-11-04"^^xsd:date` is
+`P730D`) and `YEAR`, `MONTH` and `DAY` on an `xsd:date`.
+
+No shipped check compares dates: the registry's only `xsd:date` test, in DAT-001, checks a datatype IRI
+and matches the lexical form, which neither release touches. So nothing here reports differently.
+Project queries, shapes and scripts that compare dates now get answers where they got none.
+
+543 tests pass. Production dependencies have no advisories.
+
+The `ontology-suite` npm package is unchanged at 0.16.1. Building it from this release gives the
+same files.
+
 ## 0.17.5
 
 The HOLOS store moves to 0.26.2 and the SHACL engine to 0.3.6. Both now round an `xsd:decimal`
