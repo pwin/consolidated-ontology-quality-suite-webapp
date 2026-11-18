@@ -60,7 +60,7 @@ flowchart LR
     end
 
     subgraph Local["In-process checks engine (no external runtime)"]
-        OXI["Oxigraph (Rust→WASM)\nSPARQL CONSTRUCT checks\n+ live triplify preview"]
+        HOLOS["HOLOS · holos-wasm-node (Rust→WASM)\nSPARQL CONSTRUCT checks\n+ live triplify preview"]
         SHACL["shacl-wasm (Rust→WASM)\nSHACL-SPARQL, incl. sh:target"]
         EYE["eyereasoner (EYE, WASM)\nOWL2-RL-ish inference\n+ contradiction detection"]
         GUIDE["Modelling guidance\nMDL-001/002/003\n(gist-informed)"]
@@ -83,7 +83,7 @@ flowchart LR
 ```
 
 Everything in **Local** and **Views** runs with zero external runtime
-dependency — Oxigraph, `shacl-wasm`, and `eyereasoner` are all
+dependency — HOLOS (`holos-wasm-node`), `shacl-wasm-node`, and `eyereasoner` are all
 WASM/pure-JS. The Python CLI is detected via
 `ontologySuite.pythonCliPath` (or PATH) and only used for the "Deep
 Validation" and "Full Triplify" commands, degrading gracefully if absent.
@@ -152,7 +152,7 @@ Validation" and "Full Triplify" commands, degrading gracefully if absent.
   sniffing) and drafts both a starter ontology fragment and a CONSTRUCT
   query wired to it.
 - *Query Workbench*: live, debounced preview of the query's real
-  triplified output against sample CSV rows (via Oxigraph, TARQL semantics
+  triplified output against sample CSV rows (via HOLOS, TARQL semantics
   reproduced with a standard SPARQL `VALUES` injection), a static
   "sketch" of the CONSTRUCT template, and conformance warnings
   (undeclared classes/properties, prefix drift) against the ontology.
@@ -629,7 +629,7 @@ its paired CSV until this was caught by a test).
 
 `esbuild.js` bundles only this extension's own code; `node_modules` ships
 as real files (`packages: 'external'` in the esbuild config) because
-Oxigraph, `eyereasoner` (EYE/swipl-wasm), `shacl-wasm-node` and
+`holos-wasm-node`, `eyereasoner` (EYE/swipl-wasm), `shacl-wasm-node` and
 `@viz-js/viz` all load WASM/native assets from paths relative to their own
 package directory, which bundling would break. That
 makes the packaged `.vsix` large (~19 MB compressed) for a VS Code

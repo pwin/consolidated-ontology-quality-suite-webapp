@@ -19,6 +19,14 @@ read as `?bnodes * (1.0 / ?total)`. The two readings differ at most in the 18th 
 the ratio is compared with 0.2, so no shipped check reports differently. Project queries, shapes
 and scripts that use any of the above get the corrected answers.
 
+### The documentation names the engine that runs the checks
+
+The README, the tutorial and the `ontologySuite.enableSparqlChecks` setting's description still said
+that Oxigraph runs the SPARQL checks and the live triplify preview. Neither has run on Oxigraph since
+0.13.11: the checks run on HOLOS through `holos-wasm-node` (`src/checks/sparqlRunner.ts`), and so does
+the preview (`src/triplify/previewEvaluator.ts`). They now say HOLOS, and the tutorial names
+`shacl-wasm-node` where it still named the JavaScript `shacl-engine` the extension replaced.
+
 543 tests pass. Production dependencies have no advisories.
 
 The `ontology-suite` npm package is unchanged at 0.16.1. Building it from this release gives the
