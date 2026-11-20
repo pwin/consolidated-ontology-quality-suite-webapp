@@ -20,6 +20,20 @@ PREFIX oq: <https://semantechs.co.uk/ontology-quality/>
 # class -- an entirely untyped subject is STR-009's concern ("Untyped
 # subject of a triple"), not this check's, and a multi-typed subject where
 # at least one type satisfies the domain is not a violation.
+#
+# A domain or range declared as an `owl:unionOf` is an anonymous class node,
+# and `rdfs:subClassOf*` from an asserted type can never reach one -- so every
+# use of a union-domained property was reported as a violation, and every
+# value of a union-ranged one. `(owl:unionOf/rdf:rest*/rdf:first)*` steps from
+# the declared class expression into its union members, zero or more times:
+# zero steps leaves a named class alone, one reaches each member, and more
+# handle a union nested in a union. Measured on HOLOS over eight cases: five
+# were wrong before and all five are right now, with the two genuine
+# violations still reported.
+#
+# Not a corner case -- gist declares 13 anonymous domains and ranges and every
+# one is a union, as are all three in the W3C org vocabulary this project's
+# fixtures carry (`org:reportsTo`, `org:role`).
 CONSTRUCT {
   _:r a sh:ValidationResult ;
     sh:resultSeverity sh:Violation ;
@@ -34,7 +48,8 @@ WHERE {
   FILTER EXISTS { ?s a ?anyType }
   FILTER NOT EXISTS {
     ?s a ?matchType .
-    { ?p rdfs:domain ?dc } UNION { ?p ?dip2 ?dc . FILTER(STRENDS(STR(?dip2), "domainIncludes")) }
+    { ?p rdfs:domain ?dcTop } UNION { ?p ?dip2 ?dcTop . FILTER(STRENDS(STR(?dip2), "domainIncludes")) }
+    ?dcTop (owl:unionOf/rdf:rest*/rdf:first)* ?dc .
     ?matchType rdfs:subClassOf* ?dc .
   }
   BIND(CONCAT("Property ", STR(?p), " is used with subject ", STR(?s),

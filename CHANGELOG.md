@@ -1,5 +1,61 @@
 # Changelog
 
+## 0.18.0
+
+Three checks were reporting findings that were not there, and one was also missing a finding that
+was. Both defects were reported from a project whose ontology these checks had not been run
+against before, and both are fixed here and in the Python suite, whose 0.28.0 carries the same
+shared query files.
+
+### A union domain or range is no longer a violation
+
+A domain or range can be declared as a choice of classes:
+
+```turtle
+ex:locatedIn rdfs:domain [ a owl:Class ; owl:unionOf ( ex:Site ex:Region ) ] .
+```
+
+That union is an anonymous class node, and `CNF-003`/`CNF-004` decided whether a subject or value
+satisfied a declared class by walking `?matchType rdfs:subClassOf* ?dc`. Nothing reaches a blank
+node that way, so the `FILTER NOT EXISTS` always succeeded: **every** use of a union-domained
+property was reported as a domain violation, and every value of a union-ranged one as a range
+violation.
+
+Both queries now step into a union's members with one property path, zero or more times, so a
+named class is left alone, each member of a union is reached, and a union nested inside a union
+expands all the way. Verified on HOLOS across eight cases: five were wrong before and all five
+are right now, with the two genuine violations still reported.
+
+This is not a corner case. gist declares 13 anonymous domains and ranges and every one is a
+union, as are all three in the W3C org vocabulary.
+
+### LOG-002 counts values, not spellings
+
+The check was one filter comparing `STR(?o1)` with `STR(?o2)`, which both ordered the pair and
+decided whether the two values differed. The second job was wrong: `STR()` returns a lexical
+form, and two lexical forms are not two values. Measured over nine cases, the old filter was
+wrong on four.
+
+- **Two names for one individual.** Values linked by `owl:sameAs` were reported as two values.
+  Now traversed in both directions and transitively, since `owl:sameAs` is symmetric and
+  transitive and may be asserted either way round.
+- **Two spellings of one value.** `"80"` and `"80.0"^^xsd:decimal` are one value. This one does
+  not reproduce on HOLOS, which matches them as a single value before the filter is reached;
+  fixed regardless, because the same query file ships in the Python suite and runs on other
+  engines, and a check that is correct only because one engine is forgiving is not correct.
+- **Two blank-node values, which used to be missed.** `STR()` of a blank node is a type error,
+  an error inside a FILTER drops the row, and a functional property with two distinct blank-node
+  values was reported as *clean*. That is the worse half: a false positive is an argument, a
+  false negative is silence.
+
+There is no inverse-functional check in this extension to carry the same flaw. `STR-001`'s
+mention of `owl:InverseFunctionalProperty` is a meta-type exclusion, not a cardinality check.
+
+`LOG-002.rq` and `shapes/logical.ttl` are shared data, and the same bytes now ship in the Python
+suite -- a parity test there compares the two copies character for character.
+
+559 tests pass, 16 of them new. Production dependencies have no advisories.
+
 ## 0.17.6
 
 The HOLOS store moves to 0.26.4 and the SHACL engine to 0.3.8. Both now compare `xsd:date`,

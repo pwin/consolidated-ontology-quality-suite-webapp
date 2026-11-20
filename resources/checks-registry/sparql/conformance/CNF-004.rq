@@ -38,6 +38,20 @@ PREFIX oq: <https://semantechs.co.uk/ontology-quality/>
 # resource object is STR-006's concern ("Untyped object of a triple"), not
 # this check's.
 #
+# A domain or range declared as an `owl:unionOf` is an anonymous class node,
+# and `rdfs:subClassOf*` from an asserted type can never reach one -- so every
+# use of a union-domained property was reported as a violation, and every
+# value of a union-ranged one. `(owl:unionOf/rdf:rest*/rdf:first)*` steps from
+# the declared class expression into its union members, zero or more times:
+# zero steps leaves a named class alone, one reaches each member, and more
+# handle a union nested in a union. Measured on HOLOS over eight cases: five
+# were wrong before and all five are right now, with the two genuine
+# violations still reported.
+#
+# Not a corner case -- gist declares 13 anonymous domains and ranges and every
+# one is a union, as are all three in the W3C org vocabulary this project's
+# fixtures carry (`org:reportsTo`, `org:role`).
+#
 # Deliberately written as one FILTER combining the literal/resource cases
 # with && / || / EXISTS / NOT EXISTS, not a top-level UNION of two groups:
 # a UNION branch that is only a FILTER (no triple pattern of its own) was
@@ -60,7 +74,11 @@ WHERE {
   FILTER EXISTS { { ?p rdfs:range ?anyRange } UNION { ?p ?rip ?anyRange . FILTER(STRENDS(STR(?rip), "rangeIncludes")) } }
   FILTER(
     ( isLiteral(?o) && NOT EXISTS {
-        { ?p rdfs:range ?rc } UNION { ?p ?rip2 ?rc . FILTER(STRENDS(STR(?rip2), "rangeIncludes")) }
+        { ?p rdfs:range ?rcTop } UNION { ?p ?rip2 ?rcTop . FILTER(STRENDS(STR(?rip2), "rangeIncludes")) }
+        # Into the union's members if the declared range is one -- see the
+        # header. Zero steps for the ordinary case of a named datatype, so
+        # this costs nothing where there is no union to expand.
+        ?rcTop (owl:unionOf/rdf:rest*/rdf:first)* ?rc .
         # A pure expression on purpose -- no extra pattern, no UNION, no EXISTS --
         # so none of the Oxigraph caveats in this file's header apply to it.
         FILTER(datatype(?o) = ?rc || ?rc = rdfs:Literal
@@ -104,7 +122,8 @@ WHERE {
     ||
     ( isIRI(?o) && EXISTS { ?o a ?anyOType } && NOT EXISTS {
         ?o a ?matchType .
-        { ?p rdfs:range ?rc } UNION { ?p ?rip2 ?rc . FILTER(STRENDS(STR(?rip2), "rangeIncludes")) }
+        { ?p rdfs:range ?rcTop } UNION { ?p ?rip2 ?rcTop . FILTER(STRENDS(STR(?rip2), "rangeIncludes")) }
+        ?rcTop (owl:unionOf/rdf:rest*/rdf:first)* ?rc .
         ?matchType rdfs:subClassOf* ?rc .
       }
     )
