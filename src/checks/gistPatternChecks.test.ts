@@ -20,7 +20,7 @@ import type { ResultRow } from '../types';
  * formulation would report.
  *
  * Each check has two independent formulations, a SPARQL CONSTRUCT and a SHACL
- * shape, run by different engines (Oxigraph and shacl-wasm). Comparing them is
+ * shape, run by different engines (HOLOS and the SHACL engine). Comparing them is
  * the point: two copies of the same SPARQL agree even when both are wrong.
  */
 const REGISTRY_DIR = path.resolve(__dirname, '../../resources/checks-registry');
