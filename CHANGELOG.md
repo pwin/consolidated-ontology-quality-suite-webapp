@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.18.2
+
+`semops-wasm-node` moves to 0.31.1. It fixes RDF 1.2 triple terms wherever a query pattern is
+walked: a pre-bound `$this` inside a triple term in SHACL-SPARQL, and in HOLOS the variables
+inside one in a `SERVICE` clause and blank nodes inside one in a rule template.
+
+Both halves are reachable from here. Local Checks runs `sh:sparql` constraints, several of the
+shipped shapes are SHACL-SPARQL, and the extension reads RDF 1.2 — so a triple term in data
+being validated by a SPARQL constraint is a shape a project can have today. No shipped check
+uses a triple term itself, so nothing in the bundled registry changes its answer; a project
+writing its own checks over 1.2 data is who this is for.
+
+Taken now rather than with the next feature because `^0.31.0` already admitted 0.31.1, so a
+fresh `npm install` was resolving it while the committed lock and the shipped `.vsix` stayed on
+0.31.0. The lock is what SemOps System's `check_pins.py` reads, and that gap is the subject of
+SemopsSystem#38.
+
+560 tests pass, unchanged. Production dependencies have no advisories.
+
 ## 0.18.1
 
 The HOLOS store and the SHACL engine now come from one package, `semops-wasm-node` 0.31.0, the
