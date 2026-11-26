@@ -205,7 +205,7 @@ export class LocalChecksEngine {
         const disabledChecks = new Set(config.get<string[]>('disabledChecks', []));
 
         // Both engines are now fast enough that neither toggle is worth reaching for in an
-        // ordinary edit/check loop: SHACL-SPARQL runs via shacl-wasm (see shaclRunner.ts),
+        // ordinary edit/check loop: SHACL-SPARQL runs on the native SHACL engine (see shaclRunner.ts),
         // which does the six shapes files over examples/ontology/domain.ttl in ~0.3s where
         // the previous shacl-engine took ~71s for the identical 11 findings. They stay
         // configurable for the cases where a caller genuinely wants one tier only.

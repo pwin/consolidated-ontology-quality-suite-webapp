@@ -5,11 +5,12 @@
 // The flags matter and are easy to get wrong. `vsce package --no-dependencies`
 // produces an archive that packages without error, installs without error, and
 // is missing every engine the extension runs: esbuild is configured with
-// `packages: 'external'`, so holos-wasm-node, shacl-wasm-node,
-// eyereasoner/swipl-wasm and @viz-js/viz are never bundled into
-// dist/extension.js -- they are `require`d at runtime from node_modules, which
-// .vscodeignore therefore ships on purpose. Without them Run Local Checks logs
-// "could not load shacl-wasm-node" and silently offers fewer checks.
+// `packages: 'external'`, so semops-wasm-node (the HOLOS store and the SHACL
+// engine in one module), eyereasoner/swipl-wasm and @viz-js/viz are never
+// bundled into dist/extension.js -- they are `require`d at runtime from
+// node_modules, which .vscodeignore therefore ships on purpose. Without them Run
+// Local Checks logs "could not load semops-wasm-node" and silently offers fewer
+// checks.
 //
 // Every engine has to be in the list below, and adding one is the step easy to
 // forget: holos-wasm-node shipped correctly in 0.13.10 while this check would
@@ -27,8 +28,7 @@ import { readFileSync, readdirSync, unlinkSync } from 'node:fs';
 // rather than a package name: the point is that the asset is there, not that
 // a directory with the right name is.
 const REQUIRED = [
-  'node_modules/holos-wasm-node/holos_wasm_bg.wasm',
-  'node_modules/shacl-wasm-node/shacl_wasm_bg.wasm',
+  'node_modules/semops-wasm-node/semops_wasm_bg.wasm',
   'node_modules/swipl-wasm/dist/swipl/swipl-web.wasm',
 ];
 

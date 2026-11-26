@@ -66,8 +66,8 @@ smell (grounded in gist's own conventions — see the README's
 
 You'll also see real SPARQL/SHACL structural and style findings (missing
 `owl:versionInfo`, naming-convention checks, etc.) — the same 61-check
-registry the Python suite ships, just run by HOLOS (`holos-wasm-node`) and
-the SHACL engine (`shacl-wasm-node`) instead of a Python subprocess.
+registry the Python suite ships, just run by HOLOS and the SHACL engine
+(both in `semops-wasm-node`) instead of a Python subprocess.
 
 You'll also see a `PRJ-REQUIRED` finding on `ex:Vaccination`: it's missing
 `rdfs:label`. That's not from the copied-in registry — it's from *this

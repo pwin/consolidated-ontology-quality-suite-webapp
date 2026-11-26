@@ -36,8 +36,9 @@ const SEVERITY_LABEL: Record<string, Severity> = {
  * Both are conformant, and on these checks they agree -- which is the point:
  * the swap is not a bet on different answers. It makes both of the extension's
  * engines the ones this project maintains, so a defect found here can be fixed
- * here. The SHACL tier already runs on `shacl-wasm-node`; this is the other
- * half. The Python suite made the same move for the same reason -- see its
+ * here. The SHACL tier already ran on this project's own engine; this was the
+ * other half. Both now come from one module, `semops-wasm-node` (see
+ * rdf/holosStore.ts). The Python suite made the same move for the same reason -- see its
  * docs/ARCHITECTURE.md, "Which engine does the work".
  *
  * # What crossing the boundary costs

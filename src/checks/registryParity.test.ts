@@ -112,3 +112,41 @@ describe.skipIf(PYTHON === undefined)('shared registry parity with the Python su
     for (const [name, file] of ours) expect(read(file), `repairs/${name} has drifted`).toBe(read(other.get(name) as string));
   });
 });
+
+/**
+ * The engine this extension ships carries a third copy of the registry. SemOps System
+ * compiles it into `semops-wasm-node` (its `semops-checks` crate, copied from the Python
+ * suite), and `listChecks()` returns it. Unlike the block above, this one runs everywhere,
+ * because the engine is a dependency rather than a sibling checkout.
+ *
+ * It sees the declarations only. The engine does not expose its embedded shapes, queries
+ * or repair templates, so a drift in those still needs the Python checkout to show up.
+ * What it does catch is the engine moving to a registry this copy has not caught up with,
+ * which is the case an engine bump would otherwise bring in unannounced.
+ */
+describe('registry parity with the bundled SemOps engine', () => {
+  interface EngineCheck {
+    id: string;
+    category: string;
+    metric: string;
+    defaultSeverity: string;
+    title: string;
+    description: string;
+    remediation: string;
+  }
+  const semops = require('semops-wasm-node') as { listChecks(): EngineCheck[]; version(): string };
+
+  it('declares the same checks, in the same order, with the same fields', () => {
+    const registry = JSON.parse(read(path.join(HERE, 'registry.json'))) as { checks: Array<Record<string, string>> };
+    const ours = registry.checks.map((c) => ({
+      id: c.id,
+      category: c.category,
+      metric: c.metric,
+      defaultSeverity: c.default_severity,
+      title: c.title,
+      description: c.description,
+      remediation: c.remediation,
+    }));
+    expect(ours, `registry.json differs from semops-wasm-node ${semops.version()}'s`).toEqual(semops.listChecks());
+  });
+});

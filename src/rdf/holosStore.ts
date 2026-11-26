@@ -1,7 +1,13 @@
 /**
  * The one place this extension crosses into holosdb.
  *
- * `holos-wasm-node` takes RDF as text and hands results back as text or as rdf-js terms, so
+ * holosdb comes from `semops-wasm-node`, SemOps System's one WebAssembly module, which carries
+ * the HOLOS store and the SHACL engine together (https://github.com/pwin/SemopsSystem). Its
+ * `Store` is holos-wasm's under the same name and signatures, so nothing below depends on which
+ * of the two packages provides it. `checks/shaclRunner` takes the validator from the same
+ * module, so the extension loads one wasm instance rather than one per engine.
+ *
+ * The store takes RDF as text and hands results back as text or as rdf-js terms, so
  * every caller needs the same two conversions: n3 quads out to a document on the way in, and
  * N-Triples strings back to n3 quads on the way out. Three modules need them —
  * `checks/sparqlRunner`, `checks/repairEngine` and `triplify/previewEvaluator` — and three
@@ -9,7 +15,7 @@
  *
  * The module is `require`d lazily and left external by esbuild's `packages: 'external'`: its
  * wasm-bindgen shim reads the `.wasm` from its own package directory, which bundling would
- * break. Same arrangement as `shacl-wasm-node`, `eyereasoner` and `@viz-js/viz`.
+ * break. Same arrangement as `eyereasoner` and `@viz-js/viz`.
  *
  * # Blank node labels do not survive the crossing
  *
@@ -22,7 +28,7 @@
  */
 import { DataFactory, Parser, Quad, Writer } from 'n3';
 
-/** As much of holos-wasm-node as this extension uses. */
+/** As much of semops-wasm-node's `Store` as this extension uses. */
 export interface HolosStore {
   /** Returns how many quads were added. `format` takes turtle, ntriples, nquads, trig, … */
   load(text: string, format: string, base?: string): number;
@@ -71,7 +77,7 @@ export interface RdfQuad {
 
 function holos(): HolosModule {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  return require('holos-wasm-node') as HolosModule;
+  return require('semops-wasm-node') as HolosModule;
 }
 
 /**

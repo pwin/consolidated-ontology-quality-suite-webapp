@@ -10,7 +10,7 @@ const SEVERITY_LABEL: Record<string, Severity> = {
   'http://www.w3.org/ns/shacl#Info': 'Info',
 };
 
-/** One result as `shacl-wasm` hands it back -- see resources/shacl-wasm/shacl_wasm.d.ts. */
+/** One result as the SHACL engine hands it back (`Report.results` in semops-wasm-node's .d.ts). */
 interface WasmResult {
   focusNode: string;
   path: string | null;
@@ -68,10 +68,12 @@ const DATA_BASE = 'http://ontology-dev-suite.local/data/';
 
 /**
  * Runs the registry's shapes/*.ttl (SHACL-SPARQL shapes named `oq:<CHECK-ID>`,
- * mirroring consolidated_ontology_suite's own runner) via
- * **`shacl-wasm-node`** -- a WebAssembly build of the native Rust SHACL engine
- * (https://github.com/pwin/SHACL_Engine). It is the CommonJS build of the pair
- * that engine publishes; `shacl-wasm` is the ESM one, for bundlers.
+ * mirroring consolidated_ontology_suite's own runner) via the native Rust SHACL
+ * engine, compiled to WebAssembly. It comes from **`semops-wasm-node`**, SemOps
+ * System's one module for the store and the validator
+ * (https://github.com/pwin/SemopsSystem), whose `Validator` is shacl-wasm's under
+ * the same name and signatures. It is the CommonJS build; `semops-wasm` is the
+ * ESM one, for bundlers.
  *
  * **Replaces `shacl-engine`** (the pure-JS engine used through v0.9.3), which
  * had two defects this engine does not, both confirmed against these exact
@@ -111,7 +113,7 @@ export function runShaclChecks(quads: Quad[], registry: Registry): ResultRow[] {
       const report = compiled.validator.validateTurtle(dataText, DATA_BASE, 'none');
       for (const r of toResultRows(report.results, registry, compiled)) rows.push(r);
     } catch (err) {
-      console.error(`[ontologySuite] shacl-wasm failed validating against ${file}:`, err);
+      console.error(`[ontologySuite] the SHACL engine failed validating against ${file}:`, err);
     }
   }
   return rows;
@@ -243,10 +245,10 @@ function getOrBuildValidator(file: string, registry: Registry): CompiledShapes |
     // Imported lazily, and left as a real runtime `require` by esbuild's
     // `packages: 'external'` -- its wasm-bindgen shim reads the .wasm from its
     // own package directory, which bundling would break. Same arrangement as
-    // oxigraph and eyereasoner.
-    mod = require('shacl-wasm-node') as WasmModule;
+    // eyereasoner and @viz-js/viz.
+    mod = require('semops-wasm-node') as WasmModule;
   } catch (err) {
-    console.error('[ontologySuite] could not load shacl-wasm-node; SHACL checks are unavailable:', err);
+    console.error('[ontologySuite] could not load semops-wasm-node; SHACL checks are unavailable:', err);
     return undefined;
   }
 

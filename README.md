@@ -60,8 +60,8 @@ flowchart LR
     end
 
     subgraph Local["In-process checks engine (no external runtime)"]
-        HOLOS["HOLOS · holos-wasm-node (Rust→WASM)\nSPARQL CONSTRUCT checks\n+ live triplify preview"]
-        SHACL["shacl-wasm (Rust→WASM)\nSHACL-SPARQL, incl. sh:target"]
+        HOLOS["HOLOS store · semops-wasm-node (Rust→WASM)\nSPARQL CONSTRUCT checks\n+ live triplify preview"]
+        SHACL["SHACL engine · semops-wasm-node (Rust→WASM)\nSHACL-SPARQL, incl. sh:target"]
         EYE["eyereasoner (EYE, WASM)\nOWL2-RL-ish inference\n+ contradiction detection"]
         GUIDE["Modelling guidance\nMDL-001/002/003\n(gist-informed)"]
         REPAIR["Quick Fix repair engine\nSPARQL Update templates\n+ project standards"]
@@ -83,8 +83,9 @@ flowchart LR
 ```
 
 Everything in **Local** and **Views** runs with zero external runtime
-dependency — HOLOS (`holos-wasm-node`), `shacl-wasm-node`, and `eyereasoner` are all
-WASM/pure-JS. The Python CLI is detected via
+dependency — HOLOS and the SHACL engine (both in `semops-wasm-node`, the
+WebAssembly build of [SemOps System](https://github.com/pwin/SemopsSystem)) and
+`eyereasoner` are all WASM/pure-JS. The Python CLI is detected via
 `ontologySuite.pythonCliPath` (or PATH) and only used for the "Deep
 Validation" and "Full Triplify" commands, degrading gracefully if absent.
 
@@ -507,7 +508,7 @@ Two different mechanisms, for two different kinds of customization:
 | `ontologySuite.pythonCliPath` | `"ontology-quality-suite"` | CLI executable for the optional deep-validation/docgen/version-diff fallback — see the [Appendix](#appendix-configuring-ontologysuite-settings) for how to set it and how to get a working CLI in the first place |
 | `ontologySuite.checksRegistryPath` | `""` | A registry directory (`registry.json`, `sparql/`, `shapes/`) to use **instead of** the bundled one — not as well as. To add project checks, copy the bundled registry and add yours to the copy; see the [notes](#setting-by-setting-notes) |
 | `ontologySuite.enableSparqlChecks` | `true` | Run the registry's SPARQL CONSTRUCT checks. Fast (~0.2s on this project's own fixtures) |
-| `ontologySuite.enableShaclChecks` | `true` | Run the registry's SHACL-SPARQL shapes (via `shacl-wasm-node`). Fast since 0.10.0 — ~0.3s for all six shapes files where the previous `shacl-engine` took ~71s — so there is rarely a reason to turn it off now |
+| `ontologySuite.enableShaclChecks` | `true` | Run the registry's SHACL-SPARQL shapes (via the SHACL engine in `semops-wasm-node`). Fast since 0.10.0 — ~0.3s for all six shapes files where the previous `shacl-engine` took ~71s — so there is rarely a reason to turn it off now |
 | `ontologySuite.disabledChecks` | `[]` | Check ids to suppress in *Run Local Checks*, e.g. `["QUA-009", "QUA-010"]`. A disabled check’s SPARQL query is not run at all, and findings for the id are dropped whichever engine reported them |
 | `ontologySuite.severityPolicy` | `.ontology-suite/severity-policy.json` | Per-stage severities for *Run Local Checks* and *Run Deep Validation* — see [Severity policy](#severity-policy-how-strict-at-which-stage). The default location is optional; a path set here must exist. Empty turns policies off |
 | `ontologySuite.stringency` | `""` | Which stage of the severity policy to apply. Optional when the policy has one stage |
@@ -629,8 +630,8 @@ its paired CSV until this was caught by a test).
 
 `esbuild.js` bundles only this extension's own code; `node_modules` ships
 as real files (`packages: 'external'` in the esbuild config) because
-`holos-wasm-node`, `eyereasoner` (EYE/swipl-wasm), `shacl-wasm-node` and
-`@viz-js/viz` all load WASM/native assets from paths relative to their own
+`semops-wasm-node` (HOLOS and the SHACL engine), `eyereasoner` (EYE/swipl-wasm)
+and `@viz-js/viz` all load WASM/native assets from paths relative to their own
 package directory, which bundling would break. That
 makes the packaged `.vsix` large (~19 MB compressed) for a VS Code
 extension — a deliberate tradeoff for running every engine in-process with

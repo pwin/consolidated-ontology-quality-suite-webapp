@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.18.1
+
+The HOLOS store and the SHACL engine now come from one package, `semops-wasm-node` 0.31.0, the
+WebAssembly build of [SemOps System](https://github.com/pwin/SemopsSystem). SemOps System is
+the workspace HOLOS, the SHACL engine and tarka have been consolidated into, and the engines'
+own repositories have stopped releasing. It replaces `holos-wasm-node` 0.26.4 and
+`shacl-wasm-node` 0.3.8. Its `Store` and `Validator` have the names and signatures of the two
+packages it replaces, so the change in the code is the package name in two `require` calls, and
+the extension now loads one wasm module rather than two. The vsix is 17.1 MB, down from 18.5.
+
+Nothing reports differently. The registry's SPARQL checks, SHACL shapes and the merge of the
+two were run over 209 ontologies and data graphs, this project's fixtures and the Python
+suite's testing repository, on the old engines and on the new: 12,529 SPARQL rows, 5,805 SHACL
+rows and 12,435 merged findings on each, the same ones. The only difference is the label HOLOS
+gives a blank node it reports as a value, and that label was never stable.
+
+The engines' own changes since 0.26.4 and 0.3.8 matter to project shapes and queries, and the
+comparison above shows none of them changes what the shipped checks report. HOLOS 0.27.0 stopped `sh:datatype` passing ill-formed values of the gregorian and
+duration types (`"not-a-year"^^xsd:gYear` satisfied `sh:datatype xsd:gYear`), and a SPARQL
+constraint's result now carries the `?value` it computed. The SHACL shapes take a few
+milliseconds longer per file on engine 0.31.0, the same with or without the combined package.
+
+SemOps System compiles its own copy of the check registry into the engine, copied from the
+Python suite like this extension's. A new test compares the bundled `registry.json` with the
+engine's (`listChecks()`), field by field, on every machine; the existing parity test runs only
+where the Python suite is checked out. The two agree on all 61 checks. The engine does not expose
+its shapes, queries or repair templates, so those still need the Python checkout to compare.
+
+A vsix built from a checkout VS Code had been started in could carry a `debug.log`, which
+Chromium's crash reporter writes into the working directory. `.vscodeignore` now leaves out
+`*.log`.
+
+The `ontology-suite` npm package is unchanged, and stays at 0.17.3.
+
 ## 0.18.0
 
 Three checks were reporting findings that were not there, and one was also missing a finding that
